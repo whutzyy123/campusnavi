@@ -1,0 +1,263 @@
+// Prisma Schema for 校园生存指北 (Campus Survival Guide)
+// 多租户架构：所有业务表必须包含 schoolId 字段
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// 学校表：存储校区物理边界和多租户信息
+model School {
+  id          String   @id @default(cuid())
+  name        String   @db.VarChar(100)
+  schoolCode  String   @unique @map("school_code") @db.VarChar(50) // 唯一代码，如 pku
+  boundary    Json     // GeoJSON 格式的多边形顶点坐标
+  centerLat   Float    @map("center_lat")
+  centerLng   Float    @map("center_lng")
+  isActive    Boolean  @default(true) @map("is_active") // 是否激活（软删除）
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  users       User[]
+  pois        POI[]
+  routeEdges  RouteEdge[]
+  liveStatuses LiveStatus[]
+  invitationCodes InvitationCode[]
+  comments    Comment[]
+  categories  Category[]
+  categoryOverrides CategoryOverride[]
+  campusAreas CampusArea[] // 校区区域（支持多校区）
+
+  @@map("schools")
+  @@index([centerLat, centerLng])
+}
+
+// 校区区域表：支持单校多校区（多个多边形）模式
+model CampusArea {
+  id          String   @id @default(cuid())
+  schoolId    String   @map("school_id")
+  name        String   @db.VarChar(100) // 校区名称，如"南湖校区"、"鉴湖校区"
+  boundary    Json     // GeoJSON 格式的多边形顶点坐标
+  center      Json     // 该校区的中心点 [lng, lat]，用于地图标签定位
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@map("campus_areas")
+  @@index([schoolId])
+}
+
+// 用户表：支持多租户用户隔离
+// 注意：超级管理员 (role=4) 的 schoolId 应为 null，与学校租户解耦
+model User {
+  id          String   @id @default(cuid())
+  schoolId    String?  @map("school_id") // 可选：超级管理员不需要绑定学校
+  phone       String?  @unique @db.VarChar(20)
+  email       String?  @unique @db.VarChar(100)
+  nickname    String?  @db.VarChar(50)
+  bio         String?  @db.Text // 个人简介
+  avatar      String?  @db.VarChar(255)
+  password    String?  @db.VarChar(255) // 哈希后的密码
+  role        Int      @default(0) // 0: 游客, 1: 认证学生, 2: 校级管理员, 3: 校内工作人员, 4: 超级管理员
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系（可选）
+  school      School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveStatuses LiveStatus[]
+  issuedInvitations InvitationCode[] @relation("Issuer")
+  addedSensitiveWords SensitiveWord[] @relation("AddedBy")
+  comments    Comment[]
+
+  @@map("users")
+  @@index([schoolId])
+  @@index([phone])
+  @@index([email])
+}
+
+// 邀请码表：用于权限分发
+model InvitationCode {
+  id          String   @id @default(cuid())
+  code        String   @unique @db.VarChar(50) // 唯一邀请码
+  role        Int      // 授权角色：2: 校级管理员, 3: 校内工作人员
+  schoolId    String   @map("school_id")
+  issuerId    String?  @map("issuer_id") // 发放人ID（超级管理员或校级管理员）
+  isUsed      Boolean  @default(false) @map("is_used")
+  usedBy      String?  @map("used_by") // 使用人ID
+  usedAt      DateTime? @map("used_at")
+  expiresAt   DateTime? @map("expires_at") // 过期时间（可选）
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  issuer      User?    @relation("Issuer", fields: [issuerId], references: [id], onDelete: SetNull)
+
+  @@map("invitation_codes")
+  @@index([code])
+  @@index([schoolId])
+  @@index([isUsed])
+  @@index([issuerId])
+}
+
+// POI 分类表：支持全局分类和学校自定义分类
+model Category {
+  id          String   @id @default(cuid())
+  schoolId    String?  @map("school_id") // 可选：全局分类为 null
+  name        String   @db.VarChar(50) // 分类名称
+  icon        String?  @db.VarChar(50) // 可选图标名
+  isGlobal    Boolean  @default(false) @map("is_global") // 是否为全局分类
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  pois        POI[]
+  overrides   CategoryOverride[] // 学校对全局分类的覆盖
+
+  @@map("categories")
+  @@index([schoolId])
+  @@index([isGlobal])
+  @@unique([schoolId, name]) // 同一学校内分类名称唯一（全局分类 schoolId 为 null）
+}
+
+// 分类覆盖表：记录学校对全局分类的局部修改
+model CategoryOverride {
+  id          String   @id @default(cuid())
+  schoolId    String   @map("school_id")
+  categoryId  String   @map("category_id") // 关联的全局分类ID
+  isHidden    Boolean  @default(false) @map("is_hidden") // 是否在该学校隐藏
+  customName  String?  @db.VarChar(50) @map("custom_name") // 自定义名称（可选）
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@map("category_overrides")
+  @@index([schoolId])
+  @@index([categoryId])
+  @@unique([schoolId, categoryId]) // 每个学校对每个全局分类只能有一条覆盖记录
+}
+
+// POI 资源表：支持 PGC（官方）和 UGC（众包）两种类型
+model POI {
+  id          String   @id @default(cuid())
+  schoolId    String   @map("school_id")
+  name        String   @db.VarChar(100)
+  categoryId  String?  @map("category_id") // 关联分类ID（可选，兼容旧数据）
+  category    String?  @db.VarChar(50) // 保留旧字段用于兼容（可选）
+  lat         Float
+  lng         Float
+  isOfficial  Boolean  @default(false) @map("is_official") // true: PGC, false: UGC
+  entryPoints Json?    @map("entry_points") // JSON 格式存储建筑的具体入口坐标点
+  description String?  @db.Text
+  reportCount Int      @default(0) @map("report_count") // 举报次数，>=3 时自动隐藏
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  liveStatuses LiveStatus[]
+  comments    Comment[]
+
+  @@map("pois")
+  @@index([schoolId])
+  @@index([categoryId])
+  @@index([lat, lng])
+  @@index([isOfficial])
+}
+
+// 校内路径网格表：补全高德地图不识别的小路
+model RouteEdge {
+  id          String   @id @default(cuid())
+  schoolId    String   @map("school_id")
+  startNode   Json     @map("start_node") // JSON 格式: [lng, lat]
+  endNode     Json     @map("end_node") // JSON 格式: [lng, lat]
+  weight      Float    @default(1.0) // 权重：距离/拥堵度，值越大越不推荐
+  type        String   @db.VarChar(20) // 步道/阶梯/坡道/施工中等
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@map("route_edges")
+  @@index([schoolId])
+}
+
+// 实时状态表：众包数据的生命周期管理（TTL）
+model LiveStatus {
+  id          String   @id @default(cuid())
+  poiId       String   @map("poi_id")
+  schoolId    String   @map("school_id")
+  userId      String?  @map("user_id")
+  statusType  String   @map("status_type") @db.VarChar(20) // 拥挤/营业/施工等
+  val         Int      // 状态值：1-4级拥挤度等
+  expiresAt   DateTime @map("expires_at") // TTL：默认 60 分钟后过期
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // 关联关系
+  poi         POI      @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@map("live_statuses")
+  @@index([poiId])
+  @@index([schoolId])
+  @@index([expiresAt])
+  @@index([createdAt])
+}
+
+// 平台屏蔽词表：用于内容审核
+model SensitiveWord {
+  id        String   @id @default(cuid())
+  keyword   String   @unique @db.VarChar(100) // 屏蔽词
+  createdAt DateTime @default(now()) @map("created_at")
+  addedBy   User     @relation("AddedBy", fields: [addedById], references: [id], onDelete: Cascade)
+  addedById String   @map("added_by_id") // 添加人ID (必须是超管)
+
+  @@map("sensitive_words")
+  @@index([keyword])
+  @@index([addedById])
+}
+
+// POI 留言表：用于用户对某个 POI 进行留言与讨论
+model Comment {
+  id          String   @id @default(cuid())
+  content     String   @db.Text
+  userId      String   @map("user_id")
+  poiId       String   @map("poi_id")
+  schoolId    String   @map("school_id")
+  parentId    String?  @map("parent_id") // 父留言ID，用于实现回复功能
+  isHidden    Boolean  @default(false) @map("is_hidden")  // 是否被隐藏/屏蔽
+  reportCount Int      @default(0) @map("report_count")   // 被举报次数
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  // 关联关系
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poi         POI      @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  // 自关联：回复关系
+  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies     Comment[] @relation("CommentReplies")
+
+  @@map("comments")
+  @@index([schoolId])
+  @@index([poiId])
+  @@index([userId])
+  @@index([parentId])
+  @@index([isHidden])
+  @@index([createdAt])
+}
+

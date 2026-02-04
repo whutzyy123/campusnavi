@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Reddit 风格配色系统 */
+  --reddit-orange: #FF4500;
+  --reddit-blue: #0079D3;
+  --reddit-bg-page: #DAE0E2;
+  --reddit-bg-card: #FFFFFF;
+  --reddit-text-primary: #1A1A1B;
+  --reddit-text-secondary: #7C7C7C;
+  --reddit-border: #EDEFF1;
+  --reddit-border-alt: #CCC;
+  --reddit-bg-input: #F6F7F8;
+  
+  /* 兼容性变量 */
+  --background: var(--reddit-bg-page);
+  --foreground: var(--reddit-text-primary);
+}
+
+body {
+  color: var(--reddit-text-primary);
+  background: var(--reddit-bg-page);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
