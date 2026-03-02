@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
@@ -13,8 +14,17 @@ interface PaginationControlsProps {
 /**
  * 通用分页控件组件
  * Reddit 风格：简洁的上一页/下一页按钮 + 页码显示
+ * 内部使用 useSearchParams，需 Suspense 包裹
  */
-export function PaginationControls({
+export function PaginationControls(props: PaginationControlsProps) {
+  return (
+    <Suspense fallback={<div className="h-10" />}>
+      <PaginationControlsInner {...props} />
+    </Suspense>
+  );
+}
+
+function PaginationControlsInner({
   total,
   pageCount,
   currentPage,

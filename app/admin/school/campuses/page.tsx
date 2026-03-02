@@ -9,6 +9,8 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
 import { loadAMapPlugin } from "@/lib/amap-loader";
+import polylabel from "polylabel";
+import { ensureLngLat } from "@/lib/campus-label-utils";
 import toast from "react-hot-toast";
 import {
   Plus,
@@ -27,8 +29,33 @@ interface CampusArea {
   name: string;
   boundary: any; // GeoJSON Polygon
   center: [number, number]; // [lng, lat]
+  labelCenter?: [number, number] | unknown;
   createdAt: string;
   updatedAt: string;
+}
+
+/** 从 [lng, lat] 或 GeoJSON Point 解析坐标 */
+function parseLngLat(v: unknown): [number, number] {
+  if (!v) return [0, 0];
+  if (Array.isArray(v) && v.length >= 2) return [Number(v[0]), Number(v[1])];
+  const obj = v as { coordinates?: unknown[] };
+  if (obj?.coordinates && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
+    return [Number(obj.coordinates[0]), Number(obj.coordinates[1])];
+  }
+  return [0, 0];
+}
+
+/** 从坐标数组计算 labelCenter（polylabel - Pole of Inaccessibility） */
+function computeLabelCenter(coordinates: [number, number][]): [number, number] {
+  if (!coordinates || coordinates.length < 3) return [0, 0];
+  const closed =
+    coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
+    coordinates[0][1] === coordinates[coordinates.length - 1][1]
+      ? coordinates
+      : [...coordinates, coordinates[0]];
+  const polygon = [closed];
+  const result = polylabel(polygon, 0.000001);
+  return ensureLngLat(result[0], result[1]);
 }
 
 /**
@@ -54,10 +81,15 @@ export default function CampusManagementPage() {
   const campusLabelsRef = useRef<Map<string, any>>(new Map()); // 存储校区标签实例
   const isEditingRef = useRef<boolean>(false); // 编辑锁定标志，防止 React 干扰
   const editingPolygonRef = useRef<any>(null); // 锁定正在编辑的多边形实例
+  const editingLabelRef = useRef<any>(null); // 编辑时的标签预览（随 adjust 实时更新位置）
+  const draftPolygonRef = useRef<any>(null); // 新建校区名称输入阶段的预览多边形
+  const draftLabelRef = useRef<any>(null); // 新建校区名称输入阶段的预览标签
+  const handleEditCampusRef = useRef<(campusId: string) => void>(() => {});
 
   // 编辑状态
   const [isDrawing, setIsDrawing] = useState(false);
   const [editingCampusId, setEditingCampusId] = useState<string | null>(null);
+  const [selectedCampusId, setSelectedCampusId] = useState<string | null>(null); // 左侧列表选中校区，用于地图高亮
   const [showNameInput, setShowNameInput] = useState(false);
   const [newCampusName, setNewCampusName] = useState("");
   const [newCampusBoundary, setNewCampusBoundary] = useState<[number, number][] | null>(null);
@@ -145,6 +177,7 @@ export default function CampusManagementPage() {
     };
 
     loadLockedSchool();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- activeSchool?.id 足够，避免引用变化触发地图重复初始化
   }, [currentUser?.schoolId, currentUser?.role, activeSchool?.id, setActiveSchool]);
 
   // 异步加载插件函数（不阻塞主线程）
@@ -221,11 +254,57 @@ export default function CampusManagementPage() {
 
     const initMap = async () => {
       try {
-
         // 第一阶段：优先初始化地图实例（不等待插件）
+        const defaultCenter: [number, number] = [116.397428, 39.90923];
+        let center: [number, number] = defaultCenter;
+        let zoom = 14;
+
+        if (
+          activeSchool.centerLng != null &&
+          activeSchool.centerLat != null &&
+          !isNaN(activeSchool.centerLng) &&
+          !isNaN(activeSchool.centerLat)
+        ) {
+          center = [activeSchool.centerLng, activeSchool.centerLat];
+        } else if (activeSchool.name?.trim()) {
+          // 无中心时，根据学校名称搜索并定位
+          try {
+            await loadAMapPlugin("AMap.PlaceSearch");
+            const placeSearch = new amap.PlaceSearch({ cityLimit: false });
+            const result = await new Promise<{ poiList?: { pois?: Array<{ location?: { lng: number; lat: number } | [number, number] }> } }>(
+              (resolve) => {
+                placeSearch.search(activeSchool.name.trim(), (status: string, data: any) => {
+                  if (status === "complete" && data?.poiList?.pois?.length > 0) {
+                    resolve(data);
+                  } else {
+                    resolve({});
+                  }
+                });
+              }
+            );
+            const pois = result.poiList?.pois;
+            if (pois?.[0]?.location) {
+              const loc = pois[0].location;
+              if (Array.isArray(loc)) {
+                center = [loc[0], loc[1]];
+              } else if (typeof loc === "object" && "lng" in loc && "lat" in loc) {
+                center = [(loc as { lng: number; lat: number }).lng, (loc as { lng: number; lat: number }).lat];
+              } else {
+                // AMap.LngLat 实例（含 getLng/getLat 方法）
+                const lngLat = loc as { getLng?: () => number; getLat?: () => number };
+                if (typeof lngLat?.getLng === "function" && typeof lngLat?.getLat === "function") {
+                  center = [lngLat.getLng(), lngLat.getLat()];
+                }
+              }
+            }
+          } catch (searchErr) {
+            console.warn("学校名称搜索失败，使用默认中心:", searchErr);
+          }
+        }
+
         const map = new amap.Map(mapRef.current, {
-          zoom: 15,
-          center: [activeSchool.centerLng, activeSchool.centerLat],
+          zoom,
+          center,
           viewMode: "3D",
           mapStyle: "amap://styles/normal",
         });
@@ -233,8 +312,11 @@ export default function CampusManagementPage() {
         mapInstanceRef.current = map;
         setIsMapReady(true);
 
+        // 确保地图中心已正确设置（初始化后再次确认）
+        map.setCenter(center);
+        map.setZoom(zoom);
+
         // 第二阶段：地图创建后，延迟加载插件（不阻塞地图渲染）
-        // 使用 setTimeout 确保地图先渲染，再加载插件
         setTimeout(() => {
           loadPluginsSequentially(map).catch((error) => {
             console.error("插件加载异常:", error);
@@ -342,23 +424,25 @@ export default function CampusManagementPage() {
       }
 
       // 创建多边形（Reddit 橙色风格）
-      // 如果正在编辑该校区，使用更明显的样式
+      // 编辑模式或列表选中时使用更明显的样式
       const isEditing = editingCampusId === campus.id;
+      const isHighlighted = selectedCampusId === campus.id;
       
       // 关键修复：如果正在编辑该校区且已有锁定实例，复用该实例，不创建新的
       if (isEditing && editingPolygonRef.current && editingPolygonRef.current === campusPolygonsRef.current.get(campus.id)) {
         return; // 跳过创建，使用已锁定的实例
       }
       
+      const useHighlightStyle = isEditing || isHighlighted;
       const polygon = new amap.Polygon({
         path: coordinates,
-        fillColor: isEditing ? "#FF6600" : "#FF4500",
-        fillOpacity: isEditing ? 0.25 : 0.15,
-        strokeColor: isEditing ? "#FF6600" : "#FF4500",
-        strokeWeight: isEditing ? 4 : 2, // 编辑模式下加粗边缘
-        strokeOpacity: isEditing ? 1.0 : 0.6,
-        strokeDasharray: isEditing ? undefined : [10, 5], // 编辑模式下使用实线
-        zIndex: isEditing ? 100 : 10, // 编辑模式下使用高 zIndex，防止渲染层级干扰
+        fillColor: useHighlightStyle ? "#FF6600" : "#FF4500",
+        fillOpacity: useHighlightStyle ? 0.25 : 0.15,
+        strokeColor: useHighlightStyle ? "#FF6600" : "#FF4500",
+        strokeWeight: useHighlightStyle ? 4 : 2, // 编辑/选中时加粗边缘
+        strokeOpacity: useHighlightStyle ? 1.0 : 0.6,
+        strokeDasharray: useHighlightStyle ? undefined : [10, 5], // 编辑/选中时使用实线
+        zIndex: useHighlightStyle ? 100 : 10, // 编辑/选中时使用高 zIndex
         bubble: true, // 允许事件冒泡
         draggable: false, // 防止与编辑器冲突
       });
@@ -366,11 +450,13 @@ export default function CampusManagementPage() {
       polygon.setMap(mapInstanceRef.current);
       campusPolygonsRef.current.set(campus.id, polygon);
 
-      // 创建校区标签（使用 Text 标记）
-      const [centerLng, centerLat] = campus.center;
+      // 创建校区标签：优先使用 labelCenter（保证在多边形内），否则用 center
+      const labelPos = campus.labelCenter ?? campus.center;
+      const [centerLng, centerLat] = parseLngLat(labelPos);
       const text = new amap.Text({
         text: campus.name,
         position: [centerLng, centerLat],
+        anchor: "center",
         style: {
           fontSize: "14px",
           fontWeight: "bold",
@@ -389,7 +475,7 @@ export default function CampusManagementPage() {
       // 点击多边形进入编辑模式
       polygon.on("click", () => {
         if (!isDrawing && !editingCampusId) {
-          handleEditCampus(campus.id);
+          handleEditCampusRef.current?.(campus.id);
         }
       });
     });
@@ -427,7 +513,64 @@ export default function CampusManagementPage() {
         mapInstanceRef.current.off("zoomend", updateLabelVisibility);
       }
     };
-  }, [amap, campuses, isDrawing, editingCampusId]);
+  }, [amap, campuses, isDrawing, editingCampusId, selectedCampusId]);
+
+  // 新建校区名称输入阶段：显示预览多边形和标签（labelCenter 实时计算）
+  useEffect(() => {
+    if (!amap || !mapInstanceRef.current || !showNameInput || !newCampusBoundary || newCampusBoundary.length < 3) {
+      if (draftPolygonRef.current) {
+        mapInstanceRef.current?.remove(draftPolygonRef.current);
+        draftPolygonRef.current = null;
+      }
+      if (draftLabelRef.current) {
+        mapInstanceRef.current?.remove(draftLabelRef.current);
+        draftLabelRef.current = null;
+      }
+      return;
+    }
+
+    const closedPath = [...newCampusBoundary, newCampusBoundary[0]];
+    const polygon = new amap.Polygon({
+      path: closedPath,
+      fillColor: "#FF4500",
+      fillOpacity: 0.2,
+      strokeColor: "#FF4500",
+      strokeWeight: 3,
+      strokeOpacity: 0.8,
+      zIndex: 50,
+    });
+    polygon.setMap(mapInstanceRef.current);
+    draftPolygonRef.current = polygon;
+
+    const [lng, lat] = computeLabelCenter(newCampusBoundary);
+    const label = new amap.Text({
+      text: newCampusName.trim() || "新校区",
+      position: [lng, lat],
+      style: {
+        fontSize: "14px",
+        fontWeight: "bold",
+        color: "#FF4500",
+        backgroundColor: "rgba(255, 255, 255, 0.9)",
+        padding: "4px 8px",
+        borderRadius: "4px",
+        border: "1px solid #FF4500",
+      },
+      zIndex: 60,
+    });
+    label.setMap(mapInstanceRef.current);
+    draftLabelRef.current = label;
+
+    return () => {
+      if (draftPolygonRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(draftPolygonRef.current);
+        draftPolygonRef.current = null;
+      }
+      if (draftLabelRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(draftLabelRef.current);
+        draftLabelRef.current = null;
+      }
+    };
+  }, [amap, showNameInput, newCampusBoundary, newCampusName]);
 
   // 开始绘制新校区
   const handleStartDrawing = useCallback(() => {
@@ -442,6 +585,7 @@ export default function CampusManagementPage() {
 
     setIsDrawing(true);
     setEditingCampusId(null);
+    setSelectedCampusId(null);
 
     // 关闭编辑模式
     if (polygonEditorRef.current) {
@@ -462,14 +606,14 @@ export default function CampusManagementPage() {
     mouseToolRef.current.on("draw", (e: any) => {
       const polygon = e.obj;
       const path = polygon.getPath();
-      
+
       // 转换为坐标数组（移除最后一个闭合点）
       const coordinates: [number, number][] = path.map((point: any) => [
         point.getLng(),
         point.getLat(),
       ]);
 
-      // 移除地图上的临时多边形
+      // 移除 MouseTool 生成的临时多边形（预览由 useEffect 根据 newCampusBoundary 渲染）
       mapInstanceRef.current.remove(polygon);
 
       // 保存边界并显示名称输入框
@@ -507,6 +651,7 @@ export default function CampusManagementPage() {
     isEditingRef.current = true;
     editingPolygonRef.current = polygon;
     setEditingCampusId(campusId);
+    setSelectedCampusId(null);
     setIsDrawing(false);
 
     // 关闭绘制工具
@@ -596,7 +741,37 @@ export default function CampusManagementPage() {
       
       // 开启编辑模式（显示可拖拽的控制点）
       polygonEditorRef.current.open();
-      
+
+      // 创建编辑时的标签预览（随 adjust 实时更新 labelCenter 位置）
+      const campus = campuses.find((c) => c.id === campusId);
+      const initialPos = campus
+        ? parseLngLat(campus.labelCenter ?? campus.center)
+        : (() => {
+            const rawPath = polygon.getPath();
+            if (!rawPath || rawPath.length < 3) return [0, 0];
+            const coords: [number, number][] = rawPath.map((p: any) =>
+              p?.getLng && p?.getLat ? [p.getLng(), p.getLat()] : [0, 0]
+            ).filter((c: [number, number]) => c[0] !== 0 || c[1] !== 0);
+            return coords.length >= 3 ? computeLabelCenter(coords) : [0, 0];
+          })();
+      const editingLabel = new amap.Text({
+        text: campus?.name ?? "校区",
+        position: initialPos,
+        anchor: "center",
+        style: {
+          fontSize: "14px",
+          fontWeight: "bold",
+          color: "#FF6600",
+          backgroundColor: "rgba(255, 255, 255, 0.95)",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          border: "1px solid #FF6600",
+        },
+        zIndex: 110,
+      });
+      editingLabel.setMap(mapInstanceRef.current);
+      editingLabelRef.current = editingLabel;
+
       toast.dismiss("editor-loading");
 
       // 监听编辑事件 - 关键修复：使用 hide/show 组合技强制 Canvas 物理刷新
@@ -641,10 +816,20 @@ export default function CampusManagementPage() {
                 }
                 
                 return [lng, lat] as [number, number];
-              }).filter((point): point is [number, number] => point !== null);
+              }).filter((point: [number, number] | null): point is [number, number] => point !== null);
               
               if (newPath.length < 3) {
                 return;
+              }
+
+              // 实时更新编辑标签位置（labelCenter 保证在多边形内）
+              if (editingLabelRef.current) {
+                try {
+                  const [labelLng, labelLat] = computeLabelCenter(newPath);
+                  editingLabelRef.current.setPosition([labelLng, labelLat]);
+                } catch (e) {
+                  // 忽略计算失败
+                }
               }
               
               // 计算路径哈希，检查是否真的变化了
@@ -708,7 +893,7 @@ export default function CampusManagementPage() {
                     return [p.lng, p.lat] as [number, number];
                   }
                   return null;
-                }).filter((point): point is [number, number] => point !== null);
+                }).filter((point: [number, number] | null): point is [number, number] => point !== null);
                 
                 if (newPath.length >= 3) {
                   polygon.setPath(newPath);
@@ -730,8 +915,16 @@ export default function CampusManagementPage() {
       toast.error("初始化编辑器失败，请刷新页面重试");
       setEditingCampusId(null);
       polygonEditorRef.current = null;
+      if (editingLabelRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(editingLabelRef.current);
+        editingLabelRef.current = null;
+      }
     }
-  }, [amap, isDrawing]);
+  }, [amap, isDrawing, campuses]);
+
+  useEffect(() => {
+    handleEditCampusRef.current = handleEditCampus;
+  }, [handleEditCampus]);
 
   // 保存编辑后的校区
   const handleSaveEdit = useCallback(async () => {
@@ -747,6 +940,11 @@ export default function CampusManagementPage() {
     }
 
     try {
+      // 移除编辑时的标签预览
+      if (editingLabelRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(editingLabelRef.current);
+        editingLabelRef.current = null;
+      }
       // 关键修复：先关闭编辑器，确保所有更改已提交到多边形对象
       // 关闭编辑器会触发 end 事件，确保多边形路径已更新
       polygonEditorRef.current.close();
@@ -773,7 +971,7 @@ export default function CampusManagementPage() {
               return [p.lng, p.lat] as [number, number];
             }
             return null;
-          }).filter((point): point is [number, number] => point !== null);
+          }).filter((point: [number, number] | null): point is [number, number] => point !== null);
           
           if (newPath.length >= 3) {
             polygon.setPath(newPath);
@@ -895,6 +1093,14 @@ export default function CampusManagementPage() {
 
   // 取消编辑
   const handleCancelEdit = useCallback(() => {
+    if (editingLabelRef.current && mapInstanceRef.current) {
+      try {
+        mapInstanceRef.current.remove(editingLabelRef.current);
+      } catch (e) {
+        // 忽略
+      }
+      editingLabelRef.current = null;
+    }
     if (polygonEditorRef.current) {
       try {
         polygonEditorRef.current.close();
@@ -910,7 +1116,7 @@ export default function CampusManagementPage() {
     editingPolygonRef.current = null;
     setEditingCampusId(null);
     
-    toast.info("已取消编辑");
+    toast("已取消编辑");
     
     // 刷新校区列表，恢复所有多边形的显示
     fetchCampuses();
@@ -962,13 +1168,27 @@ export default function CampusManagementPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [newCampusName, newCampusBoundary, getTargetSchoolId, currentUser?.role]);
+  }, [newCampusName, newCampusBoundary, getTargetSchoolId, currentUser?.role, fetchCampuses]);
 
-  // 取消创建新校区
+  // 取消创建新校区（名称输入阶段）
   const handleCancelNewCampus = useCallback(() => {
     setShowNameInput(false);
     setNewCampusName("");
     setNewCampusBoundary(null);
+  }, []);
+
+  // 取消绘制新校区（绘制阶段：关闭 MouseTool，清理状态）
+  const handleCancelDrawing = useCallback(() => {
+    if (mouseToolRef.current) {
+      try {
+        mouseToolRef.current.close();
+      } catch (e) {
+        console.warn("关闭 MouseTool 时出错:", e);
+      }
+      mouseToolRef.current = null;
+    }
+    setIsDrawing(false);
+    toast("已取消绘制");
   }, []);
 
   // 删除校区
@@ -996,18 +1216,21 @@ export default function CampusManagementPage() {
     }
   }, [fetchCampuses]);
 
-  // 定位到校区
+  // 定位到校区并高亮边界（列表点击时调用）
   const handleLocateCampus = useCallback((campus: CampusArea) => {
     if (!mapInstanceRef.current) {
       return;
     }
+
+    setSelectedCampusId(campus.id);
 
     const polygon = campusPolygonsRef.current.get(campus.id);
     if (polygon) {
       mapInstanceRef.current.setFitView([polygon], false, [60, 60, 60, 60], 17);
     } else {
       const [lng, lat] = campus.center;
-      mapInstanceRef.current.setZoomAndCenter(17, [lng, lat]);
+      mapInstanceRef.current.panTo([lng, lat]);
+      mapInstanceRef.current.setZoom(17);
     }
   }, []);
 
@@ -1029,43 +1252,43 @@ export default function CampusManagementPage() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
-        <div className="flex h-screen">
-          {/* 左侧控制面板 */}
-          <div className="w-80 border-r bg-white p-4 overflow-y-auto">
-            <div className="mb-4">
-              <h2 className="text-xl font-bold text-gray-900">校区管理</h2>
-              <p className="text-sm text-gray-500 mt-1">
-                {activeSchool?.name || "未选择学校"}
-              </p>
-            </div>
+        <div className="flex h-full min-h-0 overflow-hidden">
+          {/* 左侧面板：固定宽度，无外层滚动 */}
+          <div className="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
+            <div className="flex flex-col gap-4 p-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">校区管理</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {activeSchool?.name || "未选择学校"}
+                </p>
+              </div>
 
-            {/* 操作按钮 */}
-            <div className="mb-4 space-y-2">
+              {/* 新增校区按钮（置顶） */}
               <button
                 onClick={handleStartDrawing}
                 disabled={
-                  !isPluginsLoaded || 
-                  isDrawing || 
-                  editingCampusId !== null || 
-                  loading || 
-                  !isMapReady || 
+                  !isPluginsLoaded ||
+                  isDrawing ||
+                  editingCampusId !== null ||
+                  loading ||
+                  !isMapReady ||
                   !activeSchool ||
                   !getTargetSchoolId()
                 }
-                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-[#FF4500] text-white rounded-lg hover:bg-[#FF5500] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-white transition-colors hover:bg-[#FF5500] disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Plus className="h-4 w-4" />
                 {!activeSchool || !getTargetSchoolId()
                   ? "请先选择学校"
                   : loading
-                  ? "地图加载中..."
-                  : !isMapReady
-                  ? "地图初始化中..."
-                  : isPluginsLoading
-                  ? "编辑器准备中..."
-                  : !isPluginsLoaded
-                  ? "编辑器加载中..."
-                  : "新增校区"}
+                    ? "地图加载中..."
+                    : !isMapReady
+                      ? "地图初始化中..."
+                      : isPluginsLoading
+                        ? "编辑器准备中..."
+                        : !isPluginsLoaded
+                          ? "编辑器加载中..."
+                          : "新增校区"}
               </button>
 
               {editingCampusId && (
@@ -1073,7 +1296,7 @@ export default function CampusManagementPage() {
                   <button
                     onClick={handleSaveEdit}
                     disabled={isSaving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Save className="h-4 w-4" />
                     保存
@@ -1081,7 +1304,7 @@ export default function CampusManagementPage() {
                   <button
                     onClick={handleCancelEdit}
                     disabled={isSaving}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-gray-500 px-4 py-2 text-white transition-colors hover:bg-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <X className="h-4 w-4" />
                     取消
@@ -1090,68 +1313,88 @@ export default function CampusManagementPage() {
               )}
             </div>
 
-            {/* 校区列表 */}
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-gray-700">校区列表</h3>
+            {/* 校区列表：可滚动区域 */}
+            <div className="min-h-0 flex-1 overflow-y-auto p-4 pt-0">
+              <h3 className="mb-3 text-sm font-semibold text-gray-700">校区列表</h3>
               {isLoadingCampuses ? (
-                <div className="text-sm text-gray-500">加载中...</div>
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-gray-600" />
+                  加载中...
+                </div>
               ) : campuses.length === 0 ? (
-                <div className="text-sm text-gray-500">暂无校区</div>
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+                    <MapPin className="h-6 w-6 text-gray-400" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-600">暂无校区</p>
+                  <p className="mt-1 text-xs text-gray-500">点击上方按钮绘制新校区</p>
+                </div>
               ) : (
-                campuses.map((campus) => (
-                  <Card key={campus.id} className="p-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-medium text-gray-900">{campus.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          创建于 {new Date(campus.createdAt).toLocaleDateString()}
+                <div className="space-y-2">
+                  {campuses.map((campus) => (
+                    <div
+                      key={campus.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => handleLocateCampus(campus)}
+                      onKeyDown={(e) => e.key === "Enter" && handleLocateCampus(campus)}
+                      className={`cursor-pointer rounded-lg bg-white shadow p-3 transition-colors hover:bg-gray-50 ${
+                        selectedCampusId === campus.id ? "ring-2 ring-[#FF4500] ring-inset" : ""
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">{campus.name}</div>
+                          <div className="mt-1 text-xs text-gray-500">
+                            创建于 {new Date(campus.createdAt).toLocaleDateString("zh-CN")}
+                          </div>
+                        </div>
+                        <div className="flex flex-shrink-0 gap-1" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            onClick={() => handleLocateCampus(campus)}
+                            className="rounded p-1 text-[#FF4500] hover:bg-[#FFE5DD]"
+                            title="定位"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                          {editingCampusId !== campus.id && (
+                            <>
+                              <button
+                                onClick={() => handleEditCampus(campus.id)}
+                                disabled={!isPluginsLoaded || !isMapReady || loading}
+                                className="rounded p-1 text-orange-600 hover:bg-orange-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                title={
+                                  loading || !isMapReady
+                                    ? "地图加载中..."
+                                    : isPluginsLoading
+                                      ? "编辑器准备中..."
+                                      : !isPluginsLoaded
+                                        ? "编辑器加载中..."
+                                        : "编辑"
+                                }
+                              >
+                                <Edit2 className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteCampus(campus.id)}
+                                className="rounded p-1 text-red-600 hover:bg-red-50"
+                                title="删除"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleLocateCampus(campus)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                          title="定位"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
-                        {editingCampusId !== campus.id && (
-                          <>
-                            <button
-                              onClick={() => handleEditCampus(campus.id)}
-                              disabled={!isPluginsLoaded || !isMapReady || loading}
-                              className="p-1 text-orange-600 hover:bg-orange-50 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-                              title={
-                                loading || !isMapReady
-                                  ? "地图加载中..."
-                                  : isPluginsLoading
-                                  ? "编辑器准备中..."
-                                  : !isPluginsLoaded
-                                  ? "编辑器加载中..."
-                                  : "编辑"
-                              }
-                            >
-                              <Edit2 className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCampus(campus.id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                              title="删除"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </>
-                        )}
-                      </div>
                     </div>
-                  </Card>
-                ))
+                  ))}
+                </div>
               )}
             </div>
           </div>
 
-          {/* 右侧地图区域 */}
-          <div className="flex-1 relative min-h-0">
+          {/* 右侧地图区域：占满剩余空间 */}
+          <div className="relative min-h-0 flex-1 bg-gray-100">
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-50 z-10">
                 <div className="text-center">
@@ -1167,7 +1410,7 @@ export default function CampusManagementPage() {
                 </div>
               </div>
             )}
-            <div ref={mapRef} className="w-full h-full" style={{ minHeight: '400px' }} />
+            <div ref={mapRef} className="h-full w-full" />
             
             {/* 名称输入对话框 */}
             {showNameInput && (
@@ -1200,12 +1443,18 @@ export default function CampusManagementPage() {
               </div>
             )}
 
-            {/* 绘制提示 */}
+            {/* 绘制提示：新增校区时显示 */}
             {isDrawing && (
-              <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-30 bg-white rounded-lg shadow-lg p-4 border border-[#FF4500]">
-                <p className="text-sm text-gray-700">
-                  请在地图上绘制校区边界，双击完成绘制
+              <div className="absolute top-4 left-1/2 z-30 flex -translate-x-1/2 flex-col gap-3 rounded-lg border border-[#FF4500] bg-white p-4 shadow-lg">
+                <p className="text-sm font-medium text-gray-700">
+                  请在地图上点击勾画校区边界，双击结束
                 </p>
+                <button
+                  onClick={handleCancelDrawing}
+                  className="self-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                >
+                  取消绘制
+                </button>
               </div>
             )}
           </div>

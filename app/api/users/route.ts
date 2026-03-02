@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/users
  * 获取用户列表（按学校和角色筛选）
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

@@ -1,66 +1,118 @@
 "use server";
 
 /**
- * 个人中心 Server Actions
+ * 中控台 Server Actions
  * 处理用户资料更新、邮箱换绑、密码修改等操作
  */
 
-import { getAuthCookie, setAuthCookie } from "@/lib/auth-server-actions";
+import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, verifyPassword } from "@/lib/auth-utils";
+import { validateContent } from "@/lib/content-validator";
+
+const PROFILE_UPDATE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
 
 /**
- * 更新个人资料（昵称和简介）
+ * 更新个人资料（昵称、头像、简介）
+ * 昵称和头像受 7 天冷却限制
  */
 export async function updateProfile(formData: FormData) {
   try {
-    // 获取当前用户
     const auth = await getAuthCookie();
     if (!auth || !auth.userId) {
-      return {
-        success: false,
-        message: "请先登录",
-      };
+      return { success: false, message: "请先登录" };
     }
 
     const nickname = formData.get("nickname")?.toString();
     const bio = formData.get("bio")?.toString();
+    const avatar = formData.get("avatar")?.toString();
 
-    // 验证昵称
     if (!nickname || nickname.trim().length === 0) {
-      return {
-        success: false,
-        message: "昵称不能为空",
-      };
+      return { success: false, message: "昵称不能为空" };
     }
 
     const trimmedNickname = nickname.trim();
     if (trimmedNickname.length < 2 || trimmedNickname.length > 20) {
-      return {
-        success: false,
-        message: "昵称长度必须在 2-20 个字符之间",
-      };
+      return { success: false, message: "昵称长度必须在 2-20 个字符之间" };
     }
 
-    // 验证简介（可选）
+    // 昵称敏感词校验 + 数字序列屏蔽
+    let sanitizedNickname: string;
+    try {
+      sanitizedNickname = (await validateContent(trimmedNickname, { checkNumbers: true })).trim();
+    } catch (e) {
+      return { success: false, message: e instanceof Error ? e.message : "内容包含敏感词汇，请修改后重试。" };
+    }
+
     if (bio && bio.trim().length > 200) {
-      return {
-        success: false,
-        message: "个人简介最多 200 个字符",
-      };
+      return { success: false, message: "个人简介最多 200 个字符" };
     }
 
-    // 更新用户资料
+    // 个人简介敏感词校验 + 数字序列屏蔽
+    let sanitizedBio: string | null = bio?.trim() || null;
+    if (sanitizedBio) {
+      try {
+        sanitizedBio = (await validateContent(sanitizedBio, { checkNumbers: true })).trim();
+      } catch (e) {
+        return { success: false, message: e instanceof Error ? e.message : "内容包含敏感词汇，请修改后重试。" };
+      }
+    }
+
+    const currentUser = await prisma.user.findUnique({
+      where: { id: auth.userId },
+      select: { nickname: true, avatar: true, lastProfileUpdateAt: true },
+    });
+
+    if (!currentUser) {
+      return { success: false, message: "用户不存在" };
+    }
+
+    const isChangingNickname = sanitizedNickname !== (currentUser.nickname ?? "");
+    const isChangingAvatar = avatar !== undefined && avatar !== (currentUser.avatar ?? "");
+
+    if (isChangingNickname || isChangingAvatar) {
+      const lastUpdate = currentUser.lastProfileUpdateAt;
+      if (lastUpdate) {
+        const elapsed = Date.now() - lastUpdate.getTime();
+        if (elapsed < PROFILE_UPDATE_COOLDOWN_MS) {
+          const nextAllowed = new Date(lastUpdate.getTime() + PROFILE_UPDATE_COOLDOWN_MS);
+          const nextStr = nextAllowed.toLocaleString("zh-CN", {
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          return {
+            success: false,
+            message: `为了社区安全，昵称和头像每 7 天仅限修改一次。下次可修改时间：${nextStr}`,
+          };
+        }
+      }
+    }
+
+    const updateData: { nickname: string; bio: string | null; avatar?: string | null; lastProfileUpdateAt?: Date } = {
+      nickname: sanitizedNickname,
+      bio: sanitizedBio,
+    };
+
+    if (avatar !== undefined) {
+      updateData.avatar = avatar || null;
+    }
+
+    if (isChangingNickname || isChangingAvatar) {
+      updateData.lastProfileUpdateAt = new Date();
+    }
+
     const updatedUser = await prisma.user.update({
       where: { id: auth.userId },
-      data: {
-        nickname: trimmedNickname,
-        bio: bio?.trim() || null,
-      },
+      data: updateData,
       select: {
         id: true,
         nickname: true,
         bio: true,
+        avatar: true,
+        lastProfileUpdateAt: true,
         email: true,
         role: true,
         schoolId: true,
@@ -70,7 +122,10 @@ export async function updateProfile(formData: FormData) {
     return {
       success: true,
       message: "资料更新成功",
-      user: updatedUser,
+      user: {
+        ...updatedUser,
+        lastProfileUpdateAt: updatedUser.lastProfileUpdateAt?.toISOString() ?? null,
+      },
     };
   } catch (error) {
     console.error("更新资料失败:", error);

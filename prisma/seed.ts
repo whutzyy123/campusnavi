@@ -28,12 +28,6 @@ async function main() {
       data: {
         name: "系统",
         schoolCode: "system",
-        boundary: {
-          type: "Polygon",
-          coordinates: [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
-        },
-        centerLat: 0,
-        centerLng: 0,
       },
     });
     console.log("✅ 创建系统学校:", systemSchool.id);
@@ -51,18 +45,6 @@ async function main() {
       data: {
         name: "测试大学",
         schoolCode: "test",
-        boundary: {
-          type: "Polygon",
-          coordinates: [
-            [
-              [116.3, 39.9],
-              [116.35, 39.9],
-              [116.35, 39.95],
-              [116.3, 39.95],
-              [116.3, 39.9],
-            ],
-          ],
-        },
         centerLat: 39.925,
         centerLng: 116.325,
       },
@@ -151,6 +133,25 @@ async function main() {
       console.log(`✅ 创建测试账号: ${account.email} (${account.nickname})`);
     } else {
       console.log(`ℹ️  测试账号已存在: ${account.email}`);
+    }
+  }
+
+  // 5. 创建默认生存集市交易类型（SALE, SWAP, BORROW）
+  const defaultTransactionTypes = [
+    { name: "二手交易", code: "SALE", order: 0 },
+    { name: "以物换物", code: "SWAP", order: 1 },
+    { name: "物品借用", code: "BORROW", order: 2 },
+  ];
+
+  for (const t of defaultTransactionTypes) {
+    const existing = await prisma.marketTransactionType.findFirst({
+      where: { code: t.code },
+    });
+    if (!existing) {
+      await prisma.marketTransactionType.create({
+        data: t,
+      });
+      console.log(`✅ 创建交易类型: ${t.name} (${t.code})`);
     }
   }
 

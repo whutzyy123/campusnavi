@@ -1,4 +1,6 @@
 import { create } from "zustand";
+import { logoutUser } from "@/lib/auth-server-actions";
+import { useNotificationStore } from "@/store/use-notification-store";
 
 export type UserRole = "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
 
@@ -7,6 +9,8 @@ export interface User {
   email?: string;
   nickname: string;
   bio?: string; // 个人简介
+  avatar?: string | null; // 头像 URL
+  lastProfileUpdateAt?: string | null; // 昵称/头像最后修改时间
   role: UserRole;
   schoolId: string | null; // 可选：超级管理员为 null
   schoolName?: string | null;
@@ -16,8 +20,13 @@ interface AuthState {
   currentUser: User | null;
   isAuthenticated: boolean;
   isInitialized: boolean; // 是否已完成初始化（获取用户信息）
+  isLoggingOut: boolean; // 登出中（防止重复点击、显示加载态）
   setUser: (user: User | null) => void;
   clearUser: () => void;
+  /** 立即清空认证状态（用户 + 通知），用于登出时先停止受保护 UI 渲染 */
+  clearAuth: () => void;
+  /** 登出：clearAuth → Server Action → 失败时 window.location 兜底 */
+  logout: () => Promise<void>;
   initializeAuth: () => Promise<void>; // 初始化认证状态
   setInitialized: (initialized: boolean) => void; // 设置初始化状态
 }
@@ -30,6 +39,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   currentUser: null,
   isAuthenticated: false,
   isInitialized: false,
+  isLoggingOut: false,
 
   setUser: (user) => {
     set({
@@ -43,6 +53,24 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       currentUser: null,
       isAuthenticated: false,
     });
+  },
+
+  clearAuth: () => {
+    set({ currentUser: null, isAuthenticated: false });
+    useNotificationStore.getState().setUnreadCount(0);
+  },
+
+  logout: async () => {
+    get().clearAuth();
+    set({ isLoggingOut: true });
+    try {
+      await logoutUser();
+    } catch (e) {
+      if (e instanceof Error && e.message?.includes?.("NEXT_REDIRECT")) throw e;
+      window.location.href = "/login";
+      return;
+    }
+    window.location.href = "/login";
   },
 
   setInitialized: (initialized: boolean) => {

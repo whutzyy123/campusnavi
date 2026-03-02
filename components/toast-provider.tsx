@@ -10,7 +10,8 @@ import { Toaster } from "react-hot-toast";
 export function ToastProvider() {
   return (
     <Toaster
-      position="top-right"
+      position="top-center"
+      containerStyle={{ top: 80 }}
       toastOptions={{
         duration: 3000,
         style: {

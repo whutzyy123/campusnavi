@@ -4,46 +4,37 @@ import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
-import { Card } from "@/components/card";
-import { Users, Building2, TrendingUp, AlertTriangle } from "lucide-react";
-
-interface SystemStats {
-  totalUsers: number;
-  totalSchools: number;
-  todayPOIs: number;
-  pendingReports: number;
-}
+import { StatCard } from "@/components/admin/stat-card";
+import { CommandShortcuts } from "@/components/admin/command-shortcuts";
+import { Users, Building2, ShoppingBag, Plus, Tags } from "lucide-react";
+import { getSuperAdminStats, type SuperAdminStats } from "@/lib/admin-actions";
 
 /**
  * 超级管理员后台 - 系统看板
- * 功能：显示系统核心统计数据
+ * 聚焦：全局增长 & 系统安全
  */
 export default function SuperAdminPage() {
   const { currentUser } = useAuthStore();
-  const [stats, setStats] = useState<SystemStats | null>(null);
+  const [stats, setStats] = useState<SuperAdminStats | null>(null);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
 
-  // 检查是否为超级管理员
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
-  // 加载系统统计数据
   useEffect(() => {
-    const fetchStats = async () => {
+    const load = async () => {
       setIsLoadingStats(true);
       try {
-        const response = await fetch("/api/admin/stats");
-        const data = await response.json();
-        if (data.success) {
-          setStats(data.stats);
+        const result = await getSuperAdminStats();
+        if (result.success && result.data) {
+          setStats(result.data);
         }
-      } catch (error) {
-        console.error("获取统计数据失败:", error);
+      } catch (err) {
+        console.error("获取统计数据失败:", err);
       } finally {
         setIsLoadingStats(false);
       }
     };
-
-    fetchStats();
+    load();
   }, []);
 
   if (!isSuperAdmin) {
@@ -59,72 +50,51 @@ export default function SuperAdminPage() {
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-6">
-          {/* 数据统计卡片 */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card title="总注册用户数">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-100">
-                  <Users className="h-6 w-6 text-blue-600" />
-                </div>
-                <div>
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 animate-pulse rounded bg-gray-200"></div>
-                  ) : (
-                    <div className="text-2xl font-bold text-gray-900">{stats?.totalUsers || 0}</div>
-                  )}
-                  <div className="text-sm text-gray-500">注册用户</div>
-                </div>
-              </div>
-            </Card>
+        <div className="box-border p-6 lg:p-8">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">
+              欢迎回来，系统管理员 {currentUser?.nickname || "管理员"}。
+            </h1>
+            <p className="mt-1 text-gray-600">当前全平台运行平稳。</p>
+          </div>
 
-            <Card title="已入驻学校总数">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-100">
-                  <Building2 className="h-6 w-6 text-green-600" />
-                </div>
-                <div>
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 animate-pulse rounded bg-gray-200"></div>
-                  ) : (
-                    <div className="text-2xl font-bold text-gray-900">{stats?.totalSchools || 0}</div>
-                  )}
-                  <div className="text-sm text-gray-500">入驻学校</div>
-                </div>
-              </div>
-            </Card>
+          {/* 统计卡片：3 列 */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
+              icon={Users}
+              value={stats?.totalUsers ?? 0}
+              label="注册用户"
+              variant="blue"
+              isLoading={isLoadingStats}
+              href="/super-admin/users"
+            />
+            <StatCard
+              icon={Building2}
+              value={stats?.activeSchools ?? 0}
+              label="活跃学校"
+              variant="green"
+              isLoading={isLoadingStats}
+              href="/super-admin/schools"
+            />
+            <StatCard
+              icon={ShoppingBag}
+              value={stats?.bazaarHealth ?? 0}
+              label="在架商品"
+              variant="emerald"
+              isLoading={isLoadingStats}
+              href="/super-admin/schools"
+            />
+          </div>
 
-            <Card title="今日新增 POI">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-amber-100">
-                  <TrendingUp className="h-6 w-6 text-amber-600" />
-                </div>
-                <div>
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 animate-pulse rounded bg-gray-200"></div>
-                  ) : (
-                    <div className="text-2xl font-bold text-gray-900">{stats?.todayPOIs || 0}</div>
-                  )}
-                  <div className="text-sm text-gray-500">今日新增</div>
-                </div>
-              </div>
-            </Card>
-
-            <Card title="待审核举报">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-red-100">
-                  <AlertTriangle className="h-6 w-6 text-red-600" />
-                </div>
-                <div>
-                  {isLoadingStats ? (
-                    <div className="h-8 w-16 animate-pulse rounded bg-gray-200"></div>
-                  ) : (
-                    <div className="text-2xl font-bold text-gray-900">{stats?.pendingReports || 0}</div>
-                  )}
-                  <div className="text-sm text-gray-500">待处理</div>
-                </div>
-              </div>
-            </Card>
+          {/* 快捷入口 */}
+          <div className="mt-8">
+            <CommandShortcuts
+              title="快捷入口"
+              items={[
+                { label: "添加学校", href: "/super-admin/schools", icon: Plus },
+                { label: "编辑全局分类", href: "/super-admin/categories", icon: Tags },
+              ]}
+            />
           </div>
         </div>
       </AdminLayout>

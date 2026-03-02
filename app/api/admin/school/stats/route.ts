@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/admin/school/stats
  * 获取校级管理员所在学校的统计数据
@@ -86,7 +88,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

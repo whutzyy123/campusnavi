@@ -9,6 +9,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword, hashPassword } from "@/lib/auth-utils";
+import { validateInvitationCode } from "@/lib/invitation-actions";
 
 const AUTH_COOKIE_NAME = "campus-survival-auth-token";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 天（秒）
@@ -41,6 +42,7 @@ async function setAuthCookie(data: AuthCookieData): Promise<void> {
 
 /**
  * 获取认证 Cookie
+ * 会校验关联邀请码状态：若邀请码为 DEACTIVATED，则清除会话并返回 null
  */
 export async function getAuthCookie(): Promise<AuthCookieData | null> {
   const cookieStore = await cookies();
@@ -51,7 +53,19 @@ export async function getAuthCookie(): Promise<AuthCookieData | null> {
   }
 
   try {
-    return JSON.parse(authCookie.value) as AuthCookieData;
+    const data = JSON.parse(authCookie.value) as AuthCookieData;
+    // 仅 ADMIN/STAFF 通过邀请码注册，需校验关联邀请码是否被停用
+    if (data.role === "ADMIN" || data.role === "STAFF") {
+      const invite = await prisma.invitationCode.findFirst({
+        where: { usedByUserId: data.userId },
+        select: { status: true },
+      });
+      if (invite?.status === "DEACTIVATED") {
+        await removeAuthCookie();
+        return null;
+      }
+    }
+    return data;
   } catch (error) {
     console.error("解析认证 Cookie 失败:", error);
     return null;
@@ -59,9 +73,9 @@ export async function getAuthCookie(): Promise<AuthCookieData | null> {
 }
 
 /**
- * 清除认证 Cookie
+ * 清除认证 Cookie（供登出、注销等场景使用）
  */
-async function removeAuthCookie(): Promise<void> {
+export async function removeAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
   cookieStore.delete(AUTH_COOKIE_NAME);
 }
@@ -123,6 +137,7 @@ export async function loginUser(formData: FormData) {
         password: true,
         role: true,
         schoolId: true,
+        status: true,
         school: {
           select: {
             id: true,
@@ -152,6 +167,14 @@ export async function loginUser(formData: FormData) {
       return {
         success: false,
         message: "邮箱或密码错误",
+      };
+    }
+
+    // 检查账户状态
+    if ((user as { status?: string }).status === "INACTIVE") {
+      return {
+        success: false,
+        message: "该账户已被停用，请联系管理员",
       };
     }
 
@@ -213,6 +236,20 @@ export async function loginUser(formData: FormData) {
 
     const userRole = roleMap[user.role] || "STUDENT";
 
+    // ADMIN/STAFF 通过邀请码注册，校验关联邀请码是否被停用
+    if (userRole === "ADMIN" || userRole === "STAFF") {
+      const invite = await prisma.invitationCode.findFirst({
+        where: { usedByUserId: user.id },
+        select: { status: true },
+      });
+      if (invite?.status === "DEACTIVATED") {
+        return {
+          success: false,
+          message: "您的账号关联的邀请码已被停用，请联系管理员。",
+        };
+      }
+    }
+
     // 设置认证 Cookie
     await setAuthCookie({
       userId: user.id,
@@ -267,7 +304,7 @@ export async function loginUser(formData: FormData) {
         location: "lib/auth-server-actions.ts:loginUser:catch",
         message: "Login threw a non-redirect error",
         data: {
-          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          errorMessage: error instanceof Error ? error.message : "未知错误",
         },
         timestamp: Date.now(),
       }),
@@ -277,7 +314,7 @@ export async function loginUser(formData: FormData) {
     return {
       success: false,
       message: "服务器内部错误",
-      error: error instanceof Error ? error.message : "Unknown error",
+      error: error instanceof Error ? error.message : "未知错误",
     };
   }
 }
@@ -313,45 +350,35 @@ export async function registerUser(formData: FormData) {
     // 为了简化，我们直接调用现有的注册路由逻辑
     // 实际应该将注册逻辑提取为共享函数
 
-    // 验证邀请码（如果是管理员或工作人员）
-    let invitationCodeRecord = null;
+    // 验证邀请码（Code-First：ADMIN/STAFF 必须提供有效邀请码）
     let targetSchoolId = schoolId || null;
+    const trimmedCode = invitationCode?.trim().toUpperCase() || null;
 
     if (role === "ADMIN" || role === "STAFF") {
-      if (!invitationCode) {
+      if (!trimmedCode) {
         return {
           success: false,
           message: "管理员和工作人员需要邀请码",
         };
       }
 
-      invitationCodeRecord = await prisma.invitationCode.findUnique({
-        where: { code: invitationCode },
-        include: { school: true },
-      });
-
-      if (!invitationCodeRecord) {
+      const validation = await validateInvitationCode(trimmedCode);
+      if (!validation.valid) {
         return {
           success: false,
-          message: "邀请码无效",
+          message: validation.message || "邀请码无效",
         };
       }
 
-      if (invitationCodeRecord.isUsed) {
+      // 邀请码角色必须与表单角色一致
+      if (validation.roleType !== role) {
         return {
           success: false,
-          message: "邀请码已被使用",
+          message: "邀请码角色与所选身份不匹配",
         };
       }
 
-      if (invitationCodeRecord.role !== (role === "ADMIN" ? 2 : 3)) {
-        return {
-          success: false,
-          message: "邀请码角色不匹配",
-        };
-      }
-
-      targetSchoolId = invitationCodeRecord.schoolId;
+      targetSchoolId = validation.schoolId;
     } else {
       // 学生必须选择学校
       if (!schoolId) {
@@ -365,6 +392,7 @@ export async function registerUser(formData: FormData) {
     // 验证学校是否存在
     const school = await prisma.school.findUnique({
       where: { id: targetSchoolId! },
+      select: { id: true },
     });
 
     if (!school) {
@@ -381,7 +409,7 @@ export async function registerUser(formData: FormData) {
       STAFF: 3,
     };
 
-      // 创建用户（使用事务）
+    // 创建用户（使用事务，邀请码消耗在事务内完成）
     const user = await prisma.$transaction(async (tx) => {
       // 检查邮箱是否已存在
       const existingUser = await tx.user.findUnique({
@@ -406,16 +434,19 @@ export async function registerUser(formData: FormData) {
         },
       });
 
-      // 如果使用了邀请码，标记为已使用
-      if (invitationCodeRecord) {
-        await tx.invitationCode.update({
-          where: { id: invitationCodeRecord.id },
+      // 如果使用了邀请码，消耗邀请码（status=USED, usedByUserId, usedAt）
+      if (trimmedCode) {
+        const consumed = await tx.invitationCode.updateMany({
+          where: { code: trimmedCode, status: "ACTIVE" },
           data: {
-            isUsed: true,
-            usedBy: newUser.id,
+            status: "USED",
+            usedByUserId: newUser.id,
             usedAt: new Date(),
           },
         });
+        if (consumed.count === 0) {
+          throw new Error("邀请码已被使用或已失效，请刷新后重试");
+        }
       }
 
       return newUser;
@@ -455,10 +486,12 @@ export async function registerUser(formData: FormData) {
 
 /**
  * 用户登出 Server Action
+ * 清除 Cookie 后重定向到登录页。redirect() 会抛出 NEXT_REDIRECT，不可被 try/catch 吞掉。
  */
 export async function logoutUser() {
-  await removeAuthCookie();
-  redirect("/");
+  const cookieStore = await cookies();
+  cookieStore.delete(AUTH_COOKIE_NAME);
+  redirect("/login");
 }
 
 /**

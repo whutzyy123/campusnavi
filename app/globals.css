@@ -3,6 +3,23 @@
 @tailwind utilities;
 
 :root {
+  /* 导航栏高度（与 Navbar h-16 一致，用于 fixed 元素避免遮挡） */
+  --nav-height: 4rem; /* 64px */
+
+  /* Z-Index 层级（严格顺序：navbar < sidebar < modal-overlay < modal-content < tooltip） */
+  --z-navbar: 40;
+  --z-navbar-dropdown: 50;
+  --z-sidebar: 45;
+  --z-modal-overlay: 100;
+  --z-modal-content: 110;
+  --z-tooltip: 120;
+  --z-tooltip-popover: 120; /* alias */
+
+  /* 平台主题色（与 Navigate 按钮一致） */
+  --primary-theme: #FF4500;
+  --primary-theme-light: rgba(255, 69, 0, 0.2);
+  --primary-theme-pulse: rgba(255, 69, 0, 0.6);
+
   /* Reddit 风格配色系统 */
   --reddit-orange: #FF4500;
   --reddit-blue: #0079D3;
@@ -19,9 +36,245 @@
   --foreground: var(--reddit-text-primary);
 }
 
+html {
+  -webkit-overflow-scrolling: touch;
+}
+
 body {
   color: var(--reddit-text-primary);
   background: var(--reddit-bg-page);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: none; /* 防止整页下拉刷新，避免与地图手势冲突 */
 }
+
+/* 全局焦点环（无障碍） */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px white, 0 0 0 4px var(--primary-theme);
+}
+
+/* 可选：抽屉/侧边栏等滚动区域使用主题色滚动条 */
+.scrollbar-theme::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-theme::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--primary-theme) 40%, #e5e7eb);
+  border-radius: 10px;
+}
+.scrollbar-theme::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--primary-theme) 55%, #d1d5db);
+}
+
+@layer base {
+  /* Apple-style 细滚动条：Webkit 浏览器 */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--primary-theme) 25%, #e5e7eb);
+    border-radius: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in srgb, var(--primary-theme) 35%, #d1d5db);
+  }
+}
+
+/* 导航栏下方布局工具类（配合 --nav-height 使用） */
+@layer utilities {
+  .below-nav {
+    top: var(--nav-height);
+  }
+  .pt-nav {
+    padding-top: var(--nav-height);
+  }
+  .h-below-nav {
+    height: calc(100vh - var(--nav-height));
+  }
+  /* 防止滚动条出现时布局抖动 */
+  .scrollbar-gutter-stable {
+    scrollbar-gutter: stable;
+  }
+
+  /* 隐藏滚动条（Webkit / Firefox / IE-Edge），保持触摸滚动与动量滚动 */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none; /* IE and Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  /* 触摸设备动量滚动（用于列表等可滚动区域） */
+  .scroll-momentum {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Modal 视口感知布局：居中、最大高度、内部滚动 */
+  .modal-overlay {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    min-height: 100vh;
+    animation: modal-overlay-fade 0.2s ease-out forwards;
+  }
+  @keyframes modal-overlay-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  .modal-container {
+    max-height: min(85vh, calc(100vh - 40px));
+    width: 100%;
+    max-width: 32rem;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border-radius: 1rem;
+    border: 1px solid rgb(229 231 235);
+    background: white;
+    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+    animation: modal-container-in 0.25s ease-out forwards;
+  }
+  @keyframes modal-container-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  .modal-header {
+    flex-shrink: 0;
+    border-bottom: 1px solid rgb(229 231 235);
+    background: white;
+  }
+  .modal-body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .modal-footer {
+    flex-shrink: 0;
+    border-top: 1px solid rgb(229 231 235);
+    background: white;
+  }
+}
+
+/* POI Marker 高亮脉冲光晕 */
+@keyframes marker-pulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.5); opacity: 0; }
+}
+
+.highlight-pulse {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: var(--primary-theme-pulse);
+  border-radius: 50%;
+  animation: marker-pulse 1.5s infinite;
+  pointer-events: none;
+}
+
+/* 扁平圆形 POI 标记（使用平台主题色，固定 24x24 确保锚点准确） */
+.flat-marker {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  pointer-events: auto;
+  cursor: pointer;
+  transition: transform 0.2s ease-in-out;
+}
+
+.flat-marker .marker-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 18px;
+  height: 18px;
+  background: var(--primary-theme-light);
+  border-radius: 50%;
+  transition: all 0.2s ease-in-out;
+}
+
+.flat-marker .marker-inner {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  background: var(--primary-theme);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease-in-out;
+}
+
+.flat-marker:hover,
+.flat-marker.selected {
+  transform: scale(1.2);
+}
+
+.flat-marker:hover .marker-inner,
+.flat-marker.selected .marker-inner {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+/* Landing Page: Mesh gradient + blueprint dot pattern */
+.landing-mesh-bg {
+  background: linear-gradient(
+    135deg,
+    #fef7f4 0%,
+    #f8f4ff 35%,
+    #f0f4ff 60%,
+    #fef7f4 100%
+  );
+}
+
+.landing-dot-pattern {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(255, 69, 0, 0.08) 1px,
+    transparent 0
+  );
+  background-size: 24px 24px;
+}
+
+/* Hero button glow pulse */
+@keyframes hero-btn-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 69, 0, 0.4); }
+  50% { box-shadow: 0 0 32px rgba(255, 69, 0, 0.6); }
+}
+
+.hero-btn-glow {
+  animation: hero-btn-glow 2s ease-in-out infinite;
+}
+
+/* Map marker pulse (landing phone mockup) */
+@keyframes marker-pulse-soft {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.15); opacity: 0.9; }
+}
+
+.marker-pulse-soft {
+  animation: marker-pulse-soft 1.5s ease-in-out infinite;
+}
+
+.marker-pulse-delay-1 { animation-delay: 0.2s; }
+.marker-pulse-delay-2 { animation-delay: 0.3s; }
+.marker-pulse-delay-3 { animation-delay: 0.6s; }
+.marker-pulse-delay-4 { animation-delay: 0.9s; }
 

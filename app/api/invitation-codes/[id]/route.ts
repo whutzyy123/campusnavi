@@ -28,8 +28,8 @@ export async function DELETE(
       where: { id: params.id },
       select: {
         id: true,
-        issuerId: true,
-        isUsed: true,
+        createdByUserId: true,
+        status: true,
         code: true,
       },
     });
@@ -59,7 +59,7 @@ export async function DELETE(
 
     // 权限校验：只有发放人或超级管理员才能作废
     const isSuperAdmin = currentUser.role === 4;
-    const isIssuer = invitationCode.issuerId === userId;
+    const isIssuer = invitationCode.createdByUserId === userId;
 
     if (!isSuperAdmin && !isIssuer) {
       return NextResponse.json(
@@ -83,7 +83,7 @@ export async function DELETE(
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

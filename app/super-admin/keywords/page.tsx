@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState, useCallback } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { useDebounce } from "@/hooks/use-debounce";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
-import { Badge } from "@/components/badge";
+import { SearchInput } from "@/components/shared/search-input";
+import { EmptyState } from "@/components/empty-state";
 import { useAuthStore } from "@/store/use-auth-store";
-import { Plus, Trash2, X } from "lucide-react";
+import { Plus, Trash2, X, Upload, FileText, Loader2, Tags } from "lucide-react";
 import toast from "react-hot-toast";
 import {
   Table,
@@ -30,7 +33,16 @@ interface SensitiveWord {
 }
 
 export default function KeywordsManagementPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <KeywordsManagementPageContent />
+    </Suspense>
+  );
+}
+
+function KeywordsManagementPageContent() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const { currentUser } = useAuthStore();
   const [keywords, setKeywords] = useState<SensitiveWord[]>([]);
@@ -43,12 +55,20 @@ export default function KeywordsManagementPage() {
   const [newKeyword, setNewKeyword] = useState("");
   const [isAdding, setIsAdding] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [searchInput, setSearchInput] = useState(() => searchParams.get("q") || "");
+  const debouncedSearchInput = useDebounce(searchInput, 300);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [lastImportResult, setLastImportResult] = useState<{ added: number; skipped: number } | null>(null);
 
   // 获取屏蔽词列表
-  const fetchKeywords = async () => {
+  const fetchKeywords = useCallback(async () => {
     try {
       const currentPage = parseInt(searchParams.get("page") || "1", 10);
-      const response = await fetch(`/api/keywords?page=${currentPage}&limit=10`);
+      const params = new URLSearchParams({ page: String(currentPage), limit: "10" });
+      if (debouncedSearchInput.trim()) params.set("q", debouncedSearchInput.trim());
+      const response = await fetch(`/api/keywords?${params}`);
       const data = await response.json();
 
       if (data.success) {
@@ -63,11 +83,95 @@ export default function KeywordsManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchParams, debouncedSearchInput]);
 
   useEffect(() => {
     fetchKeywords();
-  }, [searchParams]);
+  }, [fetchKeywords]);
+
+  // 同步防抖后的搜索词到 URL
+  useEffect(() => {
+    const q = debouncedSearchInput.trim();
+    const params = new URLSearchParams(searchParams.toString());
+    if (q) {
+      params.set("q", q);
+      params.delete("page");
+    } else {
+      params.delete("q");
+    }
+    const newSearch = params.toString();
+    router.replace(newSearch ? `${pathname}?${newSearch}` : pathname);
+  }, [debouncedSearchInput, pathname, router, searchParams]);
+
+  // 解析文本中的词汇：逗号、换行、空格分隔
+  const parseWordsFromText = (text: string): string[] => {
+    return text
+      .split(/[\s,\n\r\t]+/)
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0);
+  };
+
+  // 批量导入
+  const handleBulkImport = async () => {
+    const words = parseWordsFromText(bulkText);
+    if (words.length === 0) {
+      toast.error("请输入或上传要导入的词汇");
+      return;
+    }
+    if (!currentUser) {
+      toast.error("请先登录");
+      return;
+    }
+
+    setBulkImporting(true);
+    setLastImportResult(null);
+    try {
+      const response = await fetch("/api/keywords/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          words,
+          addedById: currentUser.id,
+        }),
+      });
+      const data = await response.json();
+
+      if (data.success) {
+        setLastImportResult(data.data);
+        toast.success(data.message || "批量导入成功");
+        setBulkText("");
+        await fetchKeywords();
+      } else {
+        toast.error(data.message || "批量导入失败");
+      }
+    } catch (error) {
+      console.error("批量导入失败:", error);
+      toast.error("批量导入失败");
+    } finally {
+      setBulkImporting(false);
+    }
+  };
+
+  // 文件上传解析
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.toLowerCase().split(".").pop();
+    if (ext !== "txt" && ext !== "csv") {
+      toast.error("仅支持 .txt 或 .csv 文件");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = reader.result as string;
+      setBulkText((prev) => (prev ? `${prev}\n${text}` : text));
+      toast.success(`已加载 ${file.name}，共 ${parseWordsFromText(text).length} 个词汇`);
+    };
+    reader.readAsText(file, "UTF-8");
+    e.target.value = "";
+  };
 
   // 添加屏蔽词
   const handleAddKeyword = async () => {
@@ -163,12 +267,12 @@ export default function KeywordsManagementPage() {
                   }
                 }}
                 placeholder="输入要添加的屏蔽词"
-                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
               />
               <button
                 onClick={handleAddKeyword}
                 disabled={isAdding || !newKeyword.trim()}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isAdding ? (
                   <>
@@ -182,18 +286,40 @@ export default function KeywordsManagementPage() {
                   </>
                 )}
               </button>
+              <button
+                onClick={() => {
+                  setShowBulkModal(true);
+                  setLastImportResult(null);
+                  setBulkText("");
+                }}
+                className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+              >
+                <Upload className="h-4 w-4" />
+                批量导入
+              </button>
+            </div>
+
+            {/* 搜索 */}
+            <div className="mb-4">
+              <SearchInput
+                value={searchInput}
+                onChange={setSearchInput}
+                placeholder="搜索屏蔽词..."
+                className="w-full max-w-md"
+              />
             </div>
 
             {/* 屏蔽词列表 */}
             {loading ? (
               <div className="flex items-center justify-center py-12">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent"></div>
               </div>
             ) : keywords.length === 0 ? (
-              <div className="py-12 text-center text-gray-500">
-                <p>暂无屏蔽词</p>
-                <p className="mt-2 text-sm">点击上方"添加"按钮添加第一个屏蔽词</p>
-              </div>
+              <EmptyState
+                icon={Tags}
+                title="暂无屏蔽词"
+                description="点击上方「添加」按钮添加第一个屏蔽词"
+              />
             ) : (
               <div className="min-h-[500px] flex flex-col">
                 <div className="flex-1 overflow-x-auto">
@@ -262,6 +388,92 @@ export default function KeywordsManagementPage() {
             )}
           </Card>
         </div>
+
+        {/* 批量导入弹窗 */}
+        {showBulkModal && (
+          <div
+            className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50"
+            onClick={() => !bulkImporting && setShowBulkModal(false)}
+          >
+            <div
+              className="modal-container max-w-lg"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="modal-header flex items-center justify-between border-b border-gray-200 px-6 py-4">
+                <h3 className="text-lg font-semibold text-gray-900">批量导入屏蔽词</h3>
+                <button
+                  type="button"
+                  onClick={() => !bulkImporting && setShowBulkModal(false)}
+                  className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                  aria-label="关闭"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="modal-body space-y-4 px-6 py-4 scrollbar-gutter-stable">
+                <p className="text-sm text-gray-600">
+                  支持逗号、换行或空格分隔，或上传 .txt / .csv 文件
+                </p>
+
+                <div className="flex gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+                    <FileText className="h-4 w-4" />
+                    上传 .txt / .csv
+                    <input
+                      type="file"
+                      accept=".txt,.csv"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                  </label>
+                </div>
+
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => setBulkText(e.target.value)}
+                  placeholder="粘贴词汇列表，每行一个或用逗号分隔&#10;例如：&#10;词1&#10;词2, 词3"
+                  rows={10}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                />
+
+                {lastImportResult && (
+                  <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
+                    成功添加 {lastImportResult.added} 个屏蔽词，{lastImportResult.skipped} 个重复已跳过
+                  </div>
+                )}
+              </div>
+
+              <div className="modal-footer flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
+                <button
+                  type="button"
+                  onClick={() => !bulkImporting && setShowBulkModal(false)}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleBulkImport}
+                  disabled={bulkImporting || parseWordsFromText(bulkText).length === 0}
+                  className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {bulkImporting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      导入中...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      导入
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </AdminLayout>
     </AuthGuard>
   );

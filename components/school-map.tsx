@@ -1,13 +1,22 @@
 /**
  * 学校地图组件
- * 支持显示学校边界和自动定位
+ * 支持显示学校边界、校区标签和自动定位
  */
 
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useAMap } from "@/hooks/use-amap";
+import { ensureLngLat } from "@/lib/campus-label-utils";
 import type { School } from "@/store/use-school-store";
+
+interface CampusArea {
+  id: string;
+  name: string;
+  boundary: unknown;
+  center: [number, number];
+  labelCenter?: [number, number] | unknown;
+}
 
 interface SchoolMapProps {
   school: School | null;
@@ -15,11 +24,42 @@ interface SchoolMapProps {
   className?: string;
 }
 
+/** 从 [lng, lat] 或 GeoJSON Point 解析坐标，确保 [lng, lat] 顺序 */
+function parseLngLat(v: unknown): [number, number] {
+  if (!v) return [0, 0];
+  if (Array.isArray(v) && v.length >= 2) return ensureLngLat(Number(v[0]), Number(v[1]));
+  const obj = v as { coordinates?: unknown[] };
+  if (obj?.coordinates && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
+    return ensureLngLat(Number(obj.coordinates[0]), Number(obj.coordinates[1]));
+  }
+  return [0, 0];
+}
+
+/** 从 boundary 坐标计算边界框中心（labelCenter 为空时的回退） */
+function getBboxCenter(boundary: unknown): [number, number] {
+  const b = boundary as { type?: string; coordinates?: number[][][] } | undefined;
+  if (!b?.coordinates?.[0]?.length) return [0, 0];
+  const ring = b.coordinates[0];
+  let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  for (const p of ring) {
+    if (Array.isArray(p) && p.length >= 2) {
+      minLng = Math.min(minLng, p[0]);
+      maxLng = Math.max(maxLng, p[0]);
+      minLat = Math.min(minLat, p[1]);
+      maxLat = Math.max(maxLat, p[1]);
+    }
+  }
+  if (minLng === Infinity) return [0, 0];
+  return [(minLng + maxLng) / 2, (minLat + maxLat) / 2];
+}
+
 export function SchoolMap({ school, userLocation, className = "w-full h-screen" }: SchoolMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const boundaryPolygonRef = useRef<any>(null);
   const userMarkerRef = useRef<any>(null);
+  const campusPolygonsRef = useRef<Map<string, any>>(new Map());
+  const campusLabelsRef = useRef<Map<string, any>>(new Map());
+  const [campuses, setCampuses] = useState<CampusArea[]>([]);
   const { amap, loading, error } = useAMap();
 
   // 初始化地图
@@ -28,10 +68,11 @@ export function SchoolMap({ school, userLocation, className = "w-full h-screen" 
       return;
     }
 
-    // 确定地图中心点
-    const center: [number, number] = school
+    // 确定地图中心点（school center 可选）
+    const defaultCenter: [number, number] = [116.397428, 39.90923]; // 北京
+    const center: [number, number] = school?.centerLng != null && school?.centerLat != null
       ? [school.centerLng, school.centerLat]
-      : userLocation || [116.397428, 39.90923]; // 默认：北京
+      : userLocation || defaultCenter;
 
     // 创建地图实例
     const map = new amap.Map(mapRef.current, {
@@ -50,47 +91,109 @@ export function SchoolMap({ school, userLocation, className = "w-full h-screen" 
         mapInstanceRef.current = null;
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 amap 变化时初始化，加入 school/userLocation 会导致地图重复创建与闪烁
   }, [amap]);
 
-  // 绘制学校边界
+  // 获取校区列表
   useEffect(() => {
-    if (!amap || !mapInstanceRef.current || !school) {
+    if (!school?.id) {
+      setCampuses([]);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/schools/${school.id}/campuses`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelled && data.success && Array.isArray(data.data)) {
+          setCampuses(data.data);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- school?.id 足够，避免 school 引用变化触发重复请求
+  }, [school?.id]);
+
+  // 绘制学校边界与校区标签（优先使用 labelCenter，无则用边界框中心）
+  useEffect(() => {
+    if (!amap || !mapInstanceRef.current || campuses.length === 0) {
       return;
     }
 
-    const boundary = school.boundary as any;
-    if (!boundary || boundary.type !== "Polygon") {
-      return;
-    }
+    const map = mapInstanceRef.current;
+    const polygons = campusPolygonsRef.current;
+    const labels = campusLabelsRef.current;
 
-    // 移除旧的边界多边形
-    if (boundaryPolygonRef.current) {
-      mapInstanceRef.current.remove(boundaryPolygonRef.current);
-    }
+    polygons.forEach((polygon) => {
+      try { map.remove(polygon); } catch {}
+    });
+    polygons.clear();
+    labels.forEach((label) => {
+      try { map.remove(label); } catch {}
+    });
+    labels.clear();
 
-    // 绘制新的边界多边形（浅绿色，半透明）
-    const coordinates = boundary.coordinates[0]; // Polygon 的第一层坐标数组
-    boundaryPolygonRef.current = new amap.Polygon({
-      path: coordinates,
-      strokeColor: "#52c41a", // 浅绿色
-      strokeWeight: 2,
-      strokeOpacity: 0.8,
-      fillColor: "#52c41a",
-      fillOpacity: 0.15, // 半透明
+    campuses.forEach((campus) => {
+      let boundary = campus.boundary;
+      if (typeof boundary === "string") {
+        try { boundary = JSON.parse(boundary); } catch { return; }
+      }
+      const b = boundary as { type?: string; coordinates?: number[][][] };
+      if (b?.type !== "Polygon" || !b?.coordinates?.[0]?.length) return;
+
+      const coordinates = b.coordinates[0];
+      const polygon = new amap.Polygon({
+        path: coordinates,
+        fillColor: "#FF4500",
+        fillOpacity: 0.08,
+        strokeColor: "#FF4500",
+        strokeWeight: 2,
+        strokeOpacity: 0.5,
+        strokeDasharray: [10, 5],
+        zIndex: 10,
+      });
+      polygon.setMap(map);
+      polygons.set(campus.id, polygon);
+
+      // 优先使用 labelCenter（polylabel），无则用边界框中心
+      const labelPos = campus.labelCenter ?? getBboxCenter(boundary);
+      const [lng, lat] = parseLngLat(labelPos);
+      const text = new amap.Text({
+        text: campus.name,
+        position: [lng, lat],
+        anchor: "center",
+        style: {
+          fontSize: "14px",
+          fontWeight: "bold",
+          color: "#FF4500",
+          backgroundColor: "rgba(255, 255, 255, 0.95)",
+          padding: "4px 8px",
+          borderRadius: "4px",
+          border: "1px solid #FF4500",
+        },
+        zIndex: 20,
+      });
+      text.setMap(map);
+      labels.set(campus.id, text);
     });
 
-    boundaryPolygonRef.current.setMap(mapInstanceRef.current);
-
-    // 地图自动平移到学校中心
-    mapInstanceRef.current.panTo([school.centerLng, school.centerLat]);
-
-    // 清理函数
     return () => {
-      if (boundaryPolygonRef.current && mapInstanceRef.current) {
-        mapInstanceRef.current.remove(boundaryPolygonRef.current);
-        boundaryPolygonRef.current = null;
-      }
+      polygons.forEach((polygon) => {
+        try { map?.remove(polygon); } catch {}
+      });
+      polygons.clear();
+      labels.forEach((label) => {
+        try { map?.remove(label); } catch {}
+      });
+      labels.clear();
     };
+  }, [amap, campuses]);
+
+  // 若有 center，平移地图到学校中心
+  useEffect(() => {
+    if (!amap || !mapInstanceRef.current || !school) return;
+    if (school.centerLng != null && school.centerLat != null) {
+      mapInstanceRef.current.panTo([school.centerLng, school.centerLat]);
+    }
   }, [amap, school]);
 
   // 显示用户位置标记
@@ -138,7 +241,7 @@ export function SchoolMap({ school, userLocation, className = "w-full h-screen" 
         <div className="text-center">
           <div className="mb-4 text-lg font-medium text-gray-700">加载地图中...</div>
           <div className="h-2 w-64 rounded-full bg-gray-200">
-            <div className="h-2 animate-pulse rounded-full bg-blue-500"></div>
+            <div className="h-2 animate-pulse rounded-full bg-[#FF4500]"></div>
           </div>
         </div>
       </div>

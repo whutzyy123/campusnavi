@@ -1,28 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { centroid } from "@turf/turf";
-import type { Feature, Polygon } from "geojson";
 
 /**
  * POST /api/admin/school
- * 创建新学校
- * 
+ * 创建新学校（仅名称和代码，边界由 School Admin 在 CampusArea 中绘制）
+ *
  * 请求体：
  * {
  *   name: string,
- *   schoolCode: string,
- *   boundary: [number, number][] // [[lng, lat], ...]
+ *   schoolCode: string
  * }
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { name, schoolCode, boundary } = body;
+    const { name, schoolCode } = body;
 
     // 验证必填字段
-    if (!name || !schoolCode || !boundary) {
+    if (!name || !schoolCode) {
       return NextResponse.json(
-        { success: false, message: "缺少必填字段：name, schoolCode, boundary" },
+        { success: false, message: "缺少必填字段：name, schoolCode" },
         { status: 400 }
       );
     }
@@ -35,34 +32,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证边界点数量（至少3个点才能构成多边形）
-    if (!Array.isArray(boundary) || boundary.length < 3) {
-      return NextResponse.json(
-        { success: false, message: "边界至少需要3个点" },
-        { status: 400 }
-      );
-    }
-
-    // 验证坐标格式
-    for (const point of boundary) {
-      if (!Array.isArray(point) || point.length !== 2) {
-        return NextResponse.json(
-          { success: false, message: "边界坐标格式错误，应为 [lng, lat] 数组" },
-          { status: 400 }
-        );
-      }
-      const [lng, lat] = point;
-      if (typeof lng !== "number" || typeof lat !== "number" || isNaN(lng) || isNaN(lat)) {
-        return NextResponse.json(
-          { success: false, message: "坐标必须是有效的数字" },
-          { status: 400 }
-        );
-      }
-    }
-
     // 检查学校代码是否已存在
     const existingSchool = await prisma.school.findUnique({
-      where: { schoolCode },
+      where: { schoolCode: schoolCode.trim().toLowerCase() },
     });
 
     if (existingSchool) {
@@ -72,43 +44,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 构建 GeoJSON 格式的多边形（闭合：首尾相连）
-    const closedBoundary = [...boundary, boundary[0]];
-    const polygon: Polygon = {
-      type: "Polygon",
-      coordinates: [closedBoundary],
-    };
-
-    // 使用 Turf.js 计算多边形中心点
-    const polygonFeature: Feature<Polygon> = {
-      type: "Feature",
-      geometry: polygon,
-      properties: {},
-    };
-
-    const center = centroid(polygonFeature);
-    const [centerLng, centerLat] = center.geometry.coordinates;
-
-    // 保存到数据库
+    // 保存到数据库（无 boundary 和 center，由 School Admin 后续在 CampusArea 中配置）
     const school = await prisma.school.create({
       data: {
         name: name.trim(),
         schoolCode: schoolCode.trim().toLowerCase(),
-        boundary: polygon as any, // Prisma 的 Json 类型
-        centerLat,
-        centerLng,
       },
     });
 
     return NextResponse.json({
       success: true,
-      message: "学校初始化成功",
+      message: "学校创建成功",
       data: {
         id: school.id,
         name: school.name,
         schoolCode: school.schoolCode,
-        centerLat: school.centerLat,
-        centerLng: school.centerLng,
       },
     });
   } catch (error) {
@@ -123,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { success: false, message: "服务器内部错误", error: error instanceof Error ? error.message : "Unknown error" },
+      { success: false, message: "服务器内部错误", error: error instanceof Error ? error.message : "未知错误" },
       { status: 500 }
     );
   }

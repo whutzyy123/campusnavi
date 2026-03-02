@@ -1,34 +1,41 @@
 /**
  * 导航信息卡片组件
  * 显示在屏幕底部，展示导航信息
+ * 移动端：16:9 仅 Dist|Time|Exit；21:9+ 支持路线详情折叠；100dvh 适配
  */
 
 "use client";
 
-import { X } from "lucide-react";
+import { useState } from "react";
+import { X, ChevronDown } from "lucide-react";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function NavInfoCard() {
-  const { isNavigating, routeInfo, endPoint, stopNavigation } = useNavigationStore();
+  const { isNavigating, routeInfo, routeSteps, endPoint, stopNavigation } = useNavigationStore();
+  const isMobile = !useMediaQuery("(min-width: 768px)");
+  const isLongScreen = useMediaQuery("(min-aspect-ratio: 2/1)"); // 21:9+
+  const [showRouteDetail, setShowRouteDetail] = useState(false);
 
   if (!isNavigating || !routeInfo || !endPoint) {
     return null;
   }
 
-  // 格式化距离
-  const formatDistance = (meters: number): string => {
-    if (meters < 1000) {
-      return `${Math.round(meters)} 米`;
-    }
+  const formatDistanceShort = (meters: number): string => {
+    if (meters < 1000) return `${Math.round(meters)}m`;
+    return `${(meters / 1000).toFixed(1)}km`;
+  };
+  const formatDurationShort = (minutes: number): string => {
+    if (minutes < 1) return "<1min";
+    return `${Math.round(minutes)}min`;
+  };
+  const formatDistanceLong = (meters: number): string => {
+    if (meters < 1000) return `${Math.round(meters)} 米`;
     return `${(meters / 1000).toFixed(1)} 公里`;
   };
-
-  // 格式化时间
-  const formatDuration = (minutes: number): string => {
-    if (minutes < 1) {
-      return "不到 1 分钟";
-    }
+  const formatDurationLong = (minutes: number): string => {
+    if (minutes < 1) return "不到 1 分钟";
     return `${Math.round(minutes)} 分钟`;
   };
 
@@ -40,27 +47,75 @@ export function NavInfoCard() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="fixed bottom-6 left-1/2 z-50 w-full max-w-md -translate-x-1/2 px-4"
+          className={`fixed left-0 right-0 z-50 md:left-1/2 md:right-auto md:w-full md:max-w-md md:-translate-x-1/2 md:px-4 ${
+            isMobile ? "bottom-0" : "bottom-6"
+          }`}
+          style={
+            isMobile
+              ? { paddingBottom: "env(safe-area-inset-bottom, 1rem)" }
+              : undefined
+          }
         >
-          <div className="rounded-lg bg-white/95 backdrop-blur-sm shadow-xl border border-gray-200 p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <h3 className="text-base font-semibold text-gray-900">
-                  步行前往 {endPoint.name || "目标点"}
-                </h3>
-                <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
-                  <span>距离约 {formatDistance(routeInfo.distance)}</span>
-                  <span>预计耗时 {formatDuration(routeInfo.duration)}</span>
+          <div
+            className={`rounded-t-2xl border-t border-x border-gray-200 bg-white/80 backdrop-blur-lg md:rounded-lg md:border md:bg-white/95 md:shadow-xl ${
+              isMobile ? "px-4 py-3 shadow-none" : "p-4 shadow-lg"
+            }`}
+          >
+            <div className="flex items-center justify-between gap-3">
+              {isMobile ? (
+                <>
+                  {/* 16:9：仅 Dist | Time | Exit-X */}
+                  <div className="flex-1 text-center text-sm font-medium text-gray-800">
+                    {formatDistanceShort(routeInfo.distance)} | {formatDurationShort(routeInfo.duration)}
+                  </div>
+                  {/* 21:9+：路线详情折叠 */}
+                  {isLongScreen && routeSteps && routeSteps.length > 0 && (
+                    <button
+                      onClick={() => setShowRouteDetail((v) => !v)}
+                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100"
+                    >
+                      详情
+                      <ChevronDown className={`h-3 w-3 transition-transform ${showRouteDetail ? "rotate-180" : ""}`} />
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-base font-semibold text-gray-900">
+                    步行前往 {endPoint.name || "目标点"}
+                  </h3>
+                  <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
+                    <span>距离约 {formatDistanceLong(routeInfo.distance)}</span>
+                    <span>预计 {formatDurationLong(routeInfo.duration)}</span>
+                  </div>
                 </div>
-              </div>
+              )}
               <button
                 onClick={stopNavigation}
-                className="ml-4 flex h-8 w-8 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+                className="flex min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
                 title="结束导航"
               >
                 <X className="h-4 w-4" />
               </button>
             </div>
+            {/* 21:9+ 路线详情展开 */}
+            {isMobile && isLongScreen && showRouteDetail && routeSteps && routeSteps.length > 0 && (
+              <div className="mt-2 max-h-[min(25dvh,180px)] overflow-y-auto border-t border-gray-100 pt-2 text-[11px] text-gray-600 no-scrollbar">
+                {routeSteps.map((step, idx) => (
+                  <div key={idx} className="flex gap-2 py-0.5">
+                    <span className="shrink-0 text-gray-400">{idx + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-gray-800">{step.instruction}</div>
+                      {step.distance > 0 && (
+                        <div className="text-[10px] text-gray-500">
+                          约 {formatDistanceShort(step.distance)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </motion.div>
       )}

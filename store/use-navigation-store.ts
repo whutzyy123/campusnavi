@@ -37,6 +37,7 @@ export interface NavigationState {
   setStartPoint: (point: NavPoint | null) => void;
   setEndPoint: (point: NavPoint | null) => void;
   setSelectMode: (mode: "start" | "end" | null) => void;
+  openNavigationPanel: () => void;
   startNavigation: () => void;
   clearNavigation: () => void;
   swapPoints: () => void;
@@ -61,6 +62,8 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   setEndPoint: (point) => set({ endPoint: point }),
 
   setSelectMode: (mode) => set({ selectMode: mode }),
+
+  openNavigationPanel: () => set({ isNavigating: true }),
 
   startNavigation: () => {
     const { startPoint, endPoint } = get();

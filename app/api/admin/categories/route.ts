@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/auth-server-actions";
 import { getMergedCategories } from "@/lib/category-utils";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
+import { prisma } from "@/lib/prisma";
 
 // GET /api/admin/categories
 // 获取当前学校的分类（合并全局分类和私有分类，应用覆盖逻辑）
@@ -16,38 +17,63 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 获取分页参数
     const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const all = searchParams.get("all") === "true";
+    const grouped = searchParams.get("grouped") === "true";
 
     // 使用工具函数合并全局和私有分类
-    // 确保始终返回数组，即使发生错误也返回空数组
     let mergedCategories: Awaited<ReturnType<typeof getMergedCategories>>;
     try {
       mergedCategories = await getMergedCategories(auth.schoolId);
     } catch (error) {
       console.error("合并分类失败:", error);
-      mergedCategories = []; // 确保始终是数组
+      mergedCategories = [];
     }
 
-    // 防御性检查：确保 mergedCategories 是数组
     if (!Array.isArray(mergedCategories)) {
       console.error("getMergedCategories 返回了非数组类型:", typeof mergedCategories);
       mergedCategories = [];
     }
 
-    // 计算分页
+    // all=true&grouped=true：返回分组分类（常规 + 微观），用于 POI 表单下拉
+    if (all && grouped) {
+      const regular = mergedCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }));
+      const microCategories = await prisma.category.findMany({
+        where: { isMicroCategory: true, schoolId: null },
+        select: { id: true, name: true, icon: true },
+        orderBy: { createdAt: "asc" },
+      });
+      const micro = microCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }));
+      return NextResponse.json({
+        success: true,
+        data: { regular, micro },
+      });
+    }
+
+    // all=true：返回全部分类（用于下拉框），仅 id/name/icon，无分页
+    if (all) {
+      const lightCategories = mergedCategories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+      }));
+      return NextResponse.json({
+        success: true,
+        data: lightCategories,
+      });
+    }
+
+    // 分页模式：用于管理表格
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const limit = parseInt(searchParams.get("limit") || "10", 10);
     const total = mergedCategories.length;
     const { skip, take } = getPaginationParams(page, limit);
     const paginatedCategories = mergedCategories.slice(skip, skip + take);
-
-    // 计算分页元数据
     const pagination = getPaginationMeta(total, page, limit);
 
     return NextResponse.json({
       success: true,
-      data: paginatedCategories, // 确保始终是数组
+      data: paginatedCategories,
       pagination,
     });
   } catch (error) {
@@ -56,7 +82,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -167,7 +193,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

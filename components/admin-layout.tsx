@@ -14,6 +14,7 @@ import {
   Map,
   PlusCircle,
   Users,
+  Users2,
   AlertTriangle,
   Settings,
   Menu,
@@ -22,7 +23,13 @@ import {
   Tags,
   Building2,
   KeyRound,
+  CalendarDays,
+  ShoppingBag,
+  MessageSquare,
+  LogOut,
+  Loader2,
 } from "lucide-react";
+import toast from "react-hot-toast";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -33,12 +40,14 @@ interface NavItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   roles?: string[];
+  /** 审核相关：仅 ADMIN/STAFF，明确排除 SUPER_ADMIN */
+  auditOnly?: boolean;
 }
 
 export function AdminLayout({ children }: AdminLayoutProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { currentUser, initializeAuth, isInitialized } = useAuthStore();
+  const { currentUser, initializeAuth, isInitialized, isLoggingOut } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // 加载当前用户信息（使用统一的初始化逻辑）
@@ -80,22 +89,48 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       roles: ["ADMIN", "STAFF"], // 校级管理员和校内工作人员
     },
     {
+      name: "活动管理",
+      href: "/admin/school/activities",
+      icon: CalendarDays,
+      roles: ["ADMIN", "STAFF"],
+    },
+    {
+      name: "生存集市",
+      href: "/admin/school/market",
+      icon: ShoppingBag,
+      roles: ["ADMIN", "STAFF"],
+    },
+    {
+      name: "留言管理",
+      href: "/admin/school/comments",
+      icon: MessageSquare,
+      roles: ["ADMIN", "STAFF"],
+    },
+    {
       name: "团队管理",
       href: "/admin/team",
       icon: Users,
       roles: ["ADMIN"], // 只有校级管理员，超级管理员不需要
     },
     {
+      name: "用户管理",
+      href: "/admin/school/users",
+      icon: Users2,
+      roles: ["ADMIN"],
+    },
+    {
       name: "举报审核",
       href: "/admin/audit",
       icon: AlertTriangle,
-      roles: ["ADMIN", "STAFF"], // 仅校级管理员和校内工作人员，超级管理员不应介入内容审核
+      roles: ["ADMIN", "STAFF"],
+      auditOnly: true,
     },
     {
       name: "留言审核",
       href: "/admin/audit/comments",
       icon: AlertTriangle,
       roles: ["ADMIN", "STAFF"],
+      auditOnly: true,
     },
   ];
 
@@ -132,6 +167,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       roles: ["SUPER_ADMIN"],
     },
     {
+      name: "集市分类管理",
+      href: "/super-admin/categories/market",
+      icon: ShoppingBag,
+      roles: ["SUPER_ADMIN"],
+    },
+    {
       name: "屏蔽词管理",
       href: "/super-admin/keywords",
       icon: AlertTriangle,
@@ -143,6 +184,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const filteredNavItems = [
     ...(isSuperAdmin ? superAdminItems : []),
     ...navItems.filter((item) => {
+      if (item.auditOnly && currentUser?.role === "SUPER_ADMIN") return false;
       if (!item.roles) return true;
       return item.roles.includes(currentUser?.role || "");
     }),
@@ -165,6 +207,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           breadcrumbs.push({ name: "分类管理", href: "/admin/school/categories" });
         } else if (paths[2] === "campuses") {
           breadcrumbs.push({ name: "校区管理", href: "/admin/school/campuses" });
+        } else if (paths[2] === "activities") {
+          breadcrumbs.push({ name: "活动管理", href: "/admin/school/activities" });
+        } else if (paths[2] === "market") {
+          breadcrumbs.push({ name: "生存集市", href: "/admin/school/market" });
+        } else if (paths[2] === "comments") {
+          breadcrumbs.push({ name: "留言管理", href: "/admin/school/comments" });
+        } else if (paths[2] === "users") {
+          breadcrumbs.push({ name: "用户管理", href: "/admin/school/users" });
         }
       } else if (paths[1] === "team") {
         breadcrumbs.push({ name: "团队管理", href: "/admin/team" });
@@ -180,7 +230,15 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         } else if (paths[1] === "users") {
           breadcrumbs.push({ name: "用户管理", href: "/super-admin/users" });
         } else if (paths[1] === "categories") {
-          breadcrumbs.push({ name: "全局分类管理", href: "/super-admin/categories" });
+          if (paths[2] === "market") {
+            breadcrumbs.push({ name: "全局分类管理", href: "/super-admin/categories" });
+            breadcrumbs.push({ name: "集市分类管理", href: "/super-admin/categories/market" });
+          } else if (paths[2] === "all") {
+            breadcrumbs.push({ name: "全局分类管理", href: "/super-admin/categories" });
+            breadcrumbs.push({ name: "全量分类监控", href: "/super-admin/categories/all" });
+          } else {
+            breadcrumbs.push({ name: "全局分类管理", href: "/super-admin/categories" });
+          }
         } else if (paths[1] === "keywords") {
           breadcrumbs.push({ name: "屏蔽词管理", href: "/super-admin/keywords" });
         }
@@ -191,17 +249,30 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const breadcrumbs = getBreadcrumbs();
 
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    toast.loading("正在退出...", { id: "logout" });
+    try {
+      await useAuthStore.getState().logout();
+    } catch (error) {
+      if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
+        toast.error("退出登录失败，请重试", { id: "logout" });
+        console.error("退出登录失败:", error);
+      }
+    }
+  };
+
   return (
-    <div className="flex h-screen bg-gray-50">
-      {/* 侧边栏 */}
+    <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-1 overflow-hidden bg-gray-50">
+      {/* 侧边栏（固定高度，不参与主滚动） */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-white shadow-lg transition-transform duration-300 lg:static lg:translate-x-0 ${
+        className={`fixed left-0 below-nav bottom-0 z-sidebar w-64 flex-shrink-0 transform bg-white shadow-lg transition-transform duration-300 lg:static lg:top-auto lg:bottom-auto lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-full flex-col">
+        <div className="flex h-full flex-col overflow-hidden">
           {/* 侧边栏头部 */}
-          <div className="flex h-16 items-center justify-between border-b border-gray-200 px-6">
+          <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 px-6">
             <h2 className="text-lg font-bold text-gray-900">管理后台</h2>
             <button
               onClick={() => setSidebarOpen(false)}
@@ -211,8 +282,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
             </button>
           </div>
 
-          {/* 导航菜单 */}
-          <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+          {/* 导航菜单（仅侧边栏内部滚动，与主内容区独立） */}
+          <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto scrollbar-theme px-3 py-4">
             {filteredNavItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -223,7 +294,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   onClick={() => setSidebarOpen(false)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-blue-50 text-blue-700"
+                      ? "bg-[#FFE5DD] text-[#FF4500]"
                       : "text-gray-700 hover:bg-gray-50"
                   }`}
                 >
@@ -235,28 +306,40 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </nav>
 
           {/* 侧边栏底部 */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-gray-200 p-4 space-y-3">
             <div className="text-sm text-gray-600">
               <div className="font-medium text-gray-900">{currentUser?.nickname}</div>
               <div className="text-xs text-gray-500">
                 {isSuperAdmin ? "超级管理员" : "校级管理员"}
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {isLoggingOut ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <LogOut className="h-4 w-4" />
+              )}
+              退出登录
+            </button>
           </div>
         </div>
       </aside>
 
-      {/* 遮罩层（移动端） */}
+      {/* 遮罩层（移动端，低于侧边栏，高于主内容） */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-[44] bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* 主内容区 */}
-      <div className="flex flex-1 flex-col min-h-0">
-        {/* 面包屑导航（简洁版，不包含 Logo 和用户信息） */}
+      {/* 主内容区：唯一垂直滚动容器 */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        {/* 面包屑导航（固定，不滚动） */}
         <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-3 lg:px-6">
           <div className="flex items-center gap-4">
             <button
@@ -287,8 +370,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </div>
 
-        {/* 内容区域 */}
-        <main className="flex-1 min-h-0 overflow-y-auto">{children}</main>
+        {/* 内容区域：overflow-y-auto 仅在需要时显示滚动条，scrollbar-gutter 防止布局抖动，pb-24 确保底部留白可滚动到底部 */}
+        <main
+          className={`min-h-0 flex-1 overflow-x-hidden bg-gray-50 scrollbar-gutter-stable pb-24 ${
+            pathname?.includes("/campuses") || pathname?.includes("/pois")
+              ? "overflow-hidden"
+              : "overflow-y-auto"
+          }`}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );

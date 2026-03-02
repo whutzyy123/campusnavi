@@ -10,31 +10,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// 学校表：存储校区物理边界和多租户信息
+// 学校表：多租户信息（边界由 CampusArea 管理）
 model School {
-  id          String   @id @default(cuid())
-  name        String   @db.VarChar(100)
-  schoolCode  String   @unique @map("school_code") @db.VarChar(50) // 唯一代码，如 pku
-  boundary    Json     // GeoJSON 格式的多边形顶点坐标
-  centerLat   Float    @map("center_lat")
-  centerLng   Float    @map("center_lng")
-  isActive    Boolean  @default(true) @map("is_active") // 是否激活（软删除）
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  name       String   @db.VarChar(100)
+  schoolCode String   @unique @map("school_code") @db.VarChar(50) // 唯一代码，如 pku
+  centerLat  Float?   @map("center_lat") // 可选：用于无 CampusArea 时的回退
+  centerLng  Float?   @map("center_lng") // 可选：用于无 CampusArea 时的回退
+  isActive   Boolean  @default(true) @map("is_active") // 是否激活（软删除）
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  users       User[]
-  pois        POI[]
-  routeEdges  RouteEdge[]
-  liveStatuses LiveStatus[]
-  invitationCodes InvitationCode[]
-  comments    Comment[]
-  categories  Category[]
+  users             User[]
+  pois              POI[]
+  routeEdges        RouteEdge[]
+  liveStatuses      LiveStatus[]
+  invitationCodes   InvitationCode[]
+  comments          Comment[]
+  categories        Category[]
   categoryOverrides CategoryOverride[]
-  campusAreas CampusArea[] // 校区区域（支持多校区）
+  campusAreas       CampusArea[] // 校区区域（支持多校区）
+  activities        Activity[]
+  lostFoundEvents   LostFoundEvent[]
+  marketItems       MarketItem[]
 
-  @@map("schools")
   @@index([centerLat, centerLng])
+  @@map("schools")
 }
 
 // 校区区域表：支持单校多校区（多个多边形）模式
@@ -42,117 +44,152 @@ model CampusArea {
   id          String   @id @default(cuid())
   schoolId    String   @map("school_id")
   name        String   @db.VarChar(100) // 校区名称，如"南湖校区"、"鉴湖校区"
-  boundary    Json     // GeoJSON 格式的多边形顶点坐标
-  center      Json     // 该校区的中心点 [lng, lat]，用于地图标签定位
+  boundary    Json // GeoJSON 格式的多边形顶点坐标
+  center      Json // 该校区的几何中心 [lng, lat]，用于地图聚焦
+  labelCenter Json?    @map("label_center") // 标签位置 [lng, lat]，polylabel（Pole of Inaccessibility）
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  @@map("campus_areas")
   @@index([schoolId])
+  @@map("campus_areas")
 }
 
 // 用户表：支持多租户用户隔离
 // 注意：超级管理员 (role=4) 的 schoolId 应为 null，与学校租户解耦
 model User {
-  id          String   @id @default(cuid())
-  schoolId    String?  @map("school_id") // 可选：超级管理员不需要绑定学校
-  phone       String?  @unique @db.VarChar(20)
-  email       String?  @unique @db.VarChar(100)
-  nickname    String?  @db.VarChar(50)
-  bio         String?  @db.Text // 个人简介
-  avatar      String?  @db.VarChar(255)
-  password    String?  @db.VarChar(255) // 哈希后的密码
-  role        Int      @default(0) // 0: 游客, 1: 认证学生, 2: 校级管理员, 3: 校内工作人员, 4: 超级管理员
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id                  String    @id @default(cuid())
+  schoolId            String?   @map("school_id") // 可选：超级管理员不需要绑定学校
+  phone               String?   @unique @db.VarChar(20)
+  email               String?   @unique @db.VarChar(100)
+  nickname            String?   @db.VarChar(50)
+  bio                 String?   @db.Text // 个人简介
+  avatar              String?   @db.VarChar(255)
+  lastProfileUpdateAt DateTime? @map("last_profile_update_at") // 昵称/头像最后修改时间，用于 7 天冷却
+  password            String?   @db.VarChar(255) // 哈希后的密码
+  role                Int       @default(0) // 0: 游客, 1: 认证学生, 2: 校级管理员, 3: 校内工作人员, 4: 超级管理员
+  status              String    @default("ACTIVE") @db.VarChar(20) // ACTIVE: 正常, INACTIVE: 已停用/封禁
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
 
   // 关联关系（可选）
-  school      School?   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  liveStatuses LiveStatus[]
-  issuedInvitations InvitationCode[] @relation("Issuer")
-  addedSensitiveWords SensitiveWord[] @relation("AddedBy")
-  comments    Comment[]
+  school                 School?          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  liveStatuses           LiveStatus[]
+  createdInvitationCodes InvitationCode[] @relation("CreatedBy")
+  usedInvitationCode     InvitationCode?  @relation("UsedBy")
+  addedSensitiveWords    SensitiveWord[]  @relation("AddedBy")
+  comments               Comment[]
+  reviewedComments       Comment[]           @relation("CommentReviewedBy")
+  commentLogs            CommentLog[]
+  commentLikes           CommentLike[]
+  activities             Activity[]
+  lostFoundEvents        LostFoundEvent[]
+  marketItems            MarketItem[]       @relation("MarketItemSeller")
+  selectedBuyerItems     MarketItem[]       @relation("MarketItemSelectedBuyer")
+  marketIntentions       MarketIntention[]
+  marketLogs             MarketLog[]
+  notifications          Notification[]   @relation("NotificationRecipient")
+  notificationsActed     Notification[]   @relation("NotificationActor")
 
-  @@map("users")
   @@index([schoolId])
   @@index([phone])
   @@index([email])
+  @@map("users")
+}
+
+// 邀请码类型：ADMIN(校级管理员) | STAFF(校内工作人员)
+enum InvitationCodeType {
+  ADMIN
+  STAFF
+}
+
+// 邀请码状态：ACTIVE(未使用且启用) | USED(已消耗) | DISABLED(已撤销) | DEACTIVATED(已停用，关联用户禁止登录)
+enum InvitationCodeStatus {
+  ACTIVE
+  USED
+  DISABLED
+  DEACTIVATED
 }
 
 // 邀请码表：用于权限分发
 model InvitationCode {
-  id          String   @id @default(cuid())
-  code        String   @unique @db.VarChar(50) // 唯一邀请码
-  role        Int      // 授权角色：2: 校级管理员, 3: 校内工作人员
-  schoolId    String   @map("school_id")
-  issuerId    String?  @map("issuer_id") // 发放人ID（超级管理员或校级管理员）
-  isUsed      Boolean  @default(false) @map("is_used")
-  usedBy      String?  @map("used_by") // 使用人ID
-  usedAt      DateTime? @map("used_at")
-  expiresAt   DateTime? @map("expires_at") // 过期时间（可选）
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String               @id @default(cuid())
+  code            String               @unique @db.VarChar(50) // 唯一邀请码
+  type            InvitationCodeType // ADMIN | STAFF
+  schoolId        String               @map("school_id")
+  status          InvitationCodeStatus @default(ACTIVE) // ACTIVE | USED | DISABLED
+  usedByUserId    String?              @unique @map("used_by_user_id") // 使用人ID（消耗时写入，一对一：每用户仅能使用一个邀请码）
+  usedAt          DateTime?            @map("used_at")
+  createdByUserId String               @map("created_by_user_id") // 创建人ID
+  createdAt       DateTime             @default(now()) @map("created_at")
+  expiresAt       DateTime?            @map("expires_at") // 过期时间，创建时默认 now + durationDays（默认 7 天）
+  updatedAt       DateTime             @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  issuer      User?    @relation("Issuer", fields: [issuerId], references: [id], onDelete: SetNull)
+  school     School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdBy  User   @relation("CreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  usedByUser User?  @relation("UsedBy", fields: [usedByUserId], references: [id], onDelete: SetNull)
 
-  @@map("invitation_codes")
   @@index([code])
   @@index([schoolId])
-  @@index([isUsed])
-  @@index([issuerId])
+  @@index([status])
+  @@index([createdByUserId])
+  @@map("invitation_codes")
 }
 
 // POI 分类表：支持全局分类和学校自定义分类
 model Category {
-  id          String   @id @default(cuid())
-  schoolId    String?  @map("school_id") // 可选：全局分类为 null
-  name        String   @db.VarChar(50) // 分类名称
-  icon        String?  @db.VarChar(50) // 可选图标名
-  isGlobal    Boolean  @default(false) @map("is_global") // 是否为全局分类
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id              String   @id @default(cuid())
+  schoolId        String?  @map("school_id") // 可选：全局分类为 null
+  name            String   @db.VarChar(50) // 分类名称
+  icon            String?  @db.VarChar(50) // 可选图标名
+  isGlobal        Boolean  @default(false) @map("is_global") // 是否为全局分类
+  isMicroCategory Boolean  @default(false) @map("is_micro_category") // 是否为微观分类（饮水机、卫生间等，超管维护）
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  pois        POI[]
-  overrides   CategoryOverride[] // 学校对全局分类的覆盖
+  school    School?            @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  pois      POI[]
+  overrides CategoryOverride[] // 学校对全局分类的覆盖
 
-  @@map("categories")
+  @@unique([schoolId, name]) // 同一学校内分类名称唯一（全局分类 schoolId 为 null）
   @@index([schoolId])
   @@index([isGlobal])
-  @@unique([schoolId, name]) // 同一学校内分类名称唯一（全局分类 schoolId 为 null）
+  @@index([isMicroCategory])
+  @@map("categories")
 }
 
 // 分类覆盖表：记录学校对全局分类的局部修改
 model CategoryOverride {
-  id          String   @id @default(cuid())
-  schoolId    String   @map("school_id")
-  categoryId  String   @map("category_id") // 关联的全局分类ID
-  isHidden    Boolean  @default(false) @map("is_hidden") // 是否在该学校隐藏
-  customName  String?  @db.VarChar(50) @map("custom_name") // 自定义名称（可选）
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id         String   @id @default(cuid())
+  schoolId   String   @map("school_id")
+  categoryId String   @map("category_id") // 关联的全局分类ID
+  isHidden   Boolean  @default(false) @map("is_hidden") // 是否在该学校隐藏
+  customName String?  @map("custom_name") @db.VarChar(50) // 自定义名称（可选）
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  school   School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
-  @@map("category_overrides")
+  @@unique([schoolId, categoryId]) // 每个学校对每个全局分类只能有一条覆盖记录
   @@index([schoolId])
   @@index([categoryId])
-  @@unique([schoolId, categoryId]) // 每个学校对每个全局分类只能有一条覆盖记录
+  @@map("category_overrides")
 }
 
 // POI 资源表：支持 PGC（官方）和 UGC（众包）两种类型
+// 支持父子层级：Secondary POI（如建筑具体入口）通过 parentId 关联 Primary POI
 model POI {
   id          String   @id @default(cuid())
   schoolId    String   @map("school_id")
+  parentId    String?  @map("parent_id") // 可选：子 POI 关联的父 POI ID
   name        String   @db.VarChar(100)
+  alias       String?  @db.VarChar(200) // 别称，多个用逗号隔开，用于搜索匹配
   categoryId  String?  @map("category_id") // 关联分类ID（可选，兼容旧数据）
   category    String?  @db.VarChar(50) // 保留旧字段用于兼容（可选）
   lat         Float
@@ -160,62 +197,165 @@ model POI {
   isOfficial  Boolean  @default(false) @map("is_official") // true: PGC, false: UGC
   entryPoints Json?    @map("entry_points") // JSON 格式存储建筑的具体入口坐标点
   description String?  @db.Text
+  imageUrl    String?  @map("image_url") @db.VarChar(512) // 主图 URL（对象存储返回的绝对地址，非 Base64）
   reportCount Int      @default(0) @map("report_count") // 举报次数，>=3 时自动隐藏
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  categoryRef Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  liveStatuses LiveStatus[]
-  comments    Comment[]
+  school          School           @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  categoryRef     Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  parent          POI?             @relation("SubPOIs", fields: [parentId], references: [id], onDelete: Cascade)
+  children        POI[]            @relation("SubPOIs")
+  liveStatuses    LiveStatus[]
+  comments        Comment[]
+  activities      Activity[]
+  lostFoundEvents LostFoundEvent[]
+  marketItems     MarketItem[]
 
-  @@map("pois")
   @@index([schoolId])
+  @@index([parentId])
   @@index([categoryId])
   @@index([lat, lng])
   @@index([isOfficial])
+  @@map("pois")
 }
 
 // 校内路径网格表：补全高德地图不识别的小路
 model RouteEdge {
-  id          String   @id @default(cuid())
-  schoolId    String   @map("school_id")
-  startNode   Json     @map("start_node") // JSON 格式: [lng, lat]
-  endNode     Json     @map("end_node") // JSON 格式: [lng, lat]
-  weight      Float    @default(1.0) // 权重：距离/拥堵度，值越大越不推荐
-  type        String   @db.VarChar(20) // 步道/阶梯/坡道/施工中等
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  schoolId  String   @map("school_id")
+  startNode Json     @map("start_node") // JSON 格式: [lng, lat]
+  endNode   Json     @map("end_node") // JSON 格式: [lng, lat]
+  weight    Float    @default(1.0) // 权重：距离/拥堵度，值越大越不推荐
+  type      String   @db.VarChar(20) // 步道/阶梯/坡道/施工中等
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // 关联关系
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
-  @@map("route_edges")
   @@index([schoolId])
+  @@map("route_edges")
 }
 
 // 实时状态表：众包数据的生命周期管理（TTL）
+// statusType 示例: CROWDED, CONSTRUCTION, CLOSED, NORMAL
 model LiveStatus {
   id          String   @id @default(cuid())
   poiId       String   @map("poi_id")
   schoolId    String   @map("school_id")
   userId      String?  @map("user_id")
-  statusType  String   @map("status_type") @db.VarChar(20) // 拥挤/营业/施工等
-  val         Int      // 状态值：1-4级拥挤度等
-  expiresAt   DateTime @map("expires_at") // TTL：默认 60 分钟后过期
+  statusType  String   @map("status_type") @db.VarChar(20) // CROWDED, CONSTRUCTION, CLOSED, NORMAL 等
+  val         Int      @default(0) // 状态值：1-4级拥挤度等（可选）
+  description String?  @db.Text // 可选描述
+  upvotes     Int      @default(0) @map("upvotes") // 点赞数，用于未来游戏化
   createdAt   DateTime @default(now()) @map("created_at")
+  expiresAt   DateTime @map("expires_at") // TTL：该状态应消失的精确时间（如 2 小时后）
 
   // 关联关系
-  poi         POI      @relation(fields: [poiId], references: [id], onDelete: Cascade)
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  poi    POI    @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
 
-  @@map("live_statuses")
   @@index([poiId])
   @@index([schoolId])
   @@index([expiresAt])
+  @@index([schoolId, expiresAt])
   @@index([createdAt])
+  @@map("live_statuses")
+}
+
+// 活动表：POI 关联的校内活动/事件（R17）
+model Activity {
+  id          String   @id @default(cuid())
+  schoolId    String   @map("school_id")
+  poiId       String   @map("poi_id")
+  title       String   @db.VarChar(100)
+  description String   @db.VarChar(1000)
+  link        String?  @db.VarChar(512) // 可选活动链接
+  startAt     DateTime @map("start_at")
+  endAt       DateTime @map("end_at")
+  createdBy   String   @map("created_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  // 关联关系（级联删除）
+  school  School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  poi     POI    @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  creator User   @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, poiId, endAt])
+  @@map("activities")
+}
+
+// 失物招领状态
+enum LostFoundStatus {
+  ACTIVE // 进行中
+  FOUND // 已找到
+  EXPIRED // 已过期
+  HIDDEN // 已隐藏
+}
+
+// 失物招领表（R16）
+model LostFoundEvent {
+  id          String          @id @default(cuid())
+  schoolId    String          @map("school_id")
+  poiId       String          @map("poi_id")
+  userId      String          @map("user_id")
+  description String          @db.VarChar(500)
+  images      Json // 图片 URL 数组，最多 3 张
+  contactInfo String?         @map("contact_info") @db.VarChar(100) // 可选联系方式（手机/微信）
+  status      LostFoundStatus @default(ACTIVE)
+  expiresAt   DateTime        @map("expires_at") // 由后端自动计算
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  // 关联关系（级联删除）
+  school School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  poi    POI    @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([schoolId, poiId, status, expiresAt])
+  @@map("lost_found_events")
+}
+
+// 通知类型
+enum NotificationType {
+  LIKE // 点赞
+  REPLY // 回复
+  MENTION // @提及
+  SYSTEM // 系统消息
+  LOST_FOUND_FOUND // 失物已找到
+}
+
+// 通知关联实体类型
+enum NotificationEntityType {
+  COMMENT
+  LOST_FOUND
+  POI
+  MARKET_ITEM
+}
+
+// 通知表：用户互动提醒（点赞、回复、@提及、系统消息、失物已找到）
+model Notification {
+  id         String                 @id @default(cuid())
+  userId     String                 @map("user_id") // 接收者
+  actorId    String?                @map("actor_id") // 触发者（可选，系统消息无 actor）
+  type       NotificationType
+  entityId   String?                @map("entity_id") // 关联实体 ID（如 Comment ID、LostFound ID）
+  entityType NotificationEntityType @map("entity_type")
+  message    String?                @db.VarChar(500) // 短预览或系统消息内容
+  isRead     Boolean                @default(false) @map("is_read")
+  createdAt  DateTime               @default(now()) @map("created_at")
+
+  // 关联关系
+  user  User  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+  @@map("notifications")
 }
 
 // 平台屏蔽词表：用于内容审核
@@ -226,9 +366,25 @@ model SensitiveWord {
   addedBy   User     @relation("AddedBy", fields: [addedById], references: [id], onDelete: Cascade)
   addedById String   @map("added_by_id") // 添加人ID (必须是超管)
 
-  @@map("sensitive_words")
   @@index([keyword])
   @@index([addedById])
+  @@map("sensitive_words")
+}
+
+// 留言点赞表：用户对留言的点赞（每人每留言仅可点赞一次）
+model CommentLike {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  commentId String   @map("comment_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, commentId])
+  @@index([commentId])
+  @@index([userId])
+  @@map("comment_likes")
 }
 
 // POI 留言表：用于用户对某个 POI 进行留言与讨论
@@ -239,25 +395,217 @@ model Comment {
   poiId       String   @map("poi_id")
   schoolId    String   @map("school_id")
   parentId    String?  @map("parent_id") // 父留言ID，用于实现回复功能
-  isHidden    Boolean  @default(false) @map("is_hidden")  // 是否被隐藏/屏蔽
-  reportCount Int      @default(0) @map("report_count")   // 被举报次数
+  isHidden    Boolean  @default(false) @map("is_hidden") // 是否被隐藏/屏蔽
+  reportCount Int      @default(0) @map("report_count") // 被举报次数
+  likeCount   Int      @default(0) @map("like_count") // 点赞数（冗余缓存，便于按热度排序）
   createdAt   DateTime @default(now()) @map("created_at")
 
-  // 关联关系
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  poi         POI      @relation(fields: [poiId], references: [id], onDelete: Cascade)
-  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
-  
-  // 自关联：回复关系
-  parent      Comment? @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
-  replies     Comment[] @relation("CommentReplies")
+  // 审核状态：管理员处理后被标记为已审核
+  isReviewed  Boolean   @default(false) @map("is_reviewed")
+  reviewedAt  DateTime? @map("reviewed_at")
+  reviewedBy  String?   @map("reviewed_by")
 
-  @@map("comments")
+  // 关联关系
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User?         @relation("CommentReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
+  poi    POI           @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  school School        @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  likes  CommentLike[]
+
+  // 自关联：回复关系
+  parent    Comment?    @relation("CommentReplies", fields: [parentId], references: [id], onDelete: SetNull)
+  replies   Comment[]   @relation("CommentReplies")
+  logs      CommentLog[]
+
   @@index([schoolId])
   @@index([poiId])
   @@index([userId])
   @@index([parentId])
   @@index([isHidden])
+  @@index([isReviewed])
+  @@index([likeCount])
   @@index([createdAt])
+  @@map("comments")
 }
 
+// 留言审核审计日志（永久删除等操作）
+enum CommentLogActionType {
+  HARD_DELETED
+}
+
+model CommentLog {
+  id         String             @id @default(cuid())
+  commentId  String?            @map("comment_id") // 删除后 SetNull 保留审计
+  userId     String             @map("user_id")
+  actionType CommentLogActionType @map("action_type")
+  details    String?            @db.Text
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: SetNull)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([commentId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("comment_logs")
+}
+
+// 生存集市分类表：全局物品分类池（扁平，无层级）
+model MarketCategory {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(50)
+  order     Int      @default(0) // 排序
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  marketItems          MarketItem[]
+  marketTypeCategories MarketTypeCategory[]
+
+  @@index([isActive])
+  @@map("market_categories")
+}
+
+// 生存集市交易类型（动态，管理员可增删改）
+model MarketTransactionType {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(50) // 如：二手交易
+  code      String   @unique @db.VarChar(20) // 如：SALE，用于内部逻辑
+  order     Int      @default(0) // 排序
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  marketItems          MarketItem[]
+  marketTypeCategories MarketTypeCategory[]
+
+  @@index([isActive])
+  @@map("market_transaction_types")
+}
+
+// 交易类型-物品分类 多对多关联表
+model MarketTypeCategory {
+  transactionTypeId Int                   @map("transaction_type_id")
+  categoryId        String                @map("category_id")
+  transactionType   MarketTransactionType @relation(fields: [transactionTypeId], references: [id], onDelete: Cascade)
+  category          MarketCategory        @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([transactionTypeId, categoryId])
+  @@index([transactionTypeId])
+  @@index([categoryId])
+  @@map("market_type_categories")
+}
+
+// 生存集市商品状态（闭环交易生命周期）
+enum MarketItemStatus {
+  ACTIVE // 在架可见
+  LOCKED // 暂离市场（已达成意向，待线下交接）
+  COMPLETED // 交易完成（永久下架）
+  DELETED // 用户删除
+}
+
+// 生存集市意向表：多人可对同一商品表达意向，卖家从中选择一人
+model MarketIntention {
+  id          Int      @id @default(autoincrement())
+  itemId      String   @map("item_id")
+  userId      String   @map("user_id")
+  contactInfo String?  @db.VarChar(200) @map("contact_info") // 意向者提供给卖家的联系方式
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  item MarketItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, userId])
+  @@index([itemId])
+  @@index([userId])
+  @@map("market_intentions")
+}
+
+// 生存集市商品表（R30）
+model MarketItem {
+  id          String           @id @default(cuid())
+  schoolId    String           @map("school_id")
+  poiId       String           @map("poi_id")
+  userId      String           @map("user_id")
+  typeId      Int              @map("type_id") // 交易类型
+  categoryId  String?          @map("category_id") // 物品分类 ID（可选）
+  title       String           @db.VarChar(100)
+  description String           @db.Text
+  contact     String?          @db.VarChar(100) // 联系方式（Privacy Reveal）
+  price       Float? // 二手交易类型必填
+  images      Json // 图片 URL 数组
+  status      MarketItemStatus @default(ACTIVE)
+  reportCount Int              @default(0) @map("report_count")
+  isHidden    Boolean          @default(false) @map("is_hidden")
+  expiresAt   DateTime         @map("expires_at") // createdAt + 7 天
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  // 闭环交易字段
+  selectedBuyerId   String?    @map("selected_buyer_id") // 卖家选定的唯一买家（来自 intentions）
+  buyerConfirmed    Boolean    @default(false) @map("buyer_confirmed")
+  sellerConfirmed   Boolean    @default(false) @map("seller_confirmed")
+  lockedAt          DateTime?  @map("locked_at")
+  firstConfirmedAt  DateTime?  @map("first_confirmed_at") // 首次确认时间（用于单方超时自动完成）
+
+  // 交易完成后评价（Thumb Up/Down）
+  buyerRatingOfSeller  Boolean? @map("buyer_rating_of_seller")  // 买家对卖家的评价：true=好评，false=差评
+  sellerRatingOfBuyer  Boolean? @map("seller_rating_of_buyer")  // 卖家对买家的评价
+
+  intentions MarketIntention[]
+  logs        MarketLog[]
+
+  school          School                @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  poi             POI                   @relation(fields: [poiId], references: [id], onDelete: Cascade)
+  user            User                  @relation("MarketItemSeller", fields: [userId], references: [id], onDelete: Cascade)
+  selectedBuyer   User?                 @relation("MarketItemSelectedBuyer", fields: [selectedBuyerId], references: [id], onDelete: SetNull)
+  transactionType MarketTransactionType @relation(fields: [typeId], references: [id], onDelete: Restrict)
+  category        MarketCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
+  @@index([poiId])
+  @@index([userId])
+  @@index([selectedBuyerId])
+  @@index([typeId])
+  @@index([categoryId])
+  @@index([status])
+  @@index([expiresAt])
+  @@index([reportCount])
+  @@map("market_items")
+}
+
+// 集市商品生命周期审计日志
+enum MarketLogActionType {
+  INTENTION_CREATED
+  INTENTION_WITHDRAWN
+  ITEM_LOCKED
+  ITEM_UNLOCKED
+  INTENTION_RESET_BY_UNLOCK
+  INTENTION_AUTO_WITHDRAWN_ON_UNLOCK
+  TRANSACTION_COMPLETED
+  BUYER_CONFIRMED
+  SELLER_CONFIRMED
+  ITEM_EDITED
+  ADMIN_HIDDEN
+  ADMIN_RELISTED
+  ITEM_DELETED
+  AUTO_UNLOCKED
+  AUTO_COMPLETED
+}
+
+model MarketLog {
+  id         String             @id @default(cuid())
+  itemId     String?            @map("item_id") // 永久删除商品时 SetNull 以保留审计
+  userId     String             @map("user_id")
+  actionType MarketLogActionType @map("action_type")
+  details    String?            @db.Text // JSON 或文本，如 "Locked for User X"
+  createdAt  DateTime           @default(now()) @map("created_at")
+
+  item MarketItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("market_logs")
+}

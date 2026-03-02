@@ -3,9 +3,10 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerUser } from "@/lib/auth-server-actions";
+import { validateInvitationCode } from "@/lib/invitation-actions";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
-import { UserPlus, CheckCircle, AlertCircle } from "lucide-react";
+import { UserPlus, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 /**
@@ -32,12 +33,14 @@ export default function RegisterPage() {
   const [invitationCodeStatus, setInvitationCodeStatus] = useState<{
     valid: boolean;
     schoolName?: string;
+    roleType?: "ADMIN" | "STAFF";
+    schoolId?: string;
     message?: string;
   } | null>(null);
-  const [isCheckingInvitationCode, setIsCheckingInvitationCode] = useState(false);
+  const [isVerifyingCode, setIsVerifyingCode] = useState(false);
 
-  // 计算是否显示邀请码输入框
-  const showInvitationCode = formData.role === "ADMIN" || formData.role === "STAFF";
+  /** 邀请码已验证通过时，锁定学校和角色（Code-First） */
+  const codeVerified = invitationCodeStatus?.valid === true;
 
   // 如果已登录，重定向到首页
   useEffect(() => {
@@ -63,65 +66,58 @@ export default function RegisterPage() {
     fetchSchools();
   }, [setSchools]);
 
-  // 当角色改变时，清空邀请码和学校ID
-  useEffect(() => {
-    if (formData.role === "STUDENT") {
-      setFormData((prev) => ({ ...prev, invitationCode: "" }));
-      setInvitationCodeStatus(null);
-    } else {
-      // 切换到管理员/工作人员时，清空学校ID（由邀请码自动锁定）
-      setFormData((prev) => ({ ...prev, schoolId: "" }));
-      setInvitationCodeStatus(null);
-    }
-  }, [formData.role]);
-
-  // 检查邀请码（当用户输入邀请码时）
-  useEffect(() => {
-    if (!showInvitationCode || !formData.invitationCode || formData.invitationCode.length < 4) {
-      setInvitationCodeStatus(null);
+  /** 验证邀请码（Code-First：验证成功后自动填充学校和角色） */
+  const handleVerifyInvitationCode = async () => {
+    const code = formData.invitationCode.trim().toUpperCase();
+    if (!code || code.length < 4) {
+      setInvitationCodeStatus({ valid: false, message: "请输入至少 4 位邀请码" });
       return;
     }
 
-    // 防抖：延迟 500ms 后检查
-    const timer = setTimeout(async () => {
-      setIsCheckingInvitationCode(true);
-      try {
-        const response = await fetch("/api/invitation-codes/check", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            code: formData.invitationCode.trim().toUpperCase(),
-            role: formData.role,
-          }),
-        });
+    setIsVerifyingCode(true);
+    setInvitationCodeStatus(null);
 
-        const data = await response.json();
+    try {
+      const result = await validateInvitationCode(code);
 
-        if (data.success && data.valid) {
-          setInvitationCodeStatus({
-            valid: true,
-            schoolName: data.data.schoolName,
-            message: `已匹配：${data.data.schoolName}`,
-          });
-        } else {
-          setInvitationCodeStatus({
-            valid: false,
-            message: data.message || "邀请码无效",
-          });
-        }
-      } catch (error) {
-        console.error("检查邀请码失败:", error);
+      if (result.valid) {
         setInvitationCodeStatus({
-          valid: false,
-          message: "检查邀请码失败，请稍后重试",
+          valid: true,
+          schoolName: result.schoolName,
+          roleType: result.roleType,
+          schoolId: result.schoolId,
+          message: `已匹配：${result.schoolName}`,
         });
-      } finally {
-        setIsCheckingInvitationCode(false);
+        setFormData((prev) => ({
+          ...prev,
+          schoolId: result.schoolId,
+          role: result.roleType,
+          invitationCode: code,
+        }));
+        toast.success(
+          `邀请码有效！将加入 ${result.schoolName} 作为${result.roleType === "ADMIN" ? "校级管理员" : "工作人员"}`
+        );
+      } else {
+        setInvitationCodeStatus({ valid: false, message: result.message });
+        setFormData((prev) => ({
+          ...prev,
+          schoolId: "",
+          role: "STUDENT",
+        }));
       }
-    }, 500);
+    } catch (error) {
+      console.error("验证邀请码失败:", error);
+      setInvitationCodeStatus({ valid: false, message: "验证失败，请稍后重试" });
+    } finally {
+      setIsVerifyingCode(false);
+    }
+  };
 
-    return () => clearTimeout(timer);
-  }, [formData.invitationCode, formData.role, showInvitationCode]);
+  /** 清空邀请码时重置 Code-First 状态 */
+  const handleClearInvitationCode = () => {
+    setFormData((prev) => ({ ...prev, invitationCode: "", schoolId: "", role: "STUDENT" }));
+    setInvitationCodeStatus(null);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -165,12 +161,11 @@ export default function RegisterPage() {
       formDataObj.append("nickname", formData.nickname.trim());
       formDataObj.append("password", formData.password);
       formDataObj.append("role", formData.role);
-      // 学生角色需要传递 schoolId，管理员/工作人员由邀请码自动获取
-      if (formData.role === "STUDENT" && formData.schoolId) {
+      if (formData.schoolId) {
         formDataObj.append("schoolId", formData.schoolId);
       }
       if (formData.invitationCode) {
-        formDataObj.append("invitationCode", formData.invitationCode);
+        formDataObj.append("invitationCode", formData.invitationCode.trim().toUpperCase());
       }
 
       // 调用 Server Action
@@ -225,19 +220,19 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="flex w-full max-w-md max-h-[calc(100vh-2rem)] flex-col rounded-2xl bg-white shadow-xl">
-        {/* 固定头部 */}
-        <div className="flex-shrink-0 px-8 pt-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-600">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-br from-[#FFF5F2] to-[#FFE5DD] p-4 py-10">
+      <div className="my-10 flex w-full max-w-md flex-col rounded-2xl bg-white shadow-xl">
+        {/* 头部 */}
+        <div className="px-8 pt-8 text-center">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#FF4500]">
             <UserPlus className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">注册账户</h1>
           <p className="mt-2 text-sm text-gray-600">创建您的校园生存指北账户</p>
         </div>
 
-        {/* 可滚动内容区域 */}
-        <div className="flex-1 overflow-y-auto px-8 py-6 min-h-0">
+        {/* 表单内容区域 */}
+        <div className="px-8 py-6">
           {success ? (
           <div className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
@@ -264,8 +259,8 @@ export default function RegisterPage() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="example@email.com"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder="请输入邮箱"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
               />
             </div>
@@ -281,7 +276,7 @@ export default function RegisterPage() {
                 value={formData.nickname}
                 onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
                 placeholder="请输入您的昵称"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
               />
             </div>
@@ -297,7 +292,7 @@ export default function RegisterPage() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 placeholder="至少 6 位字符"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
                 minLength={6}
               />
@@ -314,134 +309,148 @@ export default function RegisterPage() {
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 placeholder="请再次输入密码"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
                 minLength={6}
               />
             </div>
 
-            {/* 选择学校（仅学生显示） */}
-            {formData.role === "STUDENT" && (
-              <div>
-                <label htmlFor="schoolId" className="mb-2 block text-sm font-medium text-gray-700">
-                  选择学校 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  id="schoolId"
-                  value={formData.schoolId}
-                  onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  required
-                >
-                  <option value="">请选择学校</option>
-                  {schools.map((school) => (
-                    <option key={school.id} value={school.id}>
-                      {school.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* 选择角色 - 使用 Tabs 样式 */}
+            {/* 邀请码（可选）- Code-First 流程 */}
             <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                注册身份 <span className="text-red-500">*</span>
+              <label htmlFor="invitationCode" className="mb-2 block text-sm font-medium text-gray-700">
+                邀请码（可选）
               </label>
-              <div className="flex gap-2 border-b border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: "STUDENT", invitationCode: "" })}
-                  className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    formData.role === "STUDENT"
-                      ? "border-blue-500 text-blue-600"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  我是学生
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: "ADMIN", invitationCode: "" })}
-                  className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    formData.role === "ADMIN"
-                      ? "border-blue-500 text-blue-600"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  我是管理员
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, role: "STAFF", invitationCode: "" })}
-                  className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                    formData.role === "STAFF"
-                      ? "border-blue-500 text-blue-600"
-                      : "border-transparent text-gray-600 hover:text-gray-900"
-                  }`}
-                >
-                  我是工作人员
-                </button>
-              </div>
-            </div>
-
-            {/* 邀请码（仅 ADMIN 或 STAFF 显示） */}
-            {showInvitationCode && (
-              <div>
-                <label htmlFor="invitationCode" className="mb-2 block text-sm font-medium text-gray-700">
-                  邀请码 <span className="text-red-500">*</span>
-                </label>
-                <div className="relative">
+              <div className="flex gap-2">
+                <div className="relative flex-1">
                   <input
                     id="invitationCode"
                     type="text"
                     value={formData.invitationCode}
-                    onChange={(e) => setFormData({ ...formData, invitationCode: e.target.value.toUpperCase().trim() })}
-                    placeholder="请输入邀请码"
-                    className={`w-full rounded-lg border px-4 py-2.5 font-mono focus:outline-none focus:ring-2 ${
+                    onChange={(e) =>
+                      setFormData({ ...formData, invitationCode: e.target.value.toUpperCase().trim() })
+                    }
+                    onBlur={() => {
+                      if (formData.invitationCode.trim().length >= 4 && !codeVerified) {
+                        handleVerifyInvitationCode();
+                      }
+                    }}
+                    placeholder="输入邀请码后点击验证"
+                    disabled={codeVerified}
+                    className={`w-full rounded-lg border px-4 py-2.5 font-mono focus:outline-none focus:ring-2 disabled:bg-gray-50 ${
                       invitationCodeStatus?.valid === false
                         ? "border-red-300 focus:border-red-500 focus:ring-red-200"
                         : invitationCodeStatus?.valid === true
                         ? "border-green-300 focus:border-green-500 focus:ring-green-200"
-                        : showInvitationCode && !formData.invitationCode
-                        ? "border-red-300 focus:border-red-500 focus:ring-red-200"
-                        : "border-gray-300 focus:border-blue-500 focus:ring-blue-200"
+                        : "border-gray-300 focus:border-[#FF4500] focus:ring-[#FF4500]/20"
                     }`}
-                    required={showInvitationCode}
                   />
-                  {isCheckingInvitationCode && (
+                  {isVerifyingCode && (
                     <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"></div>
+                      <Loader2 className="h-4 w-4 animate-spin text-[#FF4500]" />
                     </div>
                   )}
                 </div>
-                
-                {/* 邀请码状态提示 */}
-                {invitationCodeStatus && (
-                  <p
-                    className={`mt-1.5 flex items-start gap-1.5 text-xs ${
-                      invitationCodeStatus.valid
-                        ? "text-green-600"
-                        : "text-red-600"
-                    }`}
-                  >
-                    {invitationCodeStatus.valid ? (
-                      <CheckCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                    ) : (
-                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                    )}
-                    <span>{invitationCodeStatus.message}</span>
+                <button
+                  type="button"
+                  onClick={codeVerified ? handleClearInvitationCode : handleVerifyInvitationCode}
+                  disabled={isVerifyingCode || !formData.invitationCode.trim()}
+                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {codeVerified ? "清除" : "验证"}
+                </button>
+              </div>
+
+              {codeVerified && (
+                <div className="mt-2 flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+                  <CheckCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+                  <span>
+                    ✅ 邀请码有效！将加入 <strong>{invitationCodeStatus?.schoolName}</strong> 作为
+                    <strong>{formData.role === "ADMIN" ? "校级管理员" : "工作人员"}</strong>
+                  </span>
+                </div>
+              )}
+              {invitationCodeStatus?.valid === false && (
+                <p className="mt-1.5 flex items-start gap-1.5 text-xs text-red-600">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                  <span>{invitationCodeStatus.message}</span>
+                </p>
+              )}
+            </div>
+
+            {/* 选择角色和学校（邀请码验证通过时隐藏，Code-First 锁定） */}
+            {!codeVerified && (
+              <>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    注册身份 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex gap-2 border-b border-gray-200">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, role: "STUDENT", schoolId: "" })}
+                      className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                        formData.role === "STUDENT"
+                          ? "border-[#FF4500] text-[#FF4500]"
+                          : "border-transparent text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      我是学生
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, role: "ADMIN", schoolId: "" })}
+                      className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                        formData.role === "ADMIN"
+                          ? "border-[#FF4500] text-[#FF4500]"
+                          : "border-transparent text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      我是管理员
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, role: "STAFF", schoolId: "" })}
+                      className={`flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
+                        formData.role === "STAFF"
+                          ? "border-[#FF4500] text-[#FF4500]"
+                          : "border-transparent text-gray-600 hover:text-gray-900"
+                      }`}
+                    >
+                      我是工作人员
+                    </button>
+                  </div>
+                </div>
+
+                {/* 选择学校（仅学生显示） */}
+                {formData.role === "STUDENT" && (
+                  <div>
+                    <label htmlFor="schoolId" className="mb-2 block text-sm font-medium text-gray-700">
+                      选择学校 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      id="schoolId"
+                      value={formData.schoolId}
+                      onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                      required={formData.role === "STUDENT"}
+                    >
+                      <option value="">请选择学校</option>
+                      {schools.map((school) => (
+                        <option key={school.id} value={school.id}>
+                          {school.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {formData.role !== "STUDENT" && (
+                  <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                    <span>管理员/工作人员需先输入并验证邀请码</span>
                   </p>
                 )}
-                
-                <p className="mt-1.5 flex items-start gap-1.5 text-xs text-amber-600">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                  <span>此角色注册需输入由上级发放的专属邀请码</span>
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  您的学校信息将由邀请码自动锁定
-                </p>
-              </div>
+              </>
             )}
 
             {/* 错误提示 */}
@@ -462,9 +471,9 @@ export default function RegisterPage() {
                 !formData.password ||
                 !formData.confirmPassword ||
                 (formData.role === "STUDENT" && !formData.schoolId) ||
-                (showInvitationCode && !formData.invitationCode)
+                ((formData.role === "ADMIN" || formData.role === "STAFF") && !codeVerified)
               }
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
@@ -482,11 +491,11 @@ export default function RegisterPage() {
           )}
         </div>
 
-        {/* 固定底部 */}
-        <div className="flex-shrink-0 border-t border-gray-200 px-8 py-6 text-center">
+        {/* 底部 */}
+        <div className="border-t border-gray-200 px-8 py-6 text-center">
           <p className="text-sm text-gray-600">
             已有账户？{" "}
-            <a href="/login" className="font-medium text-blue-600 hover:text-blue-700">
+            <a href="/login" className="font-medium text-[#FF4500] hover:opacity-90">
               立即登录
             </a>
           </p>

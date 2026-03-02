@@ -13,12 +13,15 @@ export type POIStatus = "空闲" | "正常" | "拥挤" | "爆满";
 export interface POI {
   id: string;
   schoolId: string;
+  parentId?: string | null;
   name: string;
+  alias?: string | null; // 别称，仅用于搜索，用户端不展示
   category: POICategory;
   lat: number;
   lng: number;
   isOfficial: boolean;
   description?: string;
+  imageUrl?: string | null;
   reportCount: number;
   createdAt: string;
   updatedAt: string;

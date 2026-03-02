@@ -18,11 +18,12 @@ export interface MergedCategory {
  * @returns 合并后的分类列表
  */
 export async function getMergedCategories(schoolId: string): Promise<MergedCategory[]> {
-  // 1. 获取所有全局分类
+  // 1. 获取所有常规全局分类（排除微观分类）
   const globalCategories = await prisma.category.findMany({
     where: {
       isGlobal: true,
       schoolId: null,
+      isMicroCategory: false,
     },
     orderBy: {
       createdAt: "asc",

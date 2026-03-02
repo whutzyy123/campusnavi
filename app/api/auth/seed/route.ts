@@ -44,12 +44,6 @@ export async function POST() {
         data: {
           name: "系统",
           schoolCode: "system",
-          boundary: {
-            type: "Polygon",
-            coordinates: [[[0, 0], [0, 1], [1, 1], [1, 0], [0, 0]]],
-          },
-          centerLat: 0,
-          centerLng: 0,
         },
       });
     }
@@ -88,7 +82,7 @@ export async function POST() {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

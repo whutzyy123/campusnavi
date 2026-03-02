@@ -8,6 +8,24 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      keyframes: {
+        "comment-highlight": {
+          "0%": { boxShadow: "0 0 0 3px rgba(253, 224, 71, 0.8)" },
+          "100%": { boxShadow: "none" },
+        },
+      },
+      animation: {
+        "comment-highlight": "comment-highlight 1.2s ease-out forwards",
+      },
+      zIndex: {
+        navbar: "40",
+        "navbar-dropdown": "50",
+        sidebar: "45",
+        "modal-overlay": "100",
+        "modal-content": "110",
+        tooltip: "120",
+        "tooltip-popover": "120",
+      },
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",

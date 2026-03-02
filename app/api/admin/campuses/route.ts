@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { centroid } from "@turf/turf";
 import type { Feature, Polygon } from "geojson";
+import { computeLabelCenter } from "@/lib/campus-label-utils";
 
 /**
  * GET /api/admin/campuses
@@ -50,16 +51,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 验证学校是否存在，并获取边界数据（用于自动迁移）
+    // 验证学校是否存在（targetSchoolId 在此处已由上方逻辑保证非空）
+    if (!targetSchoolId) {
+      return NextResponse.json(
+        { success: false, message: "学校ID不能为空" },
+        { status: 400 }
+      );
+    }
     const school = await prisma.school.findUnique({
       where: { id: targetSchoolId },
-      select: {
-        id: true,
-        name: true,
-        boundary: true,
-        centerLat: true,
-        centerLng: true,
-      },
+      select: { id: true, name: true },
     });
 
     if (!school) {
@@ -70,64 +71,10 @@ export async function GET(request: NextRequest) {
     }
 
     // 获取该学校的所有校区
-    let campuses = await prisma.campusArea.findMany({
+    const campuses = await prisma.campusArea.findMany({
       where: { schoolId: targetSchoolId },
       orderBy: { createdAt: "asc" },
     });
-
-    // 数据平滑迁移：如果 CampusArea 为空，检查 School 表中是否有旧的 boundary 数据
-    if (campuses.length === 0 && school.boundary) {
-      try {
-        // 解析旧的 boundary 数据（可能是 JSON 字符串或对象）
-        let boundary: any = school.boundary;
-        if (typeof boundary === "string") {
-          try {
-            boundary = JSON.parse(boundary);
-          } catch (parseError) {
-            console.error("解析 School.boundary 失败:", parseError);
-            boundary = null;
-          }
-        }
-
-        // 如果 boundary 是有效的 GeoJSON Polygon，则自动迁移
-        if (boundary && boundary.type === "Polygon" && Array.isArray(boundary.coordinates) && boundary.coordinates.length > 0) {
-          const coordinates = boundary.coordinates[0];
-          
-          // 计算中心点（如果有 centerLat 和 centerLng，使用它们；否则使用 Turf.js 计算）
-          let centerPoint: [number, number];
-          if (school.centerLat && school.centerLng) {
-            centerPoint = [school.centerLng, school.centerLat];
-          } else {
-            // 使用 Turf.js 计算中心点
-            const polygonFeature: Feature<Polygon> = {
-              type: "Feature",
-              geometry: boundary,
-              properties: {},
-            };
-            const center = centroid(polygonFeature);
-            const [centerLng, centerLat] = center.geometry.coordinates;
-            centerPoint = [centerLng, centerLat];
-          }
-
-          // 自动创建第一条 CampusArea 记录（名称默认为"主校区"）
-          const migratedCampus = await prisma.campusArea.create({
-            data: {
-              schoolId: targetSchoolId,
-              name: "主校区",
-              boundary: boundary as any,
-              center: centerPoint as any,
-            },
-          });
-
-          campuses = [migratedCampus];
-          
-          console.log(`已自动迁移学校 ${targetSchoolId} 的边界数据到 CampusArea`);
-        }
-      } catch (migrationError) {
-        console.error("自动迁移边界数据失败:", migrationError);
-        // 迁移失败不影响正常流程，继续返回空数组
-      }
-    }
 
     return NextResponse.json({
       success: true,
@@ -139,7 +86,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -223,7 +170,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // 验证学校是否存在
+    // 验证学校是否存在（targetSchoolId 在此处已由上方逻辑保证非空）
+    if (!targetSchoolId) {
+      return NextResponse.json(
+        { success: false, message: "学校ID不能为空" },
+        { status: 400 }
+      );
+    }
     const school = await prisma.school.findUnique({
       where: { id: targetSchoolId },
     });
@@ -242,7 +195,7 @@ export async function POST(request: NextRequest) {
       coordinates: [closedBoundary],
     };
 
-    // 使用 Turf.js 计算多边形中心点
+    // 使用 Turf.js 计算中心点
     const polygonFeature: Feature<Polygon> = {
       type: "Feature",
       geometry: polygon,
@@ -253,6 +206,9 @@ export async function POST(request: NextRequest) {
     const [centerLng, centerLat] = center.geometry.coordinates;
     const centerPoint: [number, number] = [centerLng, centerLat];
 
+    // labelCenter: 使用 polylabel（Pole of Inaccessibility）保证标签落在多边形最“宽敞”位置
+    const labelCenterPoint = computeLabelCenter(closedBoundary);
+
     // 保存到数据库
     const campus = await prisma.campusArea.create({
       data: {
@@ -260,6 +216,7 @@ export async function POST(request: NextRequest) {
         name: name.trim(),
         boundary: polygon as any,
         center: centerPoint as any,
+        labelCenter: labelCenterPoint as any,
       },
     });
 
@@ -271,6 +228,7 @@ export async function POST(request: NextRequest) {
         name: campus.name,
         schoolId: campus.schoolId,
         center: campus.center,
+        labelCenter: campus.labelCenter,
       },
     });
   } catch (error) {
@@ -279,7 +237,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/market-deadlock",
+      "schedule": "0 */6 * * *"
+    }
+  ]
+}

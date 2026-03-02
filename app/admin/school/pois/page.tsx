@@ -1,35 +1,43 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef, useCallback } from "react";
 import { useAMap } from "@/hooks/use-amap";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { POIManagerTable } from "@/components/poi-manager-table";
-import { Card } from "@/components/card";
-import { CoordinateConverter } from "@/lib/amap-loader";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { deletePOI, getPOIsBySchool } from "@/lib/poi-actions";
 import toast from "react-hot-toast";
-import { X, Save, MapPin, Eye } from "lucide-react";
-import type { POICategory } from "@/lib/poi-utils";
-
+import { X, MapPin, Plus } from "lucide-react";
+import { Select } from "@/components/ui/select";
 /**
  * 管理员 POI 录入页面
  * 功能：在已定义的校区内点击地图添加 POI
  */
 export default function POIManagementPage() {
-  const router = useRouter();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
   const boundaryPolygonRef = useRef<any>(null);
   const poiMarkersRef = useRef<any[]>([]);
+  const previewMarkerRef = useRef<any>(null); // 选点时的临时红色预览标记
+  const parentMarkerRef = useRef<any>(null); // 添加二级点时父 POI 的灰色参考标记
+  const infoWindowRef = useRef<any>(null); // POI 信息窗体
+  const isPickingLocationRef = useRef(false); // 供 Marker 点击回调读取当前选点状态
   const { amap, loading, error } = useAMap();
-  const { activeSchool, schools, setActiveSchool } = useSchoolStore();
+  const { activeSchool, setActiveSchool } = useSchoolStore();
   const { currentUser } = useAuthStore();
 
-  // 是否处于“在地图上选点以添加 POI”的模式
-  const [isSelectingOnMap, setIsSelectingOnMap] = useState(false);
+  // 是否处于“在地图上选点”模式（支持缩放平移，点击即确定）
+  const [isPickingLocation, setIsPickingLocation] = useState(false);
+
+  // 地图 Marker 点击触发的编辑 POI（传递给 POIManagerTable 打开编辑弹窗）
+  const [mapClickEditPOI, setMapClickEditPOI] = useState<any>(null);
+
+  useEffect(() => {
+    isPickingLocationRef.current = isPickingLocation;
+  }, [isPickingLocation]);
 
   // 强制租户锁定：管理员/工作人员必须使用 currentUser.schoolId
   useEffect(() => {
@@ -61,7 +69,8 @@ export default function POIManagementPage() {
     };
 
     loadLockedSchool();
-  }, [currentUser?.schoolId]); // 移除 setActiveSchool 和 activeSchool 依赖，避免无限循环
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- activeSchool?.id 足够，避免引用变化触发地图重复初始化
+  }, [currentUser?.schoolId]);
 
   // 刷新键（用于强制刷新表格）
   const [refreshKey, setRefreshKey] = useState(0);
@@ -71,56 +80,59 @@ export default function POIManagementPage() {
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
+    alias: "" as string | null,
     categoryId: "",
     description: "",
     lat: 0,
     lng: 0,
+    parentId: null as string | null,
   });
+  const [parentPOI, setParentPOI] = useState<{ id: string; name: string; lat: number; lng: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // 动态分类列表
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
+  // 动态分类列表（分组：常规 + 微观）
+  const [categoryGroups, setCategoryGroups] = useState<{
+    regular: Array<{ id: string; name: string }>;
+    micro: Array<{ id: string; name: string }>;
+  }>({ regular: [], micro: [] });
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
-  // 加载分类列表
+  // 加载分类列表（常规 + 微观，分组）
   useEffect(() => {
     const fetchCategories = async () => {
       if (!currentUser?.schoolId) {
-        setCategories([]);
+        setCategoryGroups({ regular: [], micro: [] });
         setIsLoadingCategories(false);
         return;
       }
 
       setIsLoadingCategories(true);
       try {
-        const response = await fetch("/api/admin/categories");
-        
-        // 检查响应状态
+        const response = await fetch("/api/admin/categories?all=true&grouped=true");
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
 
         const result = await response.json();
-        
-        // 防御性检查：确保返回格式正确
-        if (result.success && Array.isArray(result.data)) {
-          setCategories(result.data);
-          // 如果有分类且表单中未选择，默认选择第一个
-          if (result.data.length > 0 && !formData.categoryId) {
-            setFormData((prev) => ({ ...prev, categoryId: result.data[0].id }));
-          }
+
+        if (result.success && result.data?.regular !== undefined) {
+          const { regular = [], micro = [] } = result.data;
+          setCategoryGroups({ regular, micro });
+          const firstRegular = regular[0];
+          const firstMicro = micro[0];
+          setFormData((prev) => {
+            if (prev.categoryId) return prev;
+            const firstId = firstRegular?.id ?? firstMicro?.id;
+            return firstId ? { ...prev, categoryId: firstId } : prev;
+          });
         } else {
-          // API 返回格式不正确，设置为空数组
-          setCategories([]);
-          console.error("API 返回格式不正确:", result);
-          if (result.message) {
-            toast.error(result.message);
-          }
+          setCategoryGroups({ regular: [], micro: [] });
+          if (result.message) toast.error(result.message);
         }
       } catch (error) {
-        // 网络错误或其他异常，设置为空数组
-        setCategories([]);
+        setCategoryGroups({ regular: [], micro: [] });
         console.error("获取分类列表失败:", error);
         toast.error("获取分类列表失败");
       } finally {
@@ -131,20 +143,23 @@ export default function POIManagementPage() {
     fetchCategories();
   }, [currentUser?.schoolId]);
 
-  // 初始化地图 & 点击选点逻辑
+  // 初始化地图（仅创建一次）
   useEffect(() => {
-    if (!amap || !mapRef.current) {
-      return;
-    }
+    if (!amap || !mapRef.current) return;
 
-    // 若地图尚未创建，则创建地图实例
     if (!mapInstanceRef.current) {
-      const center: [number, number] = activeSchool
-        ? [activeSchool.centerLng, activeSchool.centerLat]
-        : [116.397428, 39.90923]; // 默认：北京
+      const defaultCenter: [number, number] = [116.397428, 39.90923];
+      const hasSchoolCenter =
+        activeSchool?.centerLng != null &&
+        activeSchool?.centerLat != null &&
+        !isNaN(activeSchool.centerLng) &&
+        !isNaN(activeSchool.centerLat);
+      const center: [number, number] = hasSchoolCenter
+        ? [activeSchool!.centerLng!, activeSchool!.centerLat!]
+        : defaultCenter;
 
       const map = new amap.Map(mapRef.current, {
-        zoom: activeSchool ? 15 : 13,
+        zoom: hasSchoolCenter ? 16 : 13,
         center,
         viewMode: "3D",
         mapStyle: "amap://styles/normal",
@@ -152,71 +167,101 @@ export default function POIManagementPage() {
 
       mapInstanceRef.current = map;
     }
+  }, [amap, activeSchool]);
 
-    const map = mapInstanceRef.current;
+  // 选点模式：地图点击监听（使用原生 DOM 事件，因 AMap map.on('click') 在此环境下可能不触发）
+  useEffect(() => {
+    const mapInstance = mapInstanceRef.current;
+    const container = mapRef.current;
+    if (!mapInstance || !amap || !isPickingLocation || !container) return;
 
-    // 地图点击事件：仅在"选点模式"下才生效
-    const handleMapClick = (e: any) => {
-      if (!isSelectingOnMap) {
-        return;
+    const handleDomClick = (e: MouseEvent) => {
+      const rect = container.getBoundingClientRect();
+      const pixelX = e.clientX - rect.left;
+      const pixelY = e.clientY - rect.top;
+      if (pixelX < 0 || pixelY < 0 || pixelX > rect.width || pixelY > rect.height) return;
+
+      const lnglat = mapInstance.containerToLngLat(new amap.Pixel(pixelX, pixelY));
+      const lng = typeof lnglat?.getLng === "function" ? lnglat.getLng() : (lnglat as { lng: number }).lng;
+      const lat = typeof lnglat?.getLat === "function" ? lnglat.getLat() : (lnglat as { lat: number }).lat;
+
+      // 移除旧的预览标记
+      if (previewMarkerRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(previewMarkerRef.current);
+        previewMarkerRef.current = null;
       }
 
-      const { lng, lat } = e.lnglat;
-      setFormData({
-        name: "",
-        categoryId: (categories?.length ?? 0) > 0 ? categories[0].id : "",
-        description: "",
+      // 放置红色预览标记
+      const content = `<div style="width:20px;height:20px;border-radius:9999px;background:#ef4444;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);"></div>`;
+      const marker = new amap.Marker({
+        position: [lng, lat],
+        content,
+        offset: new amap.Pixel(-10, -10),
+        zIndex: 200,
+      });
+      marker.setMap(mapInstanceRef.current!);
+      previewMarkerRef.current = marker;
+
+      // 填充表单并切换到表单视图
+      const firstCategoryId = categoryGroups.regular[0]?.id ?? categoryGroups.micro[0]?.id ?? "";
+      setFormData((prev) => ({
+        ...prev,
         lat,
         lng,
-      });
+        name: prev.name || "",
+        categoryId: prev.categoryId || firstCategoryId,
+        description: prev.description || "",
+        parentId: prev.parentId ?? null,
+      }));
       setSelectedSchool(activeSchool?.id || "");
       setShowForm(true);
-      // 选点完成后退出选点模式
-      setIsSelectingOnMap(false);
+      setIsPickingLocation(false);
       toast.success("已选择位置，请填写 POI 信息");
     };
 
-    // 每次 effect 运行时，先移除旧的点击事件，再绑定新的，保证使用最新逻辑
-    map.off("click", handleMapClick);
-    map.on("click", handleMapClick);
+    container.addEventListener("click", handleDomClick);
+    return () => {
+      container.removeEventListener("click", handleDomClick);
+    };
+  }, [isPickingLocation, amap, activeSchool, categoryGroups]);
+
+  // 关闭表单或取消选点时移除预览标记
+  useEffect(() => {
+    if (!showForm && !isPickingLocation && previewMarkerRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.remove(previewMarkerRef.current);
+      previewMarkerRef.current = null;
+    }
+  }, [showForm, isPickingLocation]);
+
+  // 选点模式下若有 parentPOI，在地图上渲染灰色父 POI 参考标记
+  useEffect(() => {
+    if (!amap || !mapInstanceRef.current) return;
+
+    if (parentMarkerRef.current) {
+      mapInstanceRef.current.remove(parentMarkerRef.current);
+      parentMarkerRef.current = null;
+    }
+
+    if (isPickingLocation && parentPOI) {
+      const content = `<div style="width:16px;height:16px;border-radius:9999px;background:#9ca3af;border:2px solid #e5e7eb;opacity:0.8;"></div>`;
+      const marker = new amap.Marker({
+        position: [parentPOI.lng, parentPOI.lat],
+        title: parentPOI.name + "（父级参考）",
+        offset: new amap.Pixel(-8, -8),
+        content,
+        zIndex: 150,
+      });
+      marker.setMap(mapInstanceRef.current);
+      parentMarkerRef.current = marker;
+    }
 
     return () => {
-      map.off("click", handleMapClick);
+      if (parentMarkerRef.current && mapInstanceRef.current) {
+        mapInstanceRef.current.remove(parentMarkerRef.current);
+        parentMarkerRef.current = null;
+      }
     };
-  }, [amap, activeSchool, isSelectingOnMap]);
-
-  // 兜底：在地图容器上添加一个透明覆盖层做点击拾取，避免地图内部事件被其他图层吞掉
-  const handleMapOverlayClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isSelectingOnMap || !mapInstanceRef.current) {
-      return;
-    }
-
-    const container = e.currentTarget;
-    const rect = container.getBoundingClientRect();
-    const offsetX = e.clientX - rect.left;
-    const offsetY = e.clientY - rect.top;
-
-    try {
-      const lngLat = mapInstanceRef.current.containerToLngLat([offsetX, offsetY]);
-
-      if (!lngLat) return;
-
-      const { lng, lat } = lngLat;
-      setFormData({
-        name: "",
-        categoryId: (categories?.length ?? 0) > 0 ? categories[0].id : "",
-        description: "",
-        lat,
-        lng,
-      });
-      setSelectedSchool(activeSchool?.id || "");
-      setShowForm(true);
-      setIsSelectingOnMap(false);
-      toast.success("已选择位置，请填写 POI 信息");
-    } catch (err) {
-      console.error("地图坐标转换失败:", err);
-    }
-  };
+  }, [amap, isPickingLocation, parentPOI]);
 
   // 确保 selectedSchool 始终使用锁定学校或 activeSchool
   useEffect(() => {
@@ -226,35 +271,82 @@ export default function POIManagementPage() {
       // 只有在没有锁定 schoolId 的情况下才使用 activeSchool
       setSelectedSchool(activeSchool.id);
     }
-  }, [currentUser?.schoolId, activeSchool?.id]); // 移除 selectedSchool 依赖，避免无限循环
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedSchool 为同步目标，加入会导致循环
+  }, [currentUser?.schoolId, activeSchool?.id]);
 
-  // 绘制学校边界
+  // 学校中心定位：activeSchool 加载后立即 setZoomAndCenter(16)
+  useEffect(() => {
+    if (
+      !mapInstanceRef.current ||
+      !activeSchool ||
+      activeSchool.centerLng == null ||
+      activeSchool.centerLat == null ||
+      isNaN(activeSchool.centerLng) ||
+      isNaN(activeSchool.centerLat)
+    ) {
+      return;
+    }
+    const center: [number, number] = [activeSchool.centerLng, activeSchool.centerLat];
+    mapInstanceRef.current.setZoomAndCenter(16, center);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- activeSchool 属性已拆分为 id/centerLng/centerLat，避免引用变化触发地图闪烁
+  }, [activeSchool?.id, activeSchool?.centerLng, activeSchool?.centerLat]);
+
+  // 绘制校区边界（从 CampusArea 加载，替代原 School.boundary）
   useEffect(() => {
     if (!amap || !mapInstanceRef.current || !activeSchool) {
       return;
     }
 
-    const boundary = activeSchool.boundary as any;
-    if (!boundary || boundary.type !== "Polygon") {
-      return;
-    }
+    const fetchAndDrawCampuses = async () => {
+      try {
+        const response = await fetch(`/api/schools/${activeSchool.id}/campuses`);
+        const data = await response.json();
+        if (!data.success || !Array.isArray(data.data) || data.data.length === 0) {
+          const fallbackCenter: [number, number] =
+            activeSchool.centerLng != null && activeSchool.centerLat != null
+              ? [activeSchool.centerLng, activeSchool.centerLat]
+              : [116.397428, 39.90923];
+          mapInstanceRef.current?.setZoomAndCenter(16, fallbackCenter);
+          return;
+        }
 
-    if (boundaryPolygonRef.current) {
-      mapInstanceRef.current.remove(boundaryPolygonRef.current);
-    }
+        if (boundaryPolygonRef.current) {
+          mapInstanceRef.current.remove(boundaryPolygonRef.current);
+          boundaryPolygonRef.current = null;
+        }
 
-    const coordinates = boundary.coordinates[0];
-    boundaryPolygonRef.current = new amap.Polygon({
-      path: coordinates,
-      strokeColor: "#1890ff",
-      strokeWeight: 2,
-      strokeOpacity: 0.8,
-      fillColor: "#1890ff",
-      fillOpacity: 0.1,
-    });
+        const campuses = data.data as Array<{ boundary: unknown; center: [number, number] }>;
+        const first = campuses[0];
+        const boundary = first.boundary as { type?: string; coordinates?: unknown[][] } | null;
+        if (boundary?.type === "Polygon" && Array.isArray(boundary.coordinates?.[0])) {
+          boundaryPolygonRef.current = new amap.Polygon({
+            path: boundary.coordinates[0],
+            strokeColor: "#1890ff",
+            strokeWeight: 2,
+            strokeOpacity: 0.8,
+            fillColor: "#1890ff",
+            fillOpacity: 0.1,
+          });
+          boundaryPolygonRef.current.setMap(mapInstanceRef.current);
+        }
 
-    boundaryPolygonRef.current.setMap(mapInstanceRef.current);
-    mapInstanceRef.current.panTo([activeSchool.centerLng, activeSchool.centerLat]);
+        const center: [number, number] =
+          first.center ??
+          (activeSchool.centerLng != null && activeSchool.centerLat != null
+            ? [activeSchool.centerLng, activeSchool.centerLat]
+            : [116.397428, 39.90923]);
+        mapInstanceRef.current.setZoomAndCenter(16, center);
+      } catch (err) {
+        console.error("加载校区边界失败:", err);
+        const fallbackCenter: [number, number] =
+          activeSchool.centerLng != null && activeSchool.centerLat != null
+            ? [activeSchool.centerLng, activeSchool.centerLat]
+            : [116.397428, 39.90923];
+        mapInstanceRef.current?.setZoomAndCenter(16, fallbackCenter);
+      }
+    };
+
+    fetchAndDrawCampuses();
 
     return () => {
       if (boundaryPolygonRef.current && mapInstanceRef.current) {
@@ -272,13 +364,14 @@ export default function POIManagementPage() {
       }
 
       try {
-        const response = await fetch(`/api/pois?schoolId=${activeSchool.id}`);
-        const data = await response.json();
+        const result = await getPOIsBySchool(activeSchool.id);
 
-        if (!response.ok || !data.success) {
-          console.error("加载地图 POI 失败:", data.message);
+        if (!result.success || !result.data?.pois) {
+          console.error("加载地图 POI 失败:", result.error);
           return;
         }
+
+        const data = { success: true, pois: result.data.pois };
 
         // 清除旧的 Marker
         if (poiMarkersRef.current.length > 0) {
@@ -310,15 +403,27 @@ export default function POIManagementPage() {
 
         const markers: any[] = data.pois.map((poi: any) => {
           const color = getMarkerColor(poi.category);
-          const content = `<div style="width:16px;height:16px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 0 6px rgba(0,0,0,0.25);"></div>`;
+          const content = `<div style="width:16px;height:16px;border-radius:9999px;background:${color};border:2px solid #ffffff;box-shadow:0 0 6px rgba(0,0,0,0.25);cursor:pointer;"></div>`;
 
-          return new amap.Marker({
+          const marker = new amap.Marker({
             position: [poi.lng, poi.lat],
             title: poi.name,
             offset: new amap.Pixel(-8, -8),
             content,
             zIndex: 100,
           });
+
+          marker.on("click", () => {
+            if (isPickingLocationRef.current) return; // 选点模式下不打开编辑
+            setMapClickEditPOI(poi);
+            // 地图平移到选中 POI，便于用户确认位置
+            if (mapInstanceRef.current) {
+              mapInstanceRef.current.panTo([poi.lng, poi.lat], false, 300);
+              mapInstanceRef.current.setZoom(17);
+            }
+          });
+
+          return marker;
         });
 
         markers.forEach((marker) => {
@@ -353,10 +458,12 @@ export default function POIManagementPage() {
         body: JSON.stringify({
           schoolId: selectedSchool,
           name: formData.name.trim(),
+          alias: formData.alias?.trim() || undefined,
           categoryId: formData.categoryId,
           lat: formData.lat,
           lng: formData.lng,
           description: formData.description.trim() || undefined,
+          parentId: formData.parentId || undefined,
         }),
       });
 
@@ -376,9 +483,23 @@ export default function POIManagementPage() {
       setSaveMessage({ type: "success", text: "POI 创建成功！" });
       toast.success("POI 创建成功！");
       setTimeout(() => {
+        // 清除预览标记并重置到列表视图
+        if (previewMarkerRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.remove(previewMarkerRef.current);
+          previewMarkerRef.current = null;
+        }
         setShowForm(false);
-        setFormData({ name: "", categoryId: (categories?.length ?? 0) > 0 ? categories[0].id : "", description: "", lat: 0, lng: 0 });
-        handlePOISaved(); // 刷新表格
+        setFormData({
+          name: "",
+          alias: null,
+          categoryId: categoryGroups.regular[0]?.id ?? categoryGroups.micro[0]?.id ?? "",
+          description: "",
+          lat: 0,
+          lng: 0,
+          parentId: null,
+        });
+        setParentPOI(null);
+        handlePOISaved();
       }, 1500);
     } catch (err) {
       setSaveMessage({
@@ -390,13 +511,44 @@ export default function POIManagementPage() {
     }
   };
 
+  // 聚焦到 POI：地图 panTo + 打开信息窗体（必须在 early return 之前定义，遵守 Hooks 规则）
+  const handleFocusPOI = useCallback(
+    (poi: { name: string; lat: number; lng: number; category?: string; description?: string | null }) => {
+      if (!amap || !mapInstanceRef.current) return;
+
+      const position: [number, number] = [poi.lng, poi.lat];
+      mapInstanceRef.current.panTo(position, false, 300);
+      mapInstanceRef.current.setZoom(17);
+
+      if (infoWindowRef.current) {
+        infoWindowRef.current.close();
+        infoWindowRef.current = null;
+      }
+
+      const content = `
+        <div style="min-width:160px;padding:8px 12px;font-size:13px;">
+          <div style="font-weight:600;color:#1a1a1b;margin-bottom:4px;">${poi.name}</div>
+          ${poi.category ? `<div style="color:#7c7c7c;font-size:12px;">${poi.category}</div>` : ""}
+          ${poi.description ? `<div style="color:#7c7c7c;margin-top:4px;font-size:12px;">${poi.description}</div>` : ""}
+        </div>
+      `;
+      const infoWindow = new amap.InfoWindow({
+        content,
+        offset: new amap.Pixel(0, -30),
+      });
+      infoWindow.open(mapInstanceRef.current, position);
+      infoWindowRef.current = infoWindow;
+    },
+    [amap]
+  );
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
         <div className="text-center">
           <div className="mb-4 text-lg font-medium text-gray-700">加载地图中...</div>
           <div className="h-2 w-64 rounded-full bg-gray-200">
-            <div className="h-2 animate-pulse rounded-full bg-blue-500"></div>
+            <div className="h-2 animate-pulse rounded-full bg-[#FF4500]"></div>
           </div>
         </div>
       </div>
@@ -415,15 +567,29 @@ export default function POIManagementPage() {
     );
   }
 
-  // 处理新增 POI
+  // 处理新增 POI：进入选点模式（支持缩放平移，点击即确定）
   const handleAddPOI = () => {
     if (!activeSchool) {
       toast.error("请先选择学校");
       return;
     }
-    // 进入“在地图上选点”模式，让用户先在地图上选择位置
-    setIsSelectingOnMap(true);
-    toast.success("请在地图上点击要添加 POI 的位置");
+    setParentPOI(null);
+    setFormData((prev) => ({ ...prev, parentId: null }));
+    setIsPickingLocation(true);
+    toast.success("请在地图上点击目标位置（支持缩放平移寻找）");
+  };
+
+  // 处理新增二级点：预填 parentId，进入选点模式，地图定位到父 POI
+  const handleAddSubPOI = (poi: { id: string; name: string; lat: number; lng: number }) => {
+    if (!activeSchool) return;
+    setParentPOI(poi);
+    setFormData((prev) => ({ ...prev, parentId: poi.id }));
+    setIsPickingLocation(true);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.panTo([poi.lng, poi.lat], false, 300);
+      mapInstanceRef.current.setZoom(17);
+    }
+    toast.success(`正在为「${poi.name}」添加二级点，请在地图上点击位置`);
   };
 
   // 处理保存成功后的刷新
@@ -435,200 +601,251 @@ export default function POIManagementPage() {
   return (
     <AuthGuard requiredRole="ADMIN" requireSchoolId={true}>
       <AdminLayout>
-        <div className="p-6 pb-24">
-          {/* POI 管理表格 */}
-          {currentUser?.schoolId && (
-            <POIManagerTable
-              key={`poi-table-${refreshKey}`}
-              schoolId={currentUser.schoolId}
-              refreshKey={refreshKey}
-              onAddPOI={handleAddPOI}
-              onDeletePOI={async (poiId) => {
-                try {
-                  const response = await fetch(`/api/pois/${poiId}`, {
-                    method: "DELETE",
-                  });
-
-                  // 健壮性优化：先检查响应状态，再解析 JSON
-                  if (!response.ok) {
-                    // 尝试解析错误信息
-                    let errorMessage = "删除失败";
-                    try {
-                      const errorData = await response.json();
-                      errorMessage = errorData.message || errorMessage;
-                    } catch {
-                      // 如果 JSON 解析失败，使用状态码信息
-                      errorMessage = `删除失败 (${response.status} ${response.statusText})`;
-                    }
-                    throw new Error(errorMessage);
-                  }
-
-                  const data = await response.json();
-                  if (data.success) {
-                    toast.success("POI 删除成功");
-                    handlePOISaved(); // 刷新表格
-                  } else {
-                    throw new Error(data.message || "删除失败");
-                  }
-                } catch (error) {
-                  toast.error(error instanceof Error ? error.message : "删除失败");
-                }
-              }}
-            />
-          )}
-
-          {/* 地图视图（可选，用于可视化添加 POI） */}
-          <div className="mt-6">
-            <Card title="地图视图" description="点击地图添加 POI">
-              <div className="relative h-[600px] w-full overflow-hidden rounded-lg border border-gray-200">
-                <div ref={mapRef} className="h-full w-full" />
-
-                {/* 选点模式下的透明覆盖层，兜底处理点击拾取 */}
-                {isSelectingOnMap && (
-                  <div
-                    className="absolute inset-0 z-20 cursor-crosshair"
-                    onClick={handleMapOverlayClick}
-                  />
-                )}
-                
-                {/* 地图加载状态 */}
-                {loading && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80">
-                    <div className="text-center">
-                      <div className="mb-4 h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mx-auto"></div>
-                      <p className="text-sm text-gray-600">加载地图中...</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* 地图错误状态 */}
-                {error && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-red-50/80">
-                    <div className="text-center">
-                      <X className="mx-auto mb-4 h-12 w-12 text-red-500" />
-                      <p className="text-lg font-medium text-red-600">地图加载失败</p>
-                      <p className="mt-2 text-sm text-red-500">{error.message}</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </Card>
-          </div>
-
-      {/* POI 录入表单弹窗 */}
-      {showForm && (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/50">
-          <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-gray-800">添加 POI</h2>
-              <button
-                onClick={() => setShowForm(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* POI 名称 */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  POI 名称 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="例如：第一食堂"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </div>
-
-              {/* 分类 */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">
-                  分类 <span className="text-red-500">*</span>
-                </label>
-                {isLoadingCategories ? (
-                  <div className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-500">
-                    加载分类中...
-                  </div>
-                ) : (categories?.length ?? 0) === 0 ? (
-                  <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-700">
-                    暂无分类，请先前往"分类管理"创建分类
-                  </div>
-                ) : (
-                  <select
-                    value={formData.categoryId}
-                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    disabled={isLoadingCategories || (categories?.length ?? 0) === 0}
+        <div className="flex h-full min-h-0 overflow-hidden">
+          {/* 左侧面板：列表 / 新增表单 */}
+          <div className="flex w-96 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
+            {/* 固定头部：标题 + 新增按钮 */}
+            <div className="shrink-0 border-b border-gray-200 p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-900">POI 列表</h2>
+                {!showForm && (
+                  <button
+                    onClick={handleAddPOI}
+                    className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF5500]"
                   >
-                    {categories?.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    )) ?? []}
-                  </select>
+                    <Plus className="h-4 w-4" />
+                    新增 POI
+                  </button>
                 )}
               </div>
+            </div>
 
-              {/* 描述 */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">描述</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="可选：POI 的详细描述"
-                  rows={3}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+            {/* 内容区：表单可滚动；列表为固定筛选 + 可滚动卡片 */}
+            {showForm ? (
+              <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">
+                      {parentPOI ? `正在为「${parentPOI.name}」添加二级点` : "添加 POI"}
+                    </h3>
+                    <button
+                      onClick={() => {
+                        setShowForm(false);
+                        setParentPOI(null);
+                        setFormData((prev) => ({ ...prev, parentId: null }));
+                      }}
+                      className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      POI 名称 <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="例如：第一食堂"
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      别称 (Alias)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.alias ?? ""}
+                      onChange={(e) => setFormData({ ...formData, alias: e.target.value || null })}
+                      placeholder="例如：老图, 南门 (多个别称请用逗号隔开)"
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">
+                      分类 <span className="text-red-500">*</span>
+                    </label>
+                    {isLoadingCategories ? (
+                      <div className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-500">
+                        加载分类中...
+                      </div>
+                    ) : (categoryGroups.regular.length + categoryGroups.micro.length) === 0 ? (
+                      <div className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-700">
+                        暂无分类，请先前往「分类管理」创建
+                      </div>
+                    ) : (
+                      <Select
+                        value={formData.categoryId}
+                        onValueChange={(v) => setFormData({ ...formData, categoryId: v })}
+                        optionGroups={[
+                          {
+                            label: "常规分类",
+                            options: categoryGroups.regular.map((c) => ({ value: c.id, label: c.name })),
+                          },
+                          {
+                            label: "微观设施",
+                            options: categoryGroups.micro.map((c) => ({ value: c.id, label: c.name })),
+                          },
+                        ].filter((g) => g.options.length > 0)}
+                        placeholder="选择分类"
+                        disabled={isLoadingCategories}
+                        className="w-full"
+                      />
+                    )}
+                  </div>
+
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-gray-700">描述</label>
+                    <textarea
+                      value={formData.description}
+                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                      placeholder="可选"
+                      rows={2}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                    />
+                  </div>
+
+                  <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      <span>
+                        {formData.lng.toFixed(6)}, {formData.lat.toFixed(6)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowForm(false);
+                        setParentPOI(null);
+                        setFormData((prev) => ({ ...prev, parentId: null }));
+                      }}
+                      className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      disabled={
+                        isSaving ||
+                        !formData.name.trim() ||
+                        !selectedSchool ||
+                        !formData.categoryId ||
+                        isLoadingCategories ||
+                        (categoryGroups.regular.length + categoryGroups.micro.length) === 0
+                      }
+                      className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF5500] disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {isSaving ? "保存中..." : "保存"}
+                    </button>
+                  </div>
+
+                  {saveMessage && (
+                    <div
+                      className={`rounded-lg p-3 text-sm ${
+                        saveMessage.type === "success"
+                          ? "bg-green-50 text-green-700"
+                          : "bg-red-50 text-red-700"
+                      }`}
+                    >
+                      {saveMessage.text}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : currentUser?.schoolId ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <Suspense fallback={<LoadingSpinner />}>
+                  <POIManagerTable
+                  key={`poi-table-${refreshKey}`}
+                  schoolId={currentUser.schoolId}
+                  refreshKey={refreshKey}
+                  onAddPOI={handleAddPOI}
+                  onAddSubPOI={handleAddSubPOI}
+                  onFocusPOI={handleFocusPOI}
+                  onEditPOI={handlePOISaved}
+                  triggerEditPOI={mapClickEditPOI}
+                  onEditTriggered={() => setMapClickEditPOI(null)}
+                  embedded
+                  hierarchical
+                  onDeletePOI={async (poiId) => {
+                    try {
+                      const result = await deletePOI(poiId);
+                      if (result.success) {
+                        toast.success("POI 删除成功");
+                        handlePOISaved();
+                      } else {
+                        throw new Error(result.error || "删除失败");
+                      }
+                    } catch (err) {
+                      toast.error(err instanceof Error ? err.message : "删除失败");
+                    }
+                  }}
                 />
+                </Suspense>
               </div>
-
-              {/* 坐标信息 */}
-              <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-600">
-                <div className="flex items-center gap-2">
-                  <MapPin className="h-4 w-4" />
-                  <span>
-                    坐标：{formData.lng.toFixed(6)}, {formData.lat.toFixed(6)}
-                  </span>
-                </div>
+            ) : (
+              <div className="flex min-h-0 flex-1 items-center justify-center p-4">
+                <p className="text-sm text-gray-500">请先选择学校</p>
               </div>
-
-              {/* 操作按钮 */}
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setShowForm(false)}
-                  className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleSave}
-                  disabled={isSaving || !formData.name.trim() || !selectedSchool || !formData.categoryId || isLoadingCategories || (categories?.length ?? 0) === 0}
-                  className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSaving ? "保存中..." : "保存"}
-                </button>
-              </div>
-
-              {/* 消息提示 */}
-              {saveMessage && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    saveMessage.type === "success"
-                      ? "bg-green-50 text-green-700"
-                      : "bg-red-50 text-red-700"
-                  }`}
-                >
-                  {saveMessage.text}
-                </div>
-              )}
-            </div>
+            )}
           </div>
-            </div>
-          )}
+
+          {/* 右侧地图：始终可见，选点模式下支持自由缩放平移 */}
+          <div
+            className={`relative z-0 min-h-0 flex-1 bg-gray-100 ${isPickingLocation ? "cursor-crosshair" : ""}`}
+          >
+            <div ref={mapRef} className="relative z-10 h-full w-full" />
+
+            {isPickingLocation && (
+              <div className="pointer-events-none absolute top-4 left-1/2 z-30 -translate-x-1/2">
+                <div className="pointer-events-auto flex items-center gap-3 rounded-lg border border-[#FF4500] bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-lg">
+                  <span>
+                    {parentPOI
+                      ? `📍 正在为「${parentPOI.name}」添加二级点，请在地图上点击位置`
+                      : "📍 请在地图上点击目标位置 (支持缩放平移寻找)"}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setIsPickingLocation(false);
+                      setParentPOI(null);
+                      setFormData((prev) => ({ ...prev, parentId: null }));
+                    }}
+                    className="rounded px-2 py-1 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+                  >
+                    取消
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center bg-gray-100/80">
+                <div className="text-center">
+                  <div className="mx-auto mb-2 h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent" />
+                  <p className="text-sm text-gray-600">加载地图中...</p>
+                </div>
+              </div>
+            )}
+
+            {error && (
+              <div className="absolute inset-0 flex items-center justify-center bg-red-50/80">
+                <div className="text-center">
+                  <X className="mx-auto mb-4 h-12 w-12 text-red-500" />
+                  <p className="text-lg font-medium text-red-600">地图加载失败</p>
+                  <p className="mt-2 text-sm text-red-500">{String(error)}</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+
       </AdminLayout>
     </AuthGuard>
   );

@@ -1,20 +1,34 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, MapPin, Save, Loader2 } from "lucide-react";
+import { X, MapPin, Save, Loader2, Trash2 } from "lucide-react";
+import { uploadPOIImage } from "@/lib/upload-actions";
+import { updatePOI, deletePOI } from "@/lib/poi-actions";
+import { ImageUpload } from "@/components/shared/image-upload";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/amap-loader";
 import toast from "react-hot-toast";
-import type { MergedCategory } from "@/lib/category-utils";
+interface CategoryItem {
+  id: string;
+  name: string;
+  icon?: string | null;
+}
+
+interface GroupedCategories {
+  regular: CategoryItem[];
+  micro: CategoryItem[];
+}
 
 interface POI {
   id: string;
   name: string;
+  alias?: string | null;
   category: string;
   categoryId: string | null;
   lat: number;
   lng: number;
   description: string | null;
+  imageUrl?: string | null;
   isOfficial: boolean;
   reportCount: number;
   createdAt: string;
@@ -51,14 +65,21 @@ export function POIEditDialog({
   const markerRef = useRef<any>(null);
   const [isSelectingOnMap, setIsSelectingOnMap] = useState(false);
 
-  const [categories, setCategories] = useState<MergedCategory[]>([]);
+  const [categoryGroups, setCategoryGroups] = useState<GroupedCategories>({
+    regular: [],
+    micro: [],
+  });
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
 
   const [formData, setFormData] = useState({
     name: "",
+    alias: "" as string | null,
     categoryId: "",
     description: "",
+    imageUrl: "" as string | null,
     lat: 0,
     lng: 0,
     isOfficial: false,
@@ -69,17 +90,20 @@ export function POIEditDialog({
     },
   });
 
-  // 加载分类列表
+  // 加载分类列表（常规 + 微观，分组）
   useEffect(() => {
     const fetchCategories = async () => {
       if (!schoolId) return;
 
       setIsLoadingCategories(true);
       try {
-        const response = await fetch("/api/admin/categories");
+        const response = await fetch("/api/admin/categories?all=true&grouped=true");
         const data = await response.json();
-        if (data.success) {
-          setCategories(data.data || []);
+        if (data.success && data.data) {
+          setCategoryGroups({
+            regular: data.data.regular || [],
+            micro: data.data.micro || [],
+          });
         }
       } catch (error) {
         console.error("获取分类列表失败:", error);
@@ -98,8 +122,10 @@ export function POIEditDialog({
     if (poi && isOpen) {
       setFormData({
         name: poi.name,
+        alias: (poi as POI).alias ?? "",
         categoryId: poi.categoryId || "",
         description: poi.description || "",
+        imageUrl: (poi as POI & { imageUrl?: string | null }).imageUrl ?? null,
         lat: poi.lat,
         lng: poi.lng,
         isOfficial: poi.isOfficial,
@@ -217,8 +243,10 @@ export function POIEditDialog({
     try {
       const updateBody: any = {
         name: formData.name.trim(),
+        alias: formData.alias?.trim() || null,
         categoryId: formData.categoryId,
         description: formData.description.trim() || null,
+        imageUrl: formData.imageUrl || null,
         lat: formData.lat,
         lng: formData.lng,
         isOfficial: formData.isOfficial,
@@ -233,25 +261,10 @@ export function POIEditDialog({
         };
       }
 
-      const response = await fetch(`/api/pois/${poi.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(updateBody),
-      });
+      const result = await updatePOI(poi.id, updateBody);
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // 根据状态码显示不同的错误信息
-        let errorMessage = data.message || "更新失败";
-        if (response.status === 403) {
-          errorMessage = data.message || "分类无效或无权使用，请检查分类选择";
-        } else if (response.status === 404) {
-          errorMessage = data.message || "分类不存在，请刷新页面后重试";
-        }
-        throw new Error(errorMessage);
+      if (!result.success) {
+        throw new Error(result.error || "更新失败");
       }
 
       toast.success("POI 更新成功");
@@ -265,149 +278,217 @@ export function POIEditDialog({
     }
   };
 
+  // 删除 POI
+  const handleDelete = async () => {
+    if (!poi) return;
+    if (!confirm("确定要删除这个 POI 吗？此操作无法撤销。")) return;
+
+    setIsDeleting(true);
+    try {
+      const result = await deletePOI(poi.id);
+
+      if (!result.success) {
+        throw new Error(result.error || "删除失败");
+      }
+
+      toast.success("POI 已删除");
+      onClose();
+      onSave();
+    } catch (error) {
+      console.error("删除 POI 失败:", error);
+      toast.error(error instanceof Error ? error.message : "删除失败，请重试");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (!isOpen || !poi) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto rounded-lg bg-white shadow-xl">
+    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
+      <div className="modal-container max-w-4xl">
         {/* 头部 */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+        <div className="modal-header flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
           <h2 className="text-xl font-bold text-gray-900">编辑 POI</h2>
           <button
             onClick={onClose}
-            className="rounded-lg p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+            aria-label="关闭"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        {/* 内容 */}
-        <div className="p-6 space-y-6">
+        {/* 内容（可滚动） */}
+        <div className="modal-body p-6 scrollbar-gutter-stable">
           {/* 基本信息 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900">基本信息</h3>
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">基本信息</h3>
+            <div className="space-y-5">
+              {/* POI 名称 + 别称：两列布局 */}
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                    POI 名称 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="例如：第一食堂"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                    别称 (Alias)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.alias ?? ""}
+                    onChange={(e) => setFormData({ ...formData, alias: e.target.value || null })}
+                    placeholder="例如：老图, 南门（逗号分隔）"
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  />
+                </div>
+              </div>
 
-            {/* POI 名称 */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                POI 名称 <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="例如：第一食堂"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            </div>
-
-            {/* 分类 */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                分类 <span className="text-red-500">*</span>
-              </label>
+              {/* 分类 */}
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+                  分类 <span className="text-red-500">*</span>
+                </label>
               {isLoadingCategories ? (
-                <div className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-500">
+                <div className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-500">
                   加载分类中...
                 </div>
-              ) : categories.length === 0 ? (
-                <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-700">
-                  暂无分类，请先前往"分类管理"创建分类
+              ) : categoryGroups.regular.length + categoryGroups.micro.length === 0 ? (
+                <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-2.5 text-sm text-orange-700">
+                  暂无分类，请先前往「分类管理」创建分类
                 </div>
               ) : (
                 <select
                   value={formData.categoryId}
                   onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="">请选择分类</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name} {cat.isGlobal ? "(系统默认)" : "(学校自定义)"}
-                    </option>
-                  ))}
+                  {categoryGroups.regular.length > 0 && (
+                    <optgroup label="常规分类">
+                      {categoryGroups.regular.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {categoryGroups.micro.length > 0 && (
+                    <optgroup label="微观设施">
+                      {categoryGroups.micro.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               )}
+              </div>
             </div>
+          </section>
 
-            {/* 描述 */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">描述</label>
-              <textarea
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="可选：POI 的详细描述"
-                rows={3}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-              />
+          {/* 媒体与描述 */}
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">媒体与描述</h3>
+            <div className="space-y-5">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-700">主图</label>
+                <ImageUpload
+                  value={formData.imageUrl ?? ""}
+                  onChange={(url) =>
+                    setFormData((prev) => ({ ...prev, imageUrl: url || null }))
+                  }
+                  onUploading={setIsImageUploading}
+                  uploadFn={uploadPOIImage}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-700">描述</label>
+                <textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="可选：POI 的详细描述，如开放时间、注意事项等"
+                  rows={3}
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder:text-gray-400 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                />
+              </div>
             </div>
-          </div>
+          </section>
 
           {/* 地理坐标 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900">地理坐标</h3>
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">地理坐标</h3>
+            <div className="space-y-5">
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">经度</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={formData.lng}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lng: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">纬度</label>
-                <input
-                  type="number"
-                  step="any"
-                  value={formData.lat}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lat: parseFloat(e.target.value) || 0 })
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                />
-              </div>
-            </div>
-
-            {/* 地图拾取 */}
-            <div>
-              <button
-                type="button"
-                onClick={() => setIsSelectingOnMap(true)}
-                className="flex items-center gap-2 rounded-lg border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-              >
-                <MapPin className="h-4 w-4" />
-                {isSelectingOnMap ? "点击地图选择位置..." : "在地图上拾取坐标"}
-              </button>
-              {isSelectingOnMap && (
-                <p className="mt-2 text-xs text-blue-600">请在地图上点击要设置的位置</p>
-              )}
-            </div>
-
-            {/* 地图容器 */}
-            <div className="h-64 w-full overflow-hidden rounded-lg border border-gray-200">
-              {amapLoading ? (
-                <div className="flex h-full items-center justify-center bg-gray-100">
-                  <p className="text-sm text-gray-600">加载地图中...</p>
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">经度</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.lng}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lng: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  />
                 </div>
-              ) : (
-                <div ref={mapRef} className="h-full w-full" />
-              )}
+                <div>
+                  <label className="mb-1.5 block text-sm font-semibold text-gray-700">纬度</label>
+                  <input
+                    type="number"
+                    step="any"
+                    value={formData.lat}
+                    onChange={(e) =>
+                      setFormData({ ...formData, lat: parseFloat(e.target.value) || 0 })
+                    }
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={() => setIsSelectingOnMap(true)}
+                  className="flex items-center gap-2 rounded-lg border border-[#FF4500]/40 bg-[#FFE5DD] px-4 py-2.5 text-sm font-medium text-[#FF4500] transition-colors hover:bg-[#FFE5DD]/80"
+                >
+                  <MapPin className="h-4 w-4" />
+                  {isSelectingOnMap ? "点击地图选择位置..." : "在地图上拾取坐标"}
+                </button>
+                {isSelectingOnMap && (
+                  <p className="mt-2 text-xs text-[#FF4500]">请在地图上点击要设置的位置</p>
+                )}
+              </div>
+
+              <div className="h-64 w-full overflow-hidden rounded-lg border border-gray-200">
+                {amapLoading ? (
+                  <div className="flex h-full items-center justify-center bg-gray-100">
+                    <p className="text-sm text-gray-600">加载地图中...</p>
+                  </div>
+                ) : (
+                  <div ref={mapRef} className="h-full w-full" />
+                )}
+              </div>
             </div>
-          </div>
+          </section>
 
           {/* 状态管理 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900">状态管理（可选）</h3>
-
-            <div className="grid grid-cols-2 gap-4">
+          <section className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">状态管理（可选）</h3>
+            <div className="grid grid-cols-2 gap-5">
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">拥挤状态</label>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-700">拥挤状态</label>
                 <select
                   value={formData.statusOverride.val}
                   onChange={(e) =>
@@ -419,7 +500,7 @@ export function POIEditDialog({
                       },
                     })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="0">不覆盖</option>
                   <option value="1">空闲</option>
@@ -429,7 +510,7 @@ export function POIEditDialog({
                 </select>
               </div>
               <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700">有效期至</label>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-700">有效期至</label>
                 <input
                   type="datetime-local"
                   value={formData.statusOverride.expiresAt}
@@ -443,23 +524,22 @@ export function POIEditDialog({
                     })
                   }
                   disabled={formData.statusOverride.val === 0}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 />
               </div>
             </div>
-          </div>
+          </section>
 
           {/* 类型标记 */}
-          <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-gray-900">类型标记</h3>
-
+          <section>
+            <h3 className="mb-4 text-sm font-semibold text-gray-900">类型标记</h3>
             <div className="flex items-center gap-4">
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   checked={formData.isOfficial}
                   onChange={(e) => setFormData({ ...formData, isOfficial: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-2 focus:ring-blue-200"
+                  className="h-4 w-4 rounded border-gray-300 text-[#FF4500] focus:ring-2 focus:ring-[#FF4500]/20"
                 />
                 <span className="text-sm text-gray-700">官方创建</span>
               </label>
@@ -469,23 +549,43 @@ export function POIEditDialog({
                   : "该 POI 由用户众包创建"}
               </span>
             </div>
-          </div>
+          </section>
         </div>
 
-        {/* 底部操作按钮 */}
-        <div className="sticky bottom-0 border-t border-gray-200 bg-white px-6 py-4">
+        {/* 底部操作按钮（固定） */}
+        <div className="modal-footer flex items-center justify-between border-t border-gray-200 bg-white px-6 py-4">
+          <div>
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={isSaving || isDeleting}
+              className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  删除中...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  删除
+                </>
+              )}
+            </button>
+          </div>
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              disabled={isSaving}
-              className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isSaving || isDeleting}
+              className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               取消
             </button>
             <button
               onClick={handleSave}
-              disabled={isSaving || !formData.name.trim() || !formData.categoryId}
-              className="flex items-center justify-center gap-2 flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isSaving || isImageUploading || isDeleting || !formData.name.trim() || !formData.categoryId}
+              className="flex items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? (
                 <>

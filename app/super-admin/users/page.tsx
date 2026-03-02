@@ -1,17 +1,25 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
-import { Users, MoreVertical, Ban, Key, Filter, X, Search } from "lucide-react";
+import { Users, Ban, Key, Filter, X, Trash2, AlertTriangle, Info } from "lucide-react";
+import { TableActions } from "@/components/ui/table-actions";
 import toast from "react-hot-toast";
-import { Badge } from "@/components/badge";
+import { StatusBadge } from "@/components/status-badge";
+import { SearchInput } from "@/components/shared/search-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { getAdminUserDetail, type AdminUserDetail } from "@/lib/user-actions";
+import { AdminUserDetailModal } from "@/components/admin/admin-user-detail-modal";
+import { ResetPasswordModal } from "@/components/admin/reset-password-modal";
+import { adminResetUserPassword } from "@/lib/user-actions";
 
 interface User {
   id: string;
@@ -31,6 +39,14 @@ interface User {
  * 功能：查看所有注册用户、筛选、治理操作
  */
 export default function UserManagementPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <UserManagementPageContent />
+    </Suspense>
+  );
+}
+
+function UserManagementPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currentUser } = useAuthStore();
@@ -46,15 +62,20 @@ export default function UserManagementPage() {
   const [roleFilter, setRoleFilter] = useState<string>("all");
   const [schoolFilter, setSchoolFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const debouncedSearchQuery = useDebounce(searchQuery, 300);
   const [searchField, setSearchField] = useState<"nickname" | "email">("nickname");
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState<string>("");
   const [schools, setSchools] = useState<Array<{ id: string; name: string }>>([]);
   
-  // 操作菜单状态
-  const [actionMenuOpen, setActionMenuOpen] = useState<string | null>(null);
-  
-  // 防抖定时器引用
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isPatching, setIsPatching] = useState(false);
+  const [selectedUserForView, setSelectedUserForView] = useState<User | null>(null);
+  const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+  const [profileDetail, setProfileDetail] = useState<AdminUserDetail | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [selectedUserForReset, setSelectedUserForReset] = useState<User | null>(null);
+  const [isResetModalOpen, setIsResetModalOpen] = useState(false);
 
   // 加载学校列表（用于筛选器）
   useEffect(() => {
@@ -73,25 +94,8 @@ export default function UserManagementPage() {
     fetchSchools();
   }, []);
 
-  // 防抖处理搜索输入
-  useEffect(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-
-    debounceTimerRef.current = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery);
-    }, 500);
-
-    return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
-      }
-    };
-  }, [searchQuery]);
-
   // 加载用户列表
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     if (!currentUser?.id) return;
 
     setIsLoading(true);
@@ -99,9 +103,8 @@ export default function UserManagementPage() {
       // 从 URL 获取分页参数
       const currentPage = parseInt(searchParams.get("page") || "1", 10);
       
-      // 构建查询参数
+      // 构建查询参数（认证通过 Cookie）
       const params = new URLSearchParams();
-      params.append("userId", currentUser.id);
       params.append("page", currentPage.toString());
       params.append("limit", "10");
       
@@ -135,43 +138,128 @@ export default function UserManagementPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [currentUser?.id, roleFilter, schoolFilter, debouncedSearchQuery, searchField, searchParams]);
 
   // 当筛选条件、搜索关键词或分页变化时，重新加载用户列表
   useEffect(() => {
     fetchUsers();
-  }, [currentUser?.id, roleFilter, schoolFilter, debouncedSearchQuery, searchField, searchParams]);
+  }, [fetchUsers]);
 
-  // 获取角色 Badge 样式
-  const getRoleBadge = (role: string) => {
-    switch (role) {
-      case "SUPER_ADMIN":
-        return <Badge variant="error">超级管理员</Badge>;
-      case "ADMIN":
-        return <Badge variant="warning">校级管理员</Badge>;
-      case "STAFF":
-        return <Badge variant="info">工作人员</Badge>;
-      case "STUDENT":
-        return <Badge variant="default">学生</Badge>;
-      default:
-        return <Badge variant="default">{role}</Badge>;
+  // 停用/激活账户
+  const handleToggleStatus = async (user: User) => {
+    if (!currentUser?.id) return;
+    if (user.id === currentUser.id) {
+      toast.error("不能操作自己的账户");
+      return;
+    }
+
+    const newStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    setIsPatching(true);
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: user.id, status: newStatus }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "操作失败");
+      }
+
+      toast.success(newStatus === "ACTIVE" ? "已激活" : "已停用");
+      await fetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "操作失败");
+    } finally {
+      setIsPatching(false);
     }
   };
 
-  // 停用账户（UI 操作，仅提示）
-  const handleFreezeAccount = (user: User) => {
-    toast.error("停用账户功能暂未实现", {
-      icon: "🔒",
-    });
-    setActionMenuOpen(null);
+  // 删除用户
+  const handleDeleteUser = async () => {
+    if (!deleteTarget || !currentUser?.id) return;
+    const isConfirmed =
+      (deleteTarget.email && deleteConfirm.trim() === deleteTarget.email) ||
+      (deleteTarget.nickname && deleteConfirm.trim() === deleteTarget.nickname) ||
+      (deleteTarget.id && deleteConfirm.trim() === deleteTarget.id);
+    if (!isConfirmed) {
+      toast.error("请输入正确的邮箱、昵称或用户ID以确认删除");
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: deleteTarget.id }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "删除失败");
+      }
+
+      toast.success("用户已永久删除");
+      setDeleteTarget(null);
+      setDeleteConfirm("");
+      await fetchUsers();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "删除失败");
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
-  // 重置密码（UI 操作，仅提示）
   const handleResetPassword = (user: User) => {
-    toast.error("重置密码功能暂未实现", {
-      icon: "🔑",
+    setSelectedUserForReset(user);
+    setIsResetModalOpen(true);
+  };
+
+  const closeResetModal = () => {
+    setIsResetModalOpen(false);
+    setSelectedUserForReset(null);
+  };
+
+  const handleResetPasswordConfirm = async (userId: string, newPassword: string) => {
+    const result = await adminResetUserPassword(userId, newPassword);
+    if (result.success) {
+      const nickname = selectedUserForReset?.nickname || selectedUserForReset?.email || "该用户";
+      toast.success(`已为 ${nickname} 重置密码成功`);
+      closeResetModal();
+    } else {
+      toast.error(result.message);
+    }
+    return result;
+  };
+
+  // 查看资料（只读）
+  const handleViewDetails = (user: User) => {
+    setSelectedUserForView(user);
+    setIsViewModalOpen(true);
+    setProfileDetail(null);
+    setProfileLoading(true);
+    getAdminUserDetail(user.id).then((result) => {
+      if (result.success && result.data) {
+        setProfileDetail(result.data);
+      } else {
+        toast.error(result.error || "获取资料失败");
+        closeViewModal();
+      }
+    }).catch(() => {
+      toast.error("获取资料失败");
+      closeViewModal();
+    }).finally(() => {
+      setProfileLoading(false);
     });
-    setActionMenuOpen(null);
+  };
+
+  const closeViewModal = () => {
+    setIsViewModalOpen(false);
+    setSelectedUserForView(null);
+    setProfileDetail(null);
   };
 
   return (
@@ -191,21 +279,19 @@ export default function UserManagementPage() {
 
               {/* 搜索框 */}
               <div className="flex items-center gap-2">
-                <Search className="h-4 w-4 text-gray-500" />
                 <select
                   value={searchField}
                   onChange={(e) => setSearchField(e.target.value as "nickname" | "email")}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="nickname">按昵称搜索</option>
                   <option value="email">按邮箱搜索</option>
                 </select>
-                <input
-                  type="text"
+                <SearchInput
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={setSearchQuery}
                   placeholder={searchField === "nickname" ? "输入昵称..." : "输入邮箱..."}
-                  className="w-64 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  minWidth="w-64"
                 />
               </div>
 
@@ -215,7 +301,7 @@ export default function UserManagementPage() {
                 <select
                   value={roleFilter}
                   onChange={(e) => setRoleFilter(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="all">全部</option>
                   <option value="STUDENT">学生</option>
@@ -231,7 +317,7 @@ export default function UserManagementPage() {
                 <select
                   value={schoolFilter}
                   onChange={(e) => setSchoolFilter(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="all">全部</option>
                   <option value="null">系统</option>
@@ -264,11 +350,11 @@ export default function UserManagementPage() {
               )}
             </div>
 
-            {/* 数据表格 - 固定高度区域 */}
-            <div className="min-h-[500px] flex flex-col">
+            {/* 数据表格 - 自然高度，由主内容区滚动 */}
+            <div>
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent"></div>
                 </div>
               ) : users.length === 0 ? (
                 <EmptyState
@@ -278,32 +364,41 @@ export default function UserManagementPage() {
                 />
               ) : (
                 <>
-                  <div className="flex-1 overflow-x-auto">
-                    <Table>
+                  <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[150px]">用户昵称</TableHead>
-                        <TableHead className="w-[200px]">电子邮箱</TableHead>
-                        <TableHead className="w-[120px]">用户角色</TableHead>
-                        <TableHead className="w-[150px]">所属学校</TableHead>
-                        <TableHead className="w-[120px]">注册日期</TableHead>
-                        <TableHead className="w-[100px]">状态</TableHead>
-                        <TableHead className="w-[100px] text-right">操作</TableHead>
+                        <TableHead>用户昵称</TableHead>
+                        <TableHead>电子邮箱</TableHead>
+                        <TableHead className="w-[100px]">用户角色</TableHead>
+                        <TableHead>所属学校</TableHead>
+                        <TableHead className="w-[100px]">注册日期</TableHead>
+                        <TableHead className="w-[80px]">状态</TableHead>
+                        <TableHead className="w-[72px] text-right">操作</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {users.map((user) => (
                         <TableRow key={user.id}>
-                          <TableCell className="font-medium">{user.nickname}</TableCell>
-                          <TableCell className="text-sm text-gray-600">{user.email}</TableCell>
-                          <TableCell>{getRoleBadge(user.role)}</TableCell>
-                          <TableCell className="text-sm text-gray-600">
-                            {user.schoolName}
-                            {user.schoolCode && (
-                              <span className="ml-2 text-xs text-gray-400">
-                                ({user.schoolCode})
-                              </span>
-                            )}
+                          <TableCell className="min-w-0 max-w-[180px] font-medium">
+                            <div className="truncate" title={user.nickname}>
+                              {user.nickname}
+                            </div>
+                          </TableCell>
+                          <TableCell className="min-w-0 max-w-[200px] text-sm text-gray-600">
+                            <div className="truncate" title={user.email}>
+                              {user.email}
+                            </div>
+                          </TableCell>
+                          <TableCell><StatusBadge domain="user" status={user.role} /></TableCell>
+                          <TableCell className="min-w-0 max-w-[160px] text-sm text-gray-600">
+                            <div className="truncate" title={user.schoolName}>
+                              {user.schoolName}
+                              {user.schoolCode && (
+                                <span className="ml-1 text-xs text-gray-400">
+                                  ({user.schoolCode})
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell className="text-sm text-gray-500">
                             {new Date(user.createdAt).toLocaleDateString("zh-CN", {
@@ -313,56 +408,45 @@ export default function UserManagementPage() {
                             })}
                           </TableCell>
                           <TableCell>
-                            {user.status === "active" ? (
-                              <Badge variant="success">正常</Badge>
-                            ) : (
-                              <Badge variant="error">已停用</Badge>
-                            )}
+                            <StatusBadge domain="user" status={user.status} />
                           </TableCell>
                           <TableCell className="text-right">
-                            <div className="relative">
-                              <button
-                                onClick={() =>
-                                  setActionMenuOpen(actionMenuOpen === user.id ? null : user.id)
-                                }
-                                className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
-                              >
-                                <MoreVertical className="h-4 w-4" />
-                              </button>
-                              {actionMenuOpen === user.id && (
-                                <>
-                                  <div
-                                    className="fixed inset-0 z-10"
-                                    onClick={() => setActionMenuOpen(null)}
-                                  />
-                                  <div className="absolute right-0 top-full z-50 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-lg">
-                                    <div className="p-1">
-                                      <button
-                                        onClick={() => handleFreezeAccount(user)}
-                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50"
-                                      >
-                                        <Ban className="h-4 w-4" />
-                                        停用账户
-                                      </button>
-                                      <div className="my-1 h-px bg-gray-200"></div>
-                                      <button
-                                        onClick={() => handleResetPassword(user)}
-                                        className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50"
-                                      >
-                                        <Key className="h-4 w-4" />
-                                        重置密码
-                                      </button>
-                                    </div>
-                                  </div>
-                                </>
-                              )}
-                            </div>
+                            <TableActions
+                              disabled={isPatching}
+                              items={[
+                                {
+                                  label: "查看资料",
+                                  icon: Info,
+                                  onClick: () => handleViewDetails(user),
+                                },
+                                {
+                                  label: "重置密码",
+                                  icon: Key,
+                                  onClick: () => handleResetPassword(user),
+                                  disabled: user.id === currentUser?.id,
+                                },
+                                "separator",
+                                {
+                                  label: user.status === "ACTIVE" ? "停用账户" : "激活账户",
+                                  icon: Ban,
+                                  onClick: () => handleToggleStatus(user),
+                                  disabled: user.id === currentUser?.id,
+                                },
+                                "separator",
+                                {
+                                  label: "永久删除",
+                                  icon: Trash2,
+                                  onClick: () => setDeleteTarget(user),
+                                  variant: "destructive",
+                                  disabled: user.id === currentUser?.id,
+                                },
+                              ]}
+                            />
                           </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
                     </Table>
-                  </div>
                   {/* 分页控件 */}
                   {pagination && pagination.total > 0 && (
                     <div className="mt-6 flex justify-center pb-8">
@@ -377,6 +461,89 @@ export default function UserManagementPage() {
               )}
             </div>
           </Card>
+
+          {/* 删除确认弹窗 */}
+          {deleteTarget && (
+            <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
+              <div className="modal-container max-w-md p-6">
+                <div className="mb-4 flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100">
+                    <AlertTriangle className="h-6 w-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">永久删除用户</h3>
+                    <p className="text-sm text-gray-500">此操作不可逆</p>
+                  </div>
+                </div>
+                <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4">
+                  <p className="text-sm font-medium text-red-800">
+                    确定要删除用户 <strong>{deleteTarget.nickname || deleteTarget.email || deleteTarget.id}</strong> 吗？
+                  </p>
+                  <p className="mt-2 text-xs text-red-700">
+                    将同时删除其留言、点赞等关联数据
+                  </p>
+                </div>
+                <div className="mb-4">
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    请输入邮箱或昵称以确认：
+                  </label>
+                  <input
+                    type="text"
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    placeholder={deleteTarget.email || deleteTarget.nickname || ""}
+                    className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-red-500 focus:outline-none focus:ring-2 focus:ring-red-200"
+                    autoFocus
+                  />
+                </div>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setDeleteTarget(null);
+                      setDeleteConfirm("");
+                    }}
+                    disabled={isDeleting}
+                    className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleDeleteUser}
+                    disabled={
+                      isDeleting ||
+                      !(
+                        (deleteTarget.email && deleteConfirm.trim() === deleteTarget.email) ||
+                        (deleteTarget.nickname && deleteConfirm.trim() === deleteTarget.nickname) ||
+                        (deleteTarget.id && deleteConfirm.trim() === deleteTarget.id)
+                      )
+                    }
+                    className="flex-1 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isDeleting ? "删除中..." : "确认删除"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 重置密码弹窗 */}
+          <ResetPasswordModal
+            isOpen={isResetModalOpen}
+            onClose={closeResetModal}
+            userId={selectedUserForReset?.id ?? ""}
+            userNickname={selectedUserForReset?.nickname}
+            onReset={handleResetPasswordConfirm}
+          />
+
+          {/* 查看资料弹窗（只读） */}
+          <AdminUserDetailModal
+            isOpen={isViewModalOpen}
+            onClose={closeViewModal}
+            userId={selectedUserForView?.id ?? ""}
+            displayName={selectedUserForView?.nickname}
+            profileDetail={profileDetail}
+            isLoading={profileLoading}
+          />
         </div>
       </AdminLayout>
     </AuthGuard>

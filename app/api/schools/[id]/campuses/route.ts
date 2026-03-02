@@ -40,6 +40,7 @@ export async function GET(
         name: true,
         boundary: true,
         center: true,
+        labelCenter: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -55,7 +56,7 @@ export async function GET(
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

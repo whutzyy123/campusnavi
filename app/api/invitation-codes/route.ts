@@ -10,7 +10,7 @@ import { generateInvitationCode } from "@/lib/auth-utils";
  * {
  *   schoolId: string,
  *   role: number, // 2: 校级管理员, 3: 校内工作人员
- *   issuerId: string, // 发放人ID
+ *   issuerId: string, // 发放人ID (映射为 createdByUserId)
  *   expiresAt?: string // 可选过期时间
  * }
  */
@@ -99,15 +99,15 @@ export async function POST(request: NextRequest) {
       }
     } while (true);
 
-    // 创建邀请码
+    // 创建邀请码：role 2 -> ADMIN, 3 -> STAFF
+    const type = role === 2 ? "ADMIN" : "STAFF";
     const invitationCode = await prisma.invitationCode.create({
       data: {
         code,
-        role,
+        type,
         schoolId,
-        issuerId,
+        createdByUserId: issuerId,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
-        isUsed: false,
       },
     });
 
@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
       invitationCode: {
         id: invitationCode.id,
         code: invitationCode.code,
-        role: invitationCode.role,
+        type: invitationCode.type,
         schoolId: invitationCode.schoolId,
         schoolName: school.name,
         expiresAt: invitationCode.expiresAt?.toISOString() || null,
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -153,10 +153,12 @@ export async function GET(request: NextRequest) {
     const issuerId = searchParams.get("issuerId");
     const isUsed = searchParams.get("isUsed");
 
-    const where: any = {};
+    const where: Record<string, unknown> = {};
     if (schoolId) where.schoolId = schoolId;
-    if (issuerId) where.issuerId = issuerId;
-    if (isUsed !== null) where.isUsed = isUsed === "true";
+    if (issuerId) where.createdByUserId = issuerId;
+    if (isUsed !== null && isUsed !== undefined) {
+      where.status = isUsed === "true" ? "USED" : "ACTIVE";
+    }
 
     const invitationCodes = await prisma.invitationCode.findMany({
       where,
@@ -167,7 +169,13 @@ export async function GET(request: NextRequest) {
             name: true,
           },
         },
-        issuer: {
+        createdBy: {
+          select: {
+            id: true,
+            nickname: true,
+          },
+        },
+        usedByUser: {
           select: {
             id: true,
             nickname: true,
@@ -179,44 +187,29 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    // 获取所有使用人的信息
-    const usedByIds = invitationCodes
-      .filter((ic) => ic.usedBy)
-      .map((ic) => ic.usedBy!)
-      .filter((id, index, self) => self.indexOf(id) === index); // 去重
-
-    const usedByUsers = usedByIds.length > 0
-      ? await prisma.user.findMany({
-          where: { id: { in: usedByIds } },
-          select: { id: true, nickname: true },
-        })
-      : [];
-
-    const usedByMap = new Map(usedByUsers.map((u) => [u.id, u.nickname || "未知用户"]));
-
     return NextResponse.json({
       success: true,
       invitationCodes: invitationCodes.map((ic) => {
         const now = new Date();
         const isExpired = ic.expiresAt ? new Date(ic.expiresAt) < now : false;
-        const status = ic.isUsed ? "used" : isExpired ? "expired" : "unused";
+        const statusStr = ic.status === "USED" ? "used" : isExpired ? "expired" : "unused";
 
         return {
           id: ic.id,
           code: ic.code,
-          role: ic.role,
-          roleName: ic.role === 2 ? "校级管理员" : ic.role === 3 ? "校内工作人员" : "未知",
+          type: ic.type,
+          typeName: ic.type === "ADMIN" ? "校级管理员" : ic.type === "STAFF" ? "校内工作人员" : "未知",
           schoolId: ic.schoolId,
           schoolName: ic.school.name,
-          issuerId: ic.issuerId,
-          issuerName: ic.issuer?.nickname || "系统",
-          isUsed: ic.isUsed,
-          usedBy: ic.usedBy,
-          usedByName: ic.usedBy ? usedByMap.get(ic.usedBy) || "未知用户" : null,
+          createdByUserId: ic.createdByUserId,
+          createdByName: ic.createdBy?.nickname || "系统",
+          isUsed: ic.status === "USED",
+          usedByUserId: ic.usedByUserId,
+          usedByName: ic.usedByUser?.nickname || null,
           usedAt: ic.usedAt?.toISOString() || null,
           expiresAt: ic.expiresAt?.toISOString() || null,
           createdAt: ic.createdAt.toISOString(),
-          status, // 新增状态字段：unused, used, expired
+          status: statusStr,
         };
       }),
     });
@@ -226,7 +219,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

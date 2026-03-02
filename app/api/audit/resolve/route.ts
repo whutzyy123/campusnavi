@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthCookie } from "@/lib/auth-server-actions";
 
 /**
  * POST /api/audit/resolve
- * 管理员处理举报
- * 
- * 请求体：
- * {
- *   poiId: string,
- *   action: "ignore" | "delete", // ignore: 忽略举报（重置计数）, delete: 删除 POI
- * }
+ * 校级管理员/工作人员处理 POI 举报（超管不参与）
+ * 请求体：{ poiId: string, action: "ignore" | "delete" }
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId) {
+      return NextResponse.json({ success: false, message: "请先登录" }, { status: 401 });
+    }
+    if (auth.role === "SUPER_ADMIN") {
+      return NextResponse.json(
+        { success: false, message: "超级管理员不参与内容审核，请使用校级管理员或工作人员账号" },
+        { status: 403 }
+      );
+    }
+    if (auth.role !== "ADMIN" && auth.role !== "STAFF") {
+      return NextResponse.json({ success: false, message: "无权限" }, { status: 403 });
+    }
+
     const body = await request.json();
     const { poiId, action } = body;
 
@@ -49,6 +59,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!auth.schoolId || auth.schoolId !== poi.schoolId) {
+      return NextResponse.json({ success: false, message: "只能处理本校 POI" }, { status: 403 });
+    }
+
     // 执行操作
     if (action === "ignore") {
       // 忽略举报：重置 reportCount
@@ -80,7 +94,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

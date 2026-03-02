@@ -37,15 +37,15 @@ export async function POST(request: NextRequest) {
 
     // 校验内容是否包含屏蔽词
     try {
-      await validateContent(reason);
+      await validateContent(reason, { checkNumbers: false });
       if (description) {
-        await validateContent(description);
+        await validateContent(description, { checkNumbers: true });
       }
     } catch (error) {
       return NextResponse.json(
         {
           success: false,
-          message: error instanceof Error ? error.message : "内容包含不当词汇，请修改后重试",
+          message: error instanceof Error ? error.message : "内容包含敏感词汇，请修改后重试。",
         },
         { status: 400 }
       );
@@ -109,7 +109,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

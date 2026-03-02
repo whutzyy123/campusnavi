@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { booleanPointInPolygon } from "@turf/turf";
 import type { Point, Polygon, Feature } from "geojson";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/schools/detect
- * 根据经纬度检测用户所属学校
- * 
+ * 根据经纬度检测用户所属学校（基于 CampusArea 边界）
+ *
  * 查询参数：
  * - lat: 纬度
  * - lng: 经度
@@ -44,15 +46,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 查询所有学校
+    // 查询所有学校及其 CampusArea（限制 200 所）
     const schools = await prisma.school.findMany({
+      where: { isActive: true },
+      take: 200,
       select: {
         id: true,
         name: true,
         schoolCode: true,
-        boundary: true,
         centerLat: true,
         centerLng: true,
+        campusAreas: {
+          select: { id: true, name: true, boundary: true, center: true },
+        },
       },
     });
 
@@ -76,37 +82,38 @@ export async function GET(request: NextRequest) {
       properties: {},
     };
 
-    // 遍历所有学校，判断用户位置是否在边界内
+    // 遍历所有学校，检查其 CampusArea 边界
     for (const school of schools) {
-      try {
-        // 确保 boundary 是有效的 GeoJSON Polygon
-        const boundary = school.boundary as any;
-        
-        if (!boundary || boundary.type !== "Polygon") {
-          console.warn(`学校 ${school.name} 的边界数据格式无效`);
+      for (const campus of school.campusAreas) {
+        try {
+          const boundary = campus.boundary as unknown;
+          if (!boundary || (boundary as { type?: string }).type !== "Polygon") {
+            continue;
+          }
+
+          const isInside = booleanPointInPolygon(userPointFeature, boundary as Polygon);
+          if (isInside) {
+            // 优先使用 CampusArea 的 center，否则用 School 的 center
+            const center = campus.center as [number, number] | null;
+            const centerLng = center?.[0] ?? school.centerLng;
+            const centerLat = center?.[1] ?? school.centerLat;
+
+            return NextResponse.json({
+              success: true,
+              message: "成功识别学校",
+              school: {
+                id: school.id,
+                name: school.name,
+                schoolCode: school.schoolCode,
+                centerLat: centerLat ?? undefined,
+                centerLng: centerLng ?? undefined,
+              },
+            });
+          }
+        } catch (error) {
+          console.error(`检测校区 ${campus.name} 时出错:`, error);
           continue;
         }
-
-        // 使用 Turf.js 判断点是否在多边形内
-        const isInside = booleanPointInPolygon(userPointFeature, boundary as Polygon);
-
-        if (isInside) {
-          return NextResponse.json({
-            success: true,
-            message: "成功识别学校",
-            school: {
-              id: school.id,
-              name: school.name,
-              schoolCode: school.schoolCode,
-              boundary: school.boundary,
-              centerLat: school.centerLat,
-              centerLng: school.centerLng,
-            },
-          });
-        }
-      } catch (error) {
-        console.error(`检测学校 ${school.name} 时出错:`, error);
-        continue;
       }
     }
 
@@ -122,7 +129,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

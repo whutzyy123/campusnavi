@@ -12,17 +12,26 @@ export async function GET(request: NextRequest) {
     // 这里为了简化，假设已经通过中间件或 AuthGuard 验证了权限
     // 实际应该检查 currentUser.role === "SUPER_ADMIN"
 
-    // 获取分页参数
+    // 获取分页和搜索参数
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const q = searchParams.get("q")?.trim() || "";
     const { skip, take } = getPaginationParams(page, limit);
+
+    const where = q
+      ? { keyword: { contains: q } }
+      : {};
 
     // 并行查询：总数和分页数据
     const [total, keywords] = await Promise.all([
-      prisma.sensitiveWord.count(),
+      prisma.sensitiveWord.count({ where }),
       prisma.sensitiveWord.findMany({
-        include: {
+        where,
+        select: {
+          id: true,
+          keyword: true,
+          createdAt: true,
           addedBy: {
             select: {
               id: true,
@@ -60,7 +69,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -170,7 +179,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

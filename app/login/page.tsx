@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { loginUser } from "@/lib/auth-server-actions";
-import { useAuthStore } from "@/store/use-auth-store";
+import { useAuthStore, type UserRole } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
 
@@ -12,6 +13,14 @@ import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
  * 使用 Server Actions 进行认证
  */
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner className="flex min-h-screen items-center justify-center" />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { initializeAuth, isInitialized, currentUser, setUser } = useAuthStore();
@@ -92,7 +101,14 @@ export default function LoginPage() {
       }
 
       const user = result.user;
-      setUser(user);
+      setUser({
+        id: user.id,
+        email: user.email ?? undefined,
+        nickname: user.nickname ?? "",
+        role: user.role as UserRole,
+        schoolId: user.schoolId,
+        schoolName: user.schoolName ?? undefined,
+      });
 
       // 如果用户有学校，设置当前学校
       if (user.schoolId) {
@@ -120,10 +136,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-[#FFF5F2] to-[#FFE5DD]">
       <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-blue-600">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#FF4500]">
             <LogIn className="h-8 w-8 text-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-800">登录账户</h1>
@@ -143,8 +159,8 @@ export default function LoginPage() {
                 type="email"
                 value={formData.email}
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                placeholder="example@email.com"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pl-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                placeholder="请输入邮箱"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pl-10 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
                 disabled={isSubmitting}
               />
@@ -164,7 +180,7 @@ export default function LoginPage() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 placeholder="请输入密码"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pl-10 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 pl-10 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 required
                 disabled={isSubmitting}
               />
@@ -183,7 +199,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSubmitting ? (
               <>
@@ -202,7 +218,7 @@ export default function LoginPage() {
         <div className="mt-6 text-center">
           <p className="text-sm text-gray-600">
             还没有账户？{" "}
-            <a href="/register" className="font-medium text-blue-600 hover:text-blue-700">
+            <a href="/register" className="font-medium text-[#FF4500] hover:opacity-90">
               立即注册
             </a>
           </p>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
@@ -9,6 +10,7 @@ import { EmptyState } from "@/components/empty-state";
 import { Tags, Plus, Trash2, AlertCircle, EyeOff, Edit2, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { updateCategory } from "@/lib/category-actions";
 
 interface Category {
   id: string;
@@ -27,6 +29,14 @@ interface Category {
  * 功能：创建、查看、删除 POI 分类
  */
 export default function CategoryManagementPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <CategoryManagementPageContent />
+    </Suspense>
+  );
+}
+
+function CategoryManagementPageContent() {
   const { currentUser } = useAuthStore();
   const searchParams = useSearchParams();
   const [categories, setCategories] = useState<Category[]>([]);
@@ -83,7 +93,7 @@ export default function CategoryManagementPage() {
     fetchCategories();
   }, [schoolId, searchParams]);
 
-  // 创建新分类
+  // 创建新分类（始终创建校内分类，schoolId 由后端从 Cookie 注入）
   const handleCreate = async () => {
     if (!newCategoryName.trim()) {
       toast.error("请输入分类名称");
@@ -99,6 +109,7 @@ export default function CategoryManagementPage() {
         },
         body: JSON.stringify({
           name: newCategoryName.trim(),
+          isGlobal: false, // 明确创建校内分类
         }),
       });
 
@@ -118,12 +129,26 @@ export default function CategoryManagementPage() {
     }
   };
 
-  // 删除分类（全局分类隐藏，私有分类物理删除）
-  const handleDelete = async (id: string, name: string, isGlobal: boolean) => {
+  // 删除分类（系统分类隐藏，校内分类物理删除）
+  const handleDelete = async (
+    id: string,
+    name: string,
+    isGlobal: boolean,
+    poiCount: number
+  ) => {
+    if (!isGlobal && poiCount > 0) {
+      toast.error("删除前请先将关联的 POI 重新分配其他分类");
+      return;
+    }
+    if (isGlobal && poiCount > 0) {
+      toast.error("隐藏前请先处理关联的 POI");
+      return;
+    }
+
     const message = isGlobal
       ? `确定要在当前学校隐藏全局分类"${name}"吗？`
       : `确定要删除分类"${name}"吗？此操作不可恢复。`;
-    
+
     if (!confirm(message)) {
       return;
     }
@@ -182,29 +207,18 @@ export default function CategoryManagementPage() {
     setCustomName(category.customName || category.name);
   };
 
-  // 保存自定义名称
+  // 保存名称（校内分类更新 base 名称，仅校内分类可编辑）
   const handleSaveCustomName = async (id: string) => {
     setEditingId(id);
     try {
-      const response = await fetch(`/api/admin/categories/${id}/override`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ customName: customName.trim() || null }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "保存失败");
-      }
-
-      toast.success("自定义名称已保存");
+      const result = await updateCategory(id, { name: customName.trim() });
+      if (!result.success) throw new Error(result.error || "保存失败");
+      toast.success("分类名称已更新");
       setEditingId(null);
       setCustomName("");
       await refreshCategories();
     } catch (error) {
-      console.error("保存自定义名称失败:", error);
+      console.error("保存失败:", error);
       toast.error(error instanceof Error ? error.message : "保存失败，请重试");
     } finally {
       setEditingId(null);
@@ -234,7 +248,7 @@ export default function CategoryManagementPage() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
-        <div className="p-4 md:p-6">
+        <div className="p-4 lg:p-6">
           <div className="mb-4">
             <h1 className="text-xl font-semibold text-[#1A1A1B]">分类管理</h1>
             <p className="mt-1 text-sm text-[#7C7C7C]">
@@ -256,7 +270,7 @@ export default function CategoryManagementPage() {
                 }}
                 placeholder="输入分类名称（如：食堂、教学楼、快递点）"
                 maxLength={50}
-                className="flex-1 rounded-lg border border-[#EDEFF1] bg-[#F6F7F8] px-4 py-2 text-sm focus:border-[#0079D3] focus:outline-none focus:ring-2 focus:ring-[#0079D3]/20"
+                className="flex-1 rounded-lg border border-[#EDEFF1] bg-[#F6F7F8] px-4 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 disabled={isCreating}
               />
               <button
@@ -319,12 +333,12 @@ export default function CategoryManagementPage() {
                                     setCustomName("");
                                   }
                                 }}
-                                className="flex-1 rounded border border-[#EDEFF1] bg-white px-2 py-1 text-sm focus:border-[#0079D3] focus:outline-none"
+                                className="flex-1 rounded border border-[#EDEFF1] bg-white px-2 py-1 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                                 autoFocus
                               />
                               <button
                                 onClick={() => handleSaveCustomName(category.id)}
-                                className="rounded px-2 py-1 text-xs text-[#0079D3] hover:bg-[#F6F7F8]"
+                                className="rounded px-2 py-1 text-xs text-[#FF4500] hover:bg-[#FFE5DD]"
                               >
                                 保存
                               </button>
@@ -344,13 +358,13 @@ export default function CategoryManagementPage() {
                                 {displayName}
                               </span>
                               {category.isGlobal && (
-                                <span className="rounded bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+                                <span className="rounded-md bg-[#FFE5DD] px-2.5 py-1 text-xs font-semibold text-[#FF4500] ring-1 ring-[#FF4500]/20">
                                   系统默认
                                 </span>
                               )}
                               {!category.isGlobal && (
-                                <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
-                                  学校自定义
+                                <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                                  校内独特
                                 </span>
                               )}
                               {category.customName && (
@@ -374,6 +388,7 @@ export default function CategoryManagementPage() {
 
                       {/* 右侧：操作按钮 */}
                       <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* 系统分类：仅保留恢复（有自定义名时）和隐藏，不显示修改名称 */}
                         {category.isGlobal && !isEditing && (
                           <>
                             {category.customName && (
@@ -386,19 +401,29 @@ export default function CategoryManagementPage() {
                                 <span className="hidden sm:inline">恢复</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => handleStartEdit(category)}
-                              className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition-colors hover:bg-blue-100"
-                              title="修改名称"
-                            >
-                              <Edit2 className="h-3.5 w-3.5" />
-                              <span className="hidden sm:inline">修改名称</span>
-                            </button>
                           </>
                         )}
+                        {/* 校内分类：显示修改名称 */}
+                        {!category.isGlobal && !isEditing && (
+                          <button
+                            onClick={() => handleStartEdit(category)}
+                            className="flex items-center gap-1.5 rounded-lg border border-[#FF4500]/40 bg-[#FFE5DD] px-3 py-1.5 text-xs font-medium text-[#FF4500] transition-colors hover:bg-[#FFE5DD]/80"
+                            title="修改名称"
+                          >
+                            <Edit2 className="h-3.5 w-3.5" />
+                            <span className="hidden sm:inline">修改名称</span>
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleDelete(category.id, displayName, category.isGlobal)}
-                          disabled={deletingId === category.id || category.poiCount > 0}
+                          onClick={() =>
+                            handleDelete(
+                              category.id,
+                              displayName,
+                              category.isGlobal,
+                              category.poiCount
+                            )
+                          }
+                          disabled={deletingId === category.id}
                           className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
                           title={
                             category.poiCount > 0

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
@@ -10,16 +11,17 @@ import {
   Users,
   Plus,
   Copy,
-  Check,
-  X,
   UserCheck,
-  MoreVertical,
-  Clock,
+  Play,
   Ban,
-  Filter,
+  RotateCcw,
+  CalendarPlus,
+  X,
+  Info,
 } from "lucide-react";
+import { TableActions } from "@/components/ui/table-actions";
 import toast from "react-hot-toast";
-import { Badge } from "@/components/badge";
+import { StatusBadge } from "@/components/status-badge";
 import {
   Table,
   TableBody,
@@ -28,6 +30,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/table";
+import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
+import { formatDate, formatDateTimeDisplay } from "@/lib/utils";
+import { GenerateCodeModal } from "@/components/invitation-code-generate-modal";
+import {
+  listInvitationCodes,
+  toggleCodeStatus,
+  toggleInvitationCodeStatus,
+  deleteCode,
+  extendInvitationCode,
+  type InvitationCodeListItem,
+} from "@/lib/invitation-actions";
 
 interface StaffMember {
   id: string;
@@ -37,22 +50,88 @@ interface StaffMember {
   createdAt: string;
 }
 
-interface InvitationCode {
+interface School {
   id: string;
-  code: string;
-  role: number;
-  roleName: string;
-  schoolId: string;
-  schoolName: string;
-  issuerId: string | null;
-  issuerName: string;
-  isUsed: boolean;
-  usedBy: string | null;
-  usedByName: string | null;
-  usedAt: string | null;
-  expiresAt: string | null;
-  createdAt: string;
-  status: "unused" | "used" | "expired";
+  name: string;
+}
+
+const EXTEND_DAYS_OPTIONS = [7, 30, 90];
+
+function ExtendValidityDialog({
+  codeId,
+  onClose,
+  onSuccess,
+  disabled,
+}: {
+  codeId: string;
+  onClose: () => void;
+  onSuccess: (days: number) => Promise<void>;
+  disabled?: boolean;
+}) {
+  const [selectedDays, setSelectedDays] = useState(7);
+  const [loading, setLoading] = useState(false);
+
+  const handleConfirm = async () => {
+    setLoading(true);
+    try {
+      await onSuccess(selectedDays);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-modal-overlay flex items-center justify-center bg-black/50">
+      <div className="modal-container max-w-sm">
+        <div className="modal-header flex items-center justify-between px-6 py-4">
+          <h3 className="text-lg font-semibold text-gray-900">延长有效期</h3>
+          <button
+            onClick={onClose}
+            disabled={disabled || loading}
+            className="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
+            aria-label="关闭"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="modal-body px-6 py-4">
+          <p className="mb-4 text-sm text-gray-600">选择要延长的天数：</p>
+          <div className="flex gap-2">
+            {EXTEND_DAYS_OPTIONS.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setSelectedDays(d)}
+                className={`flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors ${
+                  selectedDays === d
+                    ? "border-[#FF4500] bg-[#FF4500]/10 text-[#FF4500]"
+                    : "border-gray-200 hover:border-gray-300"
+                }`}
+              >
+                {d} 天
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer flex gap-3 p-6">
+          <button
+            onClick={onClose}
+            disabled={loading}
+            className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={loading}
+            className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#FF4500]/90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {loading ? "延长中..." : "确认延长"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -60,53 +139,46 @@ interface InvitationCode {
  * 功能：查看本校 STAFF 列表、生成校内邀请码
  */
 export default function TeamManagementPage() {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <TeamManagementPageContent />
+    </Suspense>
+  );
+}
+
+function TeamManagementPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useAuthStore();
   const [staffMembers, setStaffMembers] = useState<StaffMember[]>([]);
-  const [invitationCodes, setInvitationCodes] = useState<InvitationCode[]>([]);
-  const [filteredInvitationCodes, setFilteredInvitationCodes] = useState<
-    InvitationCode[]
-  >([]);
+  const [invitationCodes, setInvitationCodes] = useState<InvitationCodeListItem[]>([]);
+  const [filteredInvitationCodes, setFilteredInvitationCodes] = useState<InvitationCodeListItem[]>([]);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [generatedCode, setGeneratedCode] = useState<string>("");
-  const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<"staff" | "invitations">("staff");
-
-  // 邀请码筛选和操作状态
-  const [invitationFilterStatus, setInvitationFilterStatus] = useState<string>(
-    "all"
+  const [schools, setSchools] = useState<School[]>([]);
+  const [activeTab, setActiveTab] = useState<"staff" | "invitations">(
+    (searchParams.get("tab") as "staff" | "invitations") || "staff"
   );
-  const [invitationActionMenuOpen, setInvitationActionMenuOpen] = useState<
-    string | null
-  >(null);
-  const [isRevoking, setIsRevoking] = useState(false);
-  const [isExtending, setIsExtending] = useState(false);
+  const [filterStatus, setFilterStatus] = useState(searchParams.get("status") || "");
+  const [filterType, setFilterType] = useState(searchParams.get("type") || "");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [extendDialog, setExtendDialog] = useState<{ open: boolean; codeId: string | null }>({ open: false, codeId: null });
 
   const schoolId = currentUser?.schoolId;
 
-  // #region agent log
+  // 从 URL 初始化 tab
   useEffect(() => {
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "team-page-initial",
-        hypothesisId: "H1",
-        location: "app/admin/team/page.tsx:initial-state",
-        message: "TeamManagementPage mounted with current user context",
-        data: {
-          hasUser: !!currentUser,
-          role: currentUser?.role ?? null,
-          schoolId: schoolId ?? null,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [currentUser, schoolId]); // 将 fetch 放入 useEffect 以避免渲染副作用
-  // #endregion agent log
+    const tab = searchParams.get("tab");
+    if (tab === "staff" || tab === "invitations") setActiveTab(tab);
+  }, [searchParams]);
+
+  // 同步 tab 和筛选器到 URL
+  const updateUrl = (tab: string, type?: string, status?: string) => {
+    const params = new URLSearchParams();
+    params.set("tab", tab);
+    if (type) params.set("type", type);
+    if (status) params.set("status", status);
+    router.replace(`/admin/team?${params.toString()}`, { scroll: false });
+  };
 
   // 加载 STAFF 列表
   useEffect(() => {
@@ -127,163 +199,128 @@ export default function TeamManagementPage() {
     fetchStaff();
   }, [schoolId]);
 
+  // 加载学校列表（用于 GenerateCodeModal）
+  useEffect(() => {
+    if (!schoolId) return;
+    const fetchSchools = async () => {
+      try {
+        const res = await fetch("/api/schools");
+        const data = await res.json();
+        if (data.success) {
+          const all = data.schools as School[];
+          setSchools(all.filter((s) => s.id === schoolId));
+        }
+      } catch (error) {
+        console.error("获取学校列表失败:", error);
+      }
+    };
+    fetchSchools();
+  }, [schoolId]);
+
   // 加载邀请码列表
-  const fetchInvitationCodes = async () => {
-    if (!schoolId || !currentUser?.id) return;
+  const fetchInvitationCodes = useCallback(async () => {
+    if (!schoolId) return;
 
     try {
-      const response = await fetch(
-        `/api/invitation-codes?schoolId=${schoolId}&issuerId=${currentUser.id}`
-      );
-      const data = await response.json();
-      if (data.success) {
-        setInvitationCodes(data.invitationCodes);
-        setFilteredInvitationCodes(data.invitationCodes);
+      const apiStatus =
+        filterStatus === "EXPIRED"
+          ? ("ACTIVE" as const)
+          : (filterStatus as "ACTIVE" | "USED" | "DISABLED" | "DEACTIVATED") || undefined;
+
+      const result = await listInvitationCodes({
+        schoolId,
+        type: (filterType as "ADMIN" | "STAFF") || undefined,
+        status: apiStatus,
+      });
+      if (result.success && result.data) {
+        setInvitationCodes(result.data);
+        const filtered =
+          filterStatus === "EXPIRED"
+            ? result.data.filter(
+                (ic) =>
+                  ic.status === "ACTIVE" &&
+                  ic.expiresAt &&
+                  new Date(ic.expiresAt) < new Date()
+              )
+            : result.data;
+        setFilteredInvitationCodes(filtered);
       }
     } catch (error) {
       console.error("获取邀请码列表失败:", error);
     }
-  };
+  }, [schoolId, filterType, filterStatus]);
 
   useEffect(() => {
     fetchInvitationCodes();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [schoolId, currentUser?.id]);
+  }, [fetchInvitationCodes]);
 
-  // 筛选邀请码
-  useEffect(() => {
-    let filtered = [...invitationCodes];
-    if (invitationFilterStatus !== "all") {
-      filtered = filtered.filter((ic) => ic.status === invitationFilterStatus);
-    }
-    setFilteredInvitationCodes(filtered);
-  }, [invitationCodes, invitationFilterStatus]);
-
-  // 生成邀请码
-  const handleGenerateCode = async () => {
-    if (!schoolId || !currentUser) {
-      return;
-    }
-
-    setIsGenerating(true);
-
+  const handleCopyInvitationCode = async (code: string) => {
     try {
-      const response = await fetch("/api/invitation-codes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          schoolId,
-          role: 3, // STAFF (校内工作人员)
-          issuerId: currentUser.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "生成失败");
-      }
-
-      setGeneratedCode(data.invitationCode.code);
-      toast.success("邀请码生成成功！");
-      await fetchInvitationCodes();
-    } catch (error) {
-      console.error("生成邀请码失败:", error);
-      toast.error(error instanceof Error ? error.message : "生成失败");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // 复制邀请码
-  const handleCopyCode = () => {
-    if (generatedCode) {
-      navigator.clipboard.writeText(generatedCode);
-      setCopied(true);
+      await navigator.clipboard.writeText(code);
       toast.success("邀请码已复制到剪贴板");
-      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast.error("复制失败，请手动复制");
     }
   };
 
-  // 复制邀请码（表格中的）
-  const handleCopyInvitationCode = (code: string) => {
-    navigator.clipboard.writeText(code);
-    toast.success("邀请码已复制到剪贴板");
-  };
-
-  // 作废邀请码
-  const handleRevokeInvitationCode = async (invitationCodeId: string) => {
-    if (!currentUser) return;
-
-    setIsRevoking(true);
-    const toastId = toast.loading("正在作废邀请码...");
-
+  const handleToggleStatus = async (codeId: string, newStatus: "ACTIVE" | "DISABLED" | "DEACTIVATED" | "USED") => {
+    setActionLoading(codeId);
+    const loadingMsg =
+      newStatus === "ACTIVE" ? "正在激活..." : newStatus === "DEACTIVATED" ? "正在停用..." : newStatus === "USED" ? "正在启用..." : "正在停用...";
+    const toastId = toast.loading(loadingMsg);
     try {
-      const response = await fetch(
-        `/api/invitation-codes/${invitationCodeId}`,
-        {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ userId: currentUser.id }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "作废失败");
+      const result =
+        newStatus === "DEACTIVATED" || newStatus === "USED"
+          ? await toggleInvitationCodeStatus(codeId)
+          : await toggleCodeStatus(codeId, newStatus);
+      if (result.success) {
+        toast.success(result.message ?? "操作成功", { id: toastId });
+        await fetchInvitationCodes();
+      } else {
+        toast.error(result.message || "操作失败", { id: toastId });
       }
-
-      toast.success("邀请码已作废", { id: toastId });
-      setInvitationActionMenuOpen(null);
-      await fetchInvitationCodes();
     } catch (error) {
-      console.error("作废邀请码失败:", error);
-      toast.error((error as Error).message || "作废失败", { id: toastId });
+      toast.error("操作失败", { id: toastId });
     } finally {
-      setIsRevoking(false);
+      setActionLoading(null);
     }
   };
 
-  // 延长邀请码有效期
-  const handleExtendInvitationCode = async (invitationCodeId: string) => {
-    if (!currentUser) {
-      return;
-    }
+  const handleDelete = async (codeId: string) => {
+    if (!window.confirm("确定要撤销此邀请码吗？撤销后将从系统中永久删除，不可恢复。")) return;
 
-    setIsExtending(true);
+    setActionLoading(codeId);
+    const toastId = toast.loading("正在删除...");
+    try {
+      const result = await deleteCode(codeId);
+      if (result.success) {
+        toast.success(result.message ?? "操作成功", { id: toastId });
+        await fetchInvitationCodes();
+      } else {
+        toast.error(result.message || "删除失败", { id: toastId });
+      }
+    } catch (error) {
+      toast.error("删除失败", { id: toastId });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleExtend = async (codeId: string, days: number = 7) => {
+    setActionLoading(codeId);
     const toastId = toast.loading("正在延长有效期...");
-
     try {
-      const response = await fetch(
-        `/api/invitation-codes/${invitationCodeId}/extend`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ userId: currentUser.id }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "延长失败");
+      const result = await extendInvitationCode(codeId, days);
+      if (result.success) {
+        toast.success(result.message ?? "操作成功", { id: toastId });
+        await fetchInvitationCodes();
+      } else {
+        toast.error(result.message || "延长失败", { id: toastId });
       }
-
-      toast.success("有效期已延长7天", { id: toastId });
-      setInvitationActionMenuOpen(null);
-      await fetchInvitationCodes();
-    } catch (error) {
-      console.error("延长有效期失败:", error);
-      toast.error((error as Error).message || "延长失败", { id: toastId });
+    } catch {
+      toast.error("延长失败", { id: toastId });
     } finally {
-      setIsExtending(false);
+      setActionLoading(null);
     }
   };
 
@@ -293,10 +330,13 @@ export default function TeamManagementPage() {
         {/* 标签页 */}
         <div className="mb-6 flex gap-4 border-b border-gray-200">
           <button
-            onClick={() => setActiveTab("staff")}
+            onClick={() => {
+              setActiveTab("staff");
+              updateUrl("staff");
+            }}
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === "staff"
-                ? "border-b-2 border-blue-600 text-blue-600"
+                ? "border-b-2 border-[#FF4500] text-[#FF4500]"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -306,10 +346,13 @@ export default function TeamManagementPage() {
             </div>
           </button>
           <button
-            onClick={() => setActiveTab("invitations")}
+            onClick={() => {
+              setActiveTab("invitations");
+              updateUrl("invitations", filterType || undefined, filterStatus || undefined);
+            }}
             className={`px-4 py-2 font-medium transition-colors ${
               activeTab === "invitations"
-                ? "border-b-2 border-blue-600 text-blue-600"
+                ? "border-b-2 border-[#FF4500] text-[#FF4500]"
                 : "text-gray-600 hover:text-gray-900"
             }`}
           >
@@ -327,7 +370,7 @@ export default function TeamManagementPage() {
             action={
               <button
                 onClick={() => setShowGenerateModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
                 生成邀请码
@@ -352,8 +395,8 @@ export default function TeamManagementPage() {
                     className="flex items-center justify-between py-4"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
-                        <Users className="h-5 w-5 text-blue-600" />
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFE5DD]">
+                        <Users className="h-5 w-5 text-[#FF4500]" />
                       </div>
                       <div>
                         <div className="font-medium text-gray-900">
@@ -381,36 +424,56 @@ export default function TeamManagementPage() {
             action={
               <button
                 onClick={() => setShowGenerateModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700"
+                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
               >
                 <Plus className="h-4 w-4" />
                 生成新邀请码
               </button>
             }
           >
-            {/* 筛选器 */}
-            <div className="mb-4 flex flex-wrap gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">
-                  筛选：
-                </span>
-              </div>
+            {/* 提示：已过期邀请码说明 */}
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                已过期的邀请码无法用于注册，需先点击操作菜单中的「延长」恢复有效期。已使用的邀请码状态不受过期时间影响。
+              </span>
+            </div>
 
-              {/* 状态筛选 */}
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">状态：</label>
-                <select
-                  value={invitationFilterStatus}
-                  onChange={(e) => setInvitationFilterStatus(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                >
-                  <option value="all">全部</option>
-                  <option value="unused">未使用</option>
-                  <option value="used">已使用</option>
-                  <option value="expired">已过期</option>
-                </select>
-              </div>
+            {/* 筛选器 */}
+            <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <AdminFilterBar
+                filters={[
+                  {
+                    label: "类型",
+                    value: filterType,
+                    onChange: (v) => {
+                      setFilterType(v);
+                      updateUrl("invitations", v || undefined, filterStatus || undefined);
+                    },
+                    options: [
+                      { value: "", label: "全部" },
+                      { value: "ADMIN", label: "校级管理员" },
+                      { value: "STAFF", label: "工作人员" },
+                    ],
+                  },
+                  {
+                    label: "状态",
+                    value: filterStatus,
+                    onChange: (v) => {
+                      setFilterStatus(v);
+                      updateUrl("invitations", filterType || undefined, v || undefined);
+                    },
+                    options: [
+                      { value: "", label: "全部" },
+                      { value: "ACTIVE", label: "未使用" },
+                      { value: "EXPIRED", label: "已过期" },
+                      { value: "DISABLED", label: "已撤销" },
+                      { value: "USED", label: "已使用" },
+                      { value: "DEACTIVATED", label: "已停用(关联用户)" },
+                    ],
+                  },
+                ]}
+              />
             </div>
 
             {filteredInvitationCodes.length === 0 ? (
@@ -424,18 +487,29 @@ export default function TeamManagementPage() {
                 }
               />
             ) : (
-              <div className="overflow-x-auto">
+              <div className="w-full overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[180px]">邀请码</TableHead>
-                      <TableHead className="w-[100px]">状态</TableHead>
-                      <TableHead className="w-[120px]">使用人</TableHead>
-                      <TableHead className="w-[140px]">创建日期</TableHead>
-                      <TableHead className="w-[140px]">过期日期</TableHead>
-                      <TableHead className="w-[100px] text-right">
-                        操作
+                      <TableHead>邀请码</TableHead>
+                      <TableHead className="w-[90px]" responsiveHide="sm">类型</TableHead>
+                      <TableHead responsiveHide="sm">目标学校</TableHead>
+                      <TableHead className="w-[80px]" responsiveHide="sm">状态</TableHead>
+                      <TableHead className="w-[140px]" responsiveHide="sm">
+                        <span className="inline-flex items-center gap-1">
+                          有效期至
+                          <span
+                            className="cursor-help text-gray-400"
+                            title="已过期的邀请码无法用于注册，需先点击「延长」恢复有效期"
+                          >
+                            <Info className="h-3.5 w-3.5" />
+                          </span>
+                        </span>
                       </TableHead>
+                      <TableHead className="w-[90px]" responsiveHide="sm">创建人</TableHead>
+                      <TableHead className="max-w-[180px]" responsiveHide="sm">使用人</TableHead>
+                      <TableHead className="w-[100px]" responsiveHide="lg">创建日期</TableHead>
+                      <TableHead className="w-[72px] text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -449,102 +523,107 @@ export default function TeamManagementPage() {
                             <button
                               onClick={() => handleCopyInvitationCode(ic.code)}
                               className="text-gray-400 hover:text-gray-600"
-                              title="复制邀请码"
+                              title="复制"
                             >
                               <Copy className="h-3.5 w-3.5" />
                             </button>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          {ic.status === "used" ? (
-                            <Badge variant="success">已使用</Badge>
-                          ) : ic.status === "expired" ? (
-                            <Badge variant="error">已过期</Badge>
+                        <TableCell responsiveHide="sm">
+                          <StatusBadge domain="user" status={ic.type} />
+                        </TableCell>
+                        <TableCell className="max-w-[160px] text-sm text-gray-700" responsiveHide="sm">
+                          <div className="truncate" title={ic.schoolName}>
+                            {ic.schoolName}
+                          </div>
+                        </TableCell>
+                        <TableCell responsiveHide="sm">
+                          <StatusBadge domain="invitation" status={ic.status} />
+                        </TableCell>
+                        <TableCell className="text-sm" responsiveHide="sm">
+                          {ic.expiresAt ? (
+                            (() => {
+                              const expired =
+                                ic.status === "ACTIVE" &&
+                                new Date(ic.expiresAt) < new Date();
+                              return (
+                                <span className={expired ? "text-red-600" : "text-gray-600"}>
+                                  {formatDateTimeDisplay(ic.expiresAt)}
+                                  {expired && (
+                                    <span className="ml-1 rounded bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                                      已过期
+                                    </span>
+                                  )}
+                                </span>
+                              );
+                            })()
                           ) : (
-                            <Badge variant="default">未使用</Badge>
+                            <span className="text-gray-400">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-sm text-gray-600">
-                          {ic.usedByName || "-"}
+                        <TableCell className="text-sm text-gray-600" responsiveHide="sm">{ic.createdByName}</TableCell>
+                        <TableCell className="max-w-[180px] text-sm text-gray-600" responsiveHide="sm">
+                          <div className="truncate" title={ic.usedByEmail || "-"}>
+                            {ic.usedByEmail || "-"}
+                          </div>
                         </TableCell>
-                        <TableCell className="text-sm text-gray-500">
-                          {new Date(ic.createdAt).toLocaleDateString("zh-CN", {
-                            year: "numeric",
-                            month: "2-digit",
-                            day: "2-digit",
-                          })}
-                        </TableCell>
-                        <TableCell className="text-sm text-gray-500">
-                          {ic.expiresAt
-                            ? new Date(ic.expiresAt).toLocaleDateString(
-                                "zh-CN",
-                                {
-                                  year: "numeric",
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                }
-                              )
-                            : "-"}
+                        <TableCell className="text-sm text-gray-500" responsiveHide="lg">
+                          {formatDate(ic.createdAt)}
                         </TableCell>
                         <TableCell className="text-right">
-                          <div className="relative">
-                            <button
-                              onClick={() =>
-                                setInvitationActionMenuOpen(
-                                  invitationActionMenuOpen === ic.id
-                                    ? null
-                                    : ic.id
-                                )
+                          <TableActions
+                            disabled={actionLoading === ic.id}
+                            items={(() => {
+                              if (ic.status === "USED") {
+                                if (!ic.usedByUserId) {
+                                  return [{ label: "无操作", onClick: () => {}, disabled: true }];
+                                }
+                                return [
+                                  {
+                                    label: "停用",
+                                    icon: Ban,
+                                    onClick: () => handleToggleStatus(ic.id, "DEACTIVATED"),
+                                    variant: "destructive",
+                                  },
+                                ];
                               }
-                              className="rounded-lg p-2 text-gray-500 hover:bg-gray-100"
-                            >
-                              <MoreVertical className="h-4 w-4" />
-                            </button>
-                            {invitationActionMenuOpen === ic.id && (
-                              <>
-                                <div
-                                  className="fixed inset-0 z-10"
-                                  onClick={() =>
-                                    setInvitationActionMenuOpen(null)
-                                  }
-                                />
-                                <div className="absolute right-0 top-full z-50 mt-2 w-40 rounded-lg border border-gray-200 bg-white shadow-lg">
-                                  <div className="p-1">
-                                    {ic.status === "unused" && (
-                                      <>
-                                        <button
-                                          onClick={() =>
-                                            handleExtendInvitationCode(ic.id)
-                                          }
-                                          disabled={isExtending}
-                                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-blue-600 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                          <Clock className="h-4 w-4" />
-                                          延长7天
-                                        </button>
-                                        <div className="my-1 h-px bg-gray-200"></div>
-                                        <button
-                                          onClick={() =>
-                                            handleRevokeInvitationCode(ic.id)
-                                          }
-                                          disabled={isRevoking}
-                                          className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50"
-                                        >
-                                          <Ban className="h-4 w-4" />
-                                          作废
-                                        </button>
-                                      </>
-                                    )}
-                                    {ic.status !== "unused" && (
-                                      <div className="px-3 py-2 text-xs text-gray-500">
-                                        无可用操作
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              </>
-                            )}
-                          </div>
+                              if (ic.status === "DEACTIVATED") {
+                                return [
+                                  {
+                                    label: "启用",
+                                    icon: RotateCcw,
+                                    onClick: () => handleToggleStatus(ic.id, "USED"),
+                                  },
+                                ];
+                              }
+                              if (ic.status === "ACTIVE") {
+                                return [
+                                  {
+                                    label: "延长",
+                                    icon: CalendarPlus,
+                                    onClick: () => setExtendDialog({ open: true, codeId: ic.id }),
+                                  },
+                                  "separator",
+                                  {
+                                    label: "撤销",
+                                    icon: Ban,
+                                    onClick: () => handleDelete(ic.id),
+                                    variant: "destructive",
+                                  },
+                                ];
+                              }
+                              if (ic.status === "DISABLED") {
+                                return [
+                                  {
+                                    label: "激活",
+                                    icon: Play,
+                                    onClick: () => handleToggleStatus(ic.id, "ACTIVE"),
+                                  },
+                                ];
+                              }
+                              return [];
+                            })()}
+                          />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -555,86 +634,26 @@ export default function TeamManagementPage() {
           </Card>
         )}
 
-        {/* 生成邀请码弹窗 */}
-        {showGenerateModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-              <div className="mb-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-gray-900">
-                  生成工作人员邀请码
-                </h3>
-                <button
-                  onClick={() => {
-                    setShowGenerateModal(false);
-                    setGeneratedCode("");
-                  }}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+        <GenerateCodeModal
+          isOpen={showGenerateModal}
+          onClose={() => setShowGenerateModal(false)}
+          schools={schools.length > 0 ? schools : schoolId ? [{ id: schoolId, name: "当前学校" }] : []}
+          fixedSchoolId={schoolId ?? undefined}
+          staffOnly
+          onSuccess={fetchInvitationCodes}
+        />
 
-              <div className="space-y-4">
-                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
-                  <p>此邀请码用于邀请校内工作人员（STAFF）加入您的团队</p>
-                  <p className="mt-1 text-xs">
-                    工作人员可以协助您管理 POI 数据
-                  </p>
-                </div>
-
-                {generatedCode && (
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-4">
-                    <div className="mb-2 text-sm font-medium text-green-800">
-                      邀请码生成成功！
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 rounded bg-white px-3 py-2 font-mono text-lg font-bold text-gray-900">
-                        {generatedCode}
-                      </code>
-                      <button
-                        onClick={handleCopyCode}
-                        className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700"
-                      >
-                        {copied ? (
-                          <>
-                            <Check className="h-4 w-4" />
-                            已复制
-                          </>
-                        ) : (
-                          <>
-                            <Copy className="h-4 w-4" />
-                            复制
-                          </>
-                        )}
-                      </button>
-                    </div>
-                    <p className="mt-2 text-xs text-green-700">
-                      请妥善保管此邀请码，分发给需要邀请的工作人员
-                    </p>
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => {
-                      setShowGenerateModal(false);
-                      setGeneratedCode("");
-                    }}
-                    className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                  >
-                    关闭
-                  </button>
-                  <button
-                    onClick={handleGenerateCode}
-                    disabled={isGenerating}
-                    className="flex-1 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {isGenerating ? "生成中..." : "生成邀请码"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
+        {/* 延长有效期弹窗 */}
+        {extendDialog.open && extendDialog.codeId && (
+          <ExtendValidityDialog
+            codeId={extendDialog.codeId}
+            onClose={() => setExtendDialog({ open: false, codeId: null })}
+            onSuccess={async (days) => {
+              await handleExtend(extendDialog.codeId!, days);
+              setExtendDialog({ open: false, codeId: null });
+            }}
+            disabled={!!actionLoading}
+          />
         )}
       </div>
     </AdminLayout>

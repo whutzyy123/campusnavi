@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { centroid } from "@turf/turf";
 import type { Feature, Polygon } from "geojson";
+import { computeLabelCenter } from "@/lib/campus-label-utils";
 
 /**
  * PUT /api/admin/campuses/[id]
@@ -90,7 +91,7 @@ export async function PUT(
         coordinates: [closedBoundary],
       };
 
-      // 计算新的中心点
+      // 计算中心点与标签位置
       const polygonFeature: Feature<Polygon> = {
         type: "Feature",
         geometry: polygon,
@@ -101,8 +102,12 @@ export async function PUT(
       const [centerLng, centerLat] = center.geometry.coordinates;
       const centerPoint: [number, number] = [centerLng, centerLat];
 
+      // labelCenter: 使用 polylabel（Pole of Inaccessibility）保证标签落在多边形最“宽敞”位置
+      const labelCenterPoint = computeLabelCenter(closedBoundary);
+
       updateData.boundary = polygon as any;
       updateData.center = centerPoint as any;
+      updateData.labelCenter = labelCenterPoint as any;
     }
 
     // 如果没有要更新的数据
@@ -127,6 +132,7 @@ export async function PUT(
         name: updatedCampus.name,
         schoolId: updatedCampus.schoolId,
         center: updatedCampus.center,
+        labelCenter: updatedCampus.labelCenter,
       },
     });
   } catch (error) {
@@ -135,7 +141,7 @@ export async function PUT(
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -189,7 +195,7 @@ export async function DELETE(
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );

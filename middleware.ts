@@ -4,6 +4,7 @@ import type { NextRequest } from "next/server";
 /**
  * 权限路由拦截中间件
  * 只读取 HTTP Only Cookie，验证 ADMIN/STAFF/SUPER_ADMIN 权限
+ * 仅匹配 /admin/*，token 缺失时直接重定向到 /login，与 logoutUser Server Action 的 redirect 一致。
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

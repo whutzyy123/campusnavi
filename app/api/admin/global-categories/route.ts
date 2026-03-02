@@ -35,10 +35,15 @@ export async function GET(request: NextRequest) {
           isGlobal: true,
           schoolId: null,
         },
-        include: {
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+          createdAt: true,
+          updatedAt: true,
           _count: {
             select: {
-              pois: true, // 统计所有学校的 POI
+              pois: true,
             },
           },
         },
@@ -71,7 +76,7 @@ export async function GET(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
@@ -158,7 +163,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: error instanceof Error ? error.message : "未知错误",
       },
       { status: 500 }
     );
