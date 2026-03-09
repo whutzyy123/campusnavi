@@ -329,6 +329,15 @@ export async function registerUser(formData: FormData) {
   const role = formData.get("role")?.toString();
   const schoolId = formData.get("schoolId")?.toString();
   const invitationCode = formData.get("invitationCode")?.toString();
+  const agreedRaw = formData.get("agreed")?.toString();
+  const agreed = agreedRaw === "true" || agreedRaw === "on";
+
+  if (!agreed) {
+    return {
+      success: false,
+      message: "You must agree to the terms before registering.",
+    };
+  }
 
   if (!email || !nickname || !password || !role) {
     return {

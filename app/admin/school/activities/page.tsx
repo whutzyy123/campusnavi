@@ -20,27 +20,26 @@ import { ActivityEditDialog } from "@/components/activity-edit-dialog";
 import {
   getActivitiesBySchool,
   deleteActivity,
-  type ActivityItem,
+  type ActivityWithPOI,
 } from "@/lib/activity-actions";
+import { getActivityStatus } from "@/types/activity";
 import { formatDateTime, truncateText } from "@/lib/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { CalendarDays, Plus, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { TableActions } from "@/components/ui/table-actions";
 
-type ActivityListItem = ActivityItem & { poiName: string };
-
 type FilterMode = "active" | "expired" | "all";
 
 export default function ActivitiesManagementPage() {
   const { currentUser } = useAuthStore();
-  const [activities, setActivities] = useState<ActivityListItem[]>([]);
+  const [activities, setActivities] = useState<ActivityWithPOI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [filterMode, setFilterMode] = useState<FilterMode>("active");
   const [searchInput, setSearchInput] = useState("");
   const debouncedSearch = useDebounce(searchInput, 300);
   const [showDialog, setShowDialog] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<ActivityListItem | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ActivityWithPOI | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const schoolId = currentUser?.schoolId ?? "";
@@ -50,7 +49,7 @@ export default function ActivitiesManagementPage() {
     try {
       const result = await getActivitiesBySchool();
       if (result.success && result.data) {
-        setActivities(result.data as ActivityListItem[]);
+        setActivities(result.data);
       } else {
         toast.error(result.error ?? "获取活动列表失败");
       }
@@ -87,7 +86,7 @@ export default function ActivitiesManagementPage() {
     setShowDialog(true);
   };
 
-  const handleEdit = (a: ActivityListItem) => {
+  const handleEdit = (a: ActivityWithPOI) => {
     setEditingActivity(a);
     setShowDialog(true);
   };
@@ -201,12 +200,15 @@ export default function ActivitiesManagementPage() {
                             </span>
                           </TableCell>
                           <TableCell className="max-w-[160px]">
-                            <span className="block truncate text-sm text-gray-700" title={a.poiName}>
-                              {a.poiName}
+                            <span className="block truncate text-sm text-gray-700" title={a.poi.name}>
+                              {a.poi.name}
                             </span>
                           </TableCell>
                           <TableCell responsiveHide="sm">
-                            <StatusBadge domain="activity" status={isExpired ? "expired" : "active"} />
+                            <StatusBadge
+                              domain="activity"
+                              status={status === "ONGOING" ? "ongoing" : status === "UPCOMING" ? "upcoming" : "expired"}
+                            />
                           </TableCell>
                           <TableCell className="text-sm text-gray-600" responsiveHide="lg">
                             {formatDateTime(a.startAt)}

@@ -66,6 +66,32 @@ export function formatRelativeTime(isoString: string): string {
 }
 
 /**
+ * 剩余时间格式化（用于活动结束倒计时）
+ * @param endAt 结束时间
+ * @returns "X天X小时" | "X小时X分钟" | "X分钟" | 或精确时间（不足1分钟时）
+ */
+export function formatTimeRemaining(endAt: Date | string): string {
+  const end = typeof endAt === "string" ? new Date(endAt) : endAt;
+  const now = new Date();
+  const diffMs = end.getTime() - now.getTime();
+
+  if (diffMs <= 0) return "已结束";
+
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "即将结束";
+  if (diffMins < 60) return `${diffMins}分钟`;
+  if (diffHours < 24) {
+    const mins = diffMins % 60;
+    return mins > 0 ? `${diffHours}小时${mins}分钟` : `${diffHours}小时`;
+  }
+  const hours = diffHours % 24;
+  return hours > 0 ? `${diffDays}天${hours}小时` : `${diffDays}天`;
+}
+
+/**
  * 短日期时间格式（月日 时分）
  */
 export function formatDateTimeShort(date: Date | string): string {

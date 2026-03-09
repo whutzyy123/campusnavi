@@ -1234,10 +1234,25 @@ export default function CampusManagementPage() {
     }
   }, []);
 
-  // 检查权限
-  const isAuthorized = currentUser?.role === "ADMIN" || 
-                       currentUser?.role === "STAFF" || 
-                       currentUser?.role === "SUPER_ADMIN";
+  // STAFF 无权访问校区管理，立即重定向到控制台
+  useEffect(() => {
+    if (currentUser?.role === "STAFF") {
+      router.replace("/admin");
+    }
+  }, [currentUser?.role, router]);
+
+  // 检查权限：仅 ADMIN 和 SUPER_ADMIN 可访问；STAFF 会由 useEffect 重定向
+  const isAuthorized = currentUser?.role === "ADMIN" || currentUser?.role === "SUPER_ADMIN";
+
+  if (currentUser?.role === "STAFF") {
+    return (
+      <AuthGuard requiredRole="ADMIN">
+        <div className="flex min-h-screen items-center justify-center">
+          <p className="text-gray-600">正在跳转...</p>
+        </div>
+      </AuthGuard>
+    );
+  }
 
   if (!isAuthorized) {
     return (

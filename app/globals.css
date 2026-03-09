@@ -2,7 +2,16 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body {
+  height: 100vh !important;
+  overflow: hidden !important;
+  margin: 0;
+  padding: 0;
+}
+
 :root {
+  height: 100%;
   /* 导航栏高度（与 Navbar h-16 一致，用于 fixed 元素避免遮挡） */
   --nav-height: 4rem; /* 64px */
 
@@ -119,6 +128,22 @@ button:focus-visible {
   /* 触摸设备动量滚动（用于列表等可滚动区域） */
   .scroll-momentum {
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* 细滚动条：现代风格，slate 配色（Chrome/Safari） */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px; /* w-1.5 */
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225); /* slate-300 */
+    border-radius: 9999px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: rgb(148 163 184); /* slate-400 */
   }
 
   /* Modal 视口感知布局：居中、最大高度、内部滚动 */
@@ -277,4 +302,31 @@ button:focus-visible {
 .marker-pulse-delay-2 { animation-delay: 0.3s; }
 .marker-pulse-delay-3 { animation-delay: 0.6s; }
 .marker-pulse-delay-4 { animation-delay: 0.9s; }
+
+/* Shimmer 骨架屏动画 */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(
+    90deg,
+    rgb(229 231 235) 25%,
+    rgb(243 244 246) 50%,
+    rgb(229 231 235) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* Live 脉冲点（绿/红） */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+.live-pulse-dot {
+  animation: live-pulse 1.5s ease-in-out infinite;
+}
 

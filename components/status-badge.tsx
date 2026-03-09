@@ -55,6 +55,8 @@ const STATUS_MAP: Record<StatusBadgeDomain, Record<string, StatusConfig>> = {
   },
   activity: {
     active: { variant: "success", label: "进行中" },
+    ongoing: { variant: "success", label: "进行中" },
+    upcoming: { variant: "info", label: "即将开始", className: "bg-blue-100 text-blue-800" },
     ended: { variant: "default", label: "已结束", className: "bg-gray-200 text-gray-700" },
     expired: { variant: "default", label: "已过期", className: "bg-gray-200 text-gray-700" },
   },

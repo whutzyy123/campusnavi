@@ -9,7 +9,7 @@
 | 产品名称 | 校园生存指北 |
 | 文档类型 | 产品需求文档 |
 | 当前版本 | v1.3.3 |
-| 最后更新 | 2026-03-05 |
+| 最后更新 | 2026-03-02|
 | 文档状态 | 正式版 |
 
 ---
@@ -18,8 +18,8 @@
 
 | 版本 | 修订日期 | 修订内容 | 修订人 | 审核人 | 状态 |
 |------|----------|----------|--------|--------|------|
-| v1.3.3 | 2026-03-05 | 活动管理豁免（ADMIN/SUPER_ADMIN 豁免敏感词与 6 位数字过滤）；link 字段永不经过 validateContent；搜索「正在进行」条件展示（getActiveActivitiesCount）；集市意向流程修复（map 变体支持） | Whutzyy | Whutzyy | 定稿 |
-| v1.3.2 | 2026-02-28 | 统一 Server Actions 架构；实现中控台；集市评价系统；角色化审核分离；集市信息流优化；UI调优 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.3 | 2026-03-02| 中控台UI优化；实现交易审计日志与声誉系统；角色化仪表盘优化；新增便民公共设施字段 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.2 | 2026-02-28 | 统一 Server Actions 架构；实现个人中控台重构；集市评价系统；角色化审核分离；集市信息流优化；UI调优 | Whutzyy | Whutzyy | 定稿 |
 | v1.3.1 | 2026-02-27 | 生存集市交易闭环（R35）：动态配置、意向系统、选定买家锁定、双确认完成、MarketLog 审计；自适应抽屉（R36）：移动端 vaul 手势、桌面侧边栏；全屏 Modal Portal、Z-Index 标准化；管理后台响应式表格、Phase 5 完整性检查、Phase 6 GIS 组件 Lint 安全修复、文档同步 | Whutzyy | Whutzyy | 定稿 |
 | v1.3.0 | 2026-02-24 | 生存集市完整上线：P2P 资源分享、2 级分类、举报审核、GIS 关联、隐私保护、7 天自动过期；全局搜索防抖、视口感知 Modal、Polylabel 标签定位 | Whutzyy | Whutzyy | 定稿 |
 | v1.2.1 | 2026-01-17 | 存储与媒体（Vercel Blob、图片压缩）、分级举报、邀请码停用、关键词引擎（6 位数字屏蔽、批量导入、搜索）、个人资料 7 天冷却、通知深度链接、视口约束 | Whutzyy | Whutzyy | 定稿 |
@@ -41,13 +41,13 @@
 | LOD | Level of Detail，细节层次，根据缩放级别控制渲染粒度 |
 | 多租户 | 基于 `schoolId` 的数据隔离，每所学校独立数据空间 |
 | 地理围栏 | 校区边界多边形，用于判断用户是否在某校范围内 |
-| FitView | 地图工具，自动计算最优缩放级别与中心点，使指定一组 Marker（如父 POI + 子 POI）完整显示在视口内 |
+| FitView | 地图工具，自动计算最优缩放级别与中心点，使指定一组 Marker 完整显示在视口内 |
 | POI Alias | POI 的别称或非正式名称，用于提升搜索精准度 |
 | Marker Pulse | 地图上用于临时高亮某坐标的脉动动画效果 |
 | Privacy Reveal | 交互模式：敏感信息（如联系方式）默认隐藏，用户点击确认按钮后才展示，以保护隐私 |
 | 生存集市 | Survival Bazaar，P2P 资源分享平台，支持二手交易、以物换物、物品借用 |
 | 中控台 (Command Center) | 个人中心内集中展示用户互动与集市活动的仪表盘，含我的发布、意向、历史等 Tab |
-| Market Reputation | 集市声誉，基于已完成交易的买家/卖家互评，以好评率（approval rate）展示 |
+| Market Reputation | 集市声誉，基于已完成交易的买家/卖家互评，以好评率展示 |
 
 ---
 
@@ -84,7 +84,7 @@
 
 ## 四、需求总表
 
-### 4.1 需求列表（按模块）
+### 4.1 需求列表
 
 | 序号 | 模块 | 需求名称 | 状态 | 优先级 | 备注 |
 |------|------|----------|------|--------|------|
@@ -95,8 +95,8 @@
 | R05 | POI | POI 父子层级与二级点管理 | 已完成 | P0 | parentId、Split-View 卡片；支持简化子 POI 抽屉视图与自动 FitView 居中 |
 | R06 | POI | 地图 LOD 与 Marker 聚合 | 已完成 | P0 | zoom≤17 聚合、>17 展开 |
 | R07 | POI | 子 POI 按需高亮 | 已完成 | P1 | highlightSubPOI、「在地图中查看」；CSS 脉动光晕 + 自动清除 |
-| R08 | POI | 底图 POI 分类筛选 | 已完成 | P1 | POIFilterPanel、常规/微观分组勾选、useFilterStore |
-| R09 | POI | 微观 POI 分类 | 已完成 | P1 | isMicroCategory、超管维护、校管创建 POI 分常规/微观 |
+| R08 | POI | 底图 POI 分类筛选 | 已完成 | P1 | POIFilterPanel、常规/便民分组勾选 |
+| R09 | POI | 便民公共设施 | 已完成 | P1 | 便民设施分类、超管维护、校管创建 POI 分常规/便民 |
 | R10 | POI | POI 图片槽位 | 已完成 | P1 | Vercel Blob、客户端压缩 <1MB、校管/工作人员 |
 | R11 | 导航 | 校内步行路径规划 | 已完成 | P0 | AMap.Walking |
 | R12 | 导航 | 地图/搜索选点 | 已完成 | P0 | 起终点设置 |
@@ -114,14 +114,14 @@
 | R24 | 认证 | RBAC 五级权限 | 已完成 | P0 | Guest/Student/Admin/Staff/SuperAdmin |
 | R25 | 认证 | 邀请码系统 | 已完成 | P0 | ADMIN/STAFF 权限分发 |
 | R26 | 搜索 | 别称搜索支持 | 已完成 | P0 | POI alias 模糊匹配 |
-| R26a | 搜索 | 「正在进行」条件展示 | 已完成 | P1 | 仅当该校有进行中活动时显示快捷入口；getActiveActivitiesCount |
+| R26a | 搜索 | 「正在进行」条件展示 | 已完成 | P1 | 仅当该校有进行中活动时显示快捷入口 |
 | R27 | 社交 | 消息与互动通知 | 已完成 | P1 | LIKE/REPLY/MENTION/SYSTEM/LOST_FOUND_FOUND |
 | R28 | 个人中心 | 我的发布与消息管理 Tab | 已完成 | P1 | My Lost & Found、消息列表 |
 | R29 | 生存集市 | 分类管理（二级层级） | 已完成 | P1 | 超管维护全局 2 级分类（如 Books > Textbooks） |
 | R30 | 生存集市 | 发布与列表 | 已完成 | P1 | SALE/SWAP/BORROW 三种类型；必选 2 级分类；绑定 POI |
 | R31 | 生存集市 | 举报与审核 | 已完成 | P1 | 3 次入审核、5 次自动隐藏；与留言审核统一入口 |
 | R32 | 生存集市 | GIS 关联与「在地图中查看」 | 已完成 | P1 | 每商品必链 POI；详情页支持跳转地图定位 |
-| R33 | 生存集市 | 隐私保护（Reveal Contact） | 已完成 | P1 | 联系方式默认隐藏，点击后展示；联系字段豁免 6 位数字屏蔽 |
+| R33 | 生存集市 | 隐私保护 | 已完成 | P1 | 联系方式默认隐藏，点击后展示；联系字段豁免 6 位数字屏蔽 |
 | R34 | 生存集市 | 7 天自动过期 | 已完成 | P1 | 发布后 7 天自动下架，服务端保留 |
 | R35 | 生存集市 | 交易闭环（意向→选定→锁定→双确认） | 已完成 | P1 | 买家提交意向（含联系方式）；卖家选定买家并锁定；线下交易后双确认完成；支持重新上架 |
 | R36 | POI | 自适应抽屉（桌面侧边栏 / 移动端手势 Bottom Sheet） | 已完成 | P1 | 桌面：右侧固定抽屉；移动端：vaul 手势 Bottom Sheet，吸附点 0.35/0.85 |
@@ -144,7 +144,7 @@
 | 认证学生 | Student | 目标地点查找与导航、实时情报、参与众包 | 查看排队状态、上报拥挤度 |
 | 校级管理员 | Admin | 维护本校地理数据 | 创建 POI、管理分类、审核举报 |
 | 校内工作人员 | Staff | 协助审核与运营 | 留言审核、举报处理 |
-| 超级管理员 | SuperAdmin | 系统级配置 | 敏感词、用户、学校、微观分类 |
+| 超级管理员 | SuperAdmin | 系统级配置 | 敏感词、用户、学校、便民公共设施分类 |
 
 ### 5.2 用户场景
 
@@ -183,7 +183,7 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | 非超管跨校请求（含手工改 URL）返回 403；所有 API 校验 schoolId |
+| **功能描述** | 非超管跨校请求返回 403；所有 API 校验 schoolId |
 
 ---
 
@@ -228,13 +228,13 @@
 | **功能描述** | POIFilterPanel 分类勾选，勾选/取消控制 POI Marker 显隐 |
 | **实现** | useFilterStore、rootVisiblePois 按 selectedCategoryIds 筛选；/api/categories 返回 regular+micro；切换学校 resetFilters |
 
-#### R09 微观 POI 分类
+#### R09 便民公共设施
 
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | Category.isMicroCategory；超管维护；校管创建 POI 时分类分「常规」「微观」；筛选面板微观分组 |
-| **实现** | super-admin/categories 微观 Tab；poi-edit-dialog/admin/pois；POIFilterPanel |
+| **功能描述** | Category.isMicroCategory（便民设施分类）；超管维护；校管创建 POI 时分类分「常规」「便民」；筛选面板便民分组 |
+| **实现** | super-admin/categories 便民 Tab；poi-edit-dialog/admin/pois；POIFilterPanel |
 
 #### R10 POI 图片槽位
 
@@ -273,7 +273,7 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | 3 图+简介；24h 前端隐藏；Reveal Contact；LostFoundDetailModal Portal z-[200]/z-[210] |
+| **功能描述** | 3 图+简介；24h 前端隐藏； |
 | **约束** | 同 POI 1h 限 1 条；敏感词；6 位数字屏蔽（联系方式豁免） |
 
 ---
@@ -289,14 +289,6 @@
 | **内容过滤豁免** | ADMIN/SUPER_ADMIN 豁免 title、description 的敏感词与 6 位数字过滤；link 永不经过 validateContent（含 tracking ID 等长数字 URL 不受限） |
 | **实现** | activity-actions、admin/school/activities、ActivityEditDialog、ActivityDetailModal、poi-drawer、validateActivityContent |
 
-#### R26a 「正在进行」条件展示
-
-| 维度 | 说明 |
-|------|------|
-| **状态** | 已完成 |
-| **功能描述** | 搜索零态下拉中「🔥 正在进行」入口仅当该校有进行中活动时展示；避免无活动时显示空结果 |
-| **实现** | getActiveActivitiesCount(schoolId)、poi-search-bar hasActiveActivities、/api/pois/search?ongoingOnly=true |
-
 ---
 
 ### 6.6 模块 F：地图与校区
@@ -306,7 +298,7 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | Navbar 学校 Pill 点击 → setZoomAndCenter(16, center)；中心优先级 activeSchool > campuses[0] |
+| **功能描述** | Navbar 学校 Pill 点击 → setZoomAndCenter(16, center)；中心优先级 inspectedSchool ?? activeSchool ?? campuses[0] |
 
 #### R19–R20 多校区边界与编辑器
 
@@ -324,7 +316,7 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | 控制台、POI/校区/分类/团队、举报审核、留言审核；StatCard、CommandShortcuts、SetupGuide |
+| **功能描述** | 控制台、POI/校区/分类/团队、举报审核（POI+集市双 Tab）、留言审核；StatCard、CommandShortcuts、SetupGuide |
 | **角色** | Admin/Staff 运营，requireSchoolId |
 
 #### R22 超级管理员后台
@@ -332,7 +324,7 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | 系统看板、用户/敏感词/学校/微观分类/集市分类 |
+| **功能描述** | 系统看板、用户/敏感词/学校/便民公共设施分类/集市分类 |
 | **角色** | SuperAdmin 仅基础设施；不参与审核；审核侧边栏对超管隐藏 |
 
 ---
@@ -349,14 +341,14 @@
 
 ---
 
-### 6.9 模块 I：生存集市（Survival Bazaar）— v1.3.1 动态配置与交易闭环
+### 6.9 模块 I：生存集市
 
 #### R29 分类管理（动态配置 + 二级层级）
 
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | MarketTransactionType + MarketCategory 动态表；MarketTypeCategory 多对多；超管维护 2 级分类（parentId） |
+| **功能描述** | MarketTransactionType、MarketCategory 动态表；MarketTypeCategory 多对多；超管维护 2 级分类（parentId） |
 | **发布** | 按 typeId 过滤可用分类；`optgroup` 展示一级+二级 |
 
 #### R30 发布与列表
@@ -374,14 +366,14 @@
 | **状态** | 已完成 |
 | **功能描述** | 与留言统一：≥3 入审核；≥5 自动 isHidden 并通知；admin/audit 集市 Tab |
 
-#### R32 GIS 关联与「在地图中查看」
+#### R32 GIS 关联与在地图中显示
 
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
 | **功能描述** | 每商品必链 POI；详情页「在地图中查看」→ `/?poiId=xxx` 跳转定位 |
 
-#### R33 隐私保护（Reveal Contact）
+#### R33 隐私保护
 
 | 维度 | 说明 |
 |------|------|
@@ -395,7 +387,7 @@
 | **状态** | 已完成 |
 | **功能描述** | expiresAt = createdAt + 7d；用户端过滤；管理端可查全部 |
 
-#### R35 交易闭环（意向→选定→锁定→双确认）
+#### R35 交易流程闭环
 
 | 维度 | 说明 |
 |------|------|
@@ -418,15 +410,16 @@
 
 ```mermaid
 flowchart LR
-  A[选择起点/终点<br/>POI/当前位置/地图选点] --> B[获取校内路径点集<br/>RouteEdge + AMap.Walking]
-  B --> C[结合实时状态<br/>计算路径权重]
-  C --> D[生成最优路径<br/>写入导航状态]
-  D --> E[地图渲染路径<br/>展示距离与时间]
-  E --> F{导航中}
-  F -->|位置偏移过大| G[重新规划路径]
-  F -->|接近终点| H[结束导航<br/>记录埋点]
-  G --> C
+  A[选择起点/终点<br/>POI/当前位置/地图选点] --> B[AMap.Walking 步行路径规划]
+  B --> C[写入导航状态]
+  C --> D[地图渲染 Polyline<br/>展示距离与时间]
+  D --> E{导航中}
+  E -->|位置偏移过大| F[重新规划路径]
+  E -->|接近终点| G[结束导航<br/>记录埋点]
+  F --> B
 ```
+
+> 注：RouteEdge 表存在于 schema，当前路径规划仅使用 AMap.Walking；路径权重引擎为后续增强规划。
 
 ### 7.2 POI 状态机
 
@@ -451,40 +444,40 @@ flowchart LR
 
 | 项目 | 要求 |
 |------|------|
-| 权限 | L0–L1 只读；L2 可发布众包、导航、留言、失物招领 |
-| 隐私 | 不存储用户精确位置点序列，仅脱敏聚合指标 |
-| 内容安全 | POI、留言、活动、失物招领、集市标题/描述均需敏感词校验；联系方式豁免 6 位数字屏蔽 |
+| 权限 | L0(Guest) 只读；L1(Student) 可发布众包、导航、留言、失物招领、集市；L2–L4 为 Admin/Staff/SuperAdmin 管理权限 |
+| 隐私 | 不存储用户精确位置点序列，仅脱敏聚合指标；Contact Reveal：联系方式默认隐藏，点击确认后展示；集市意向解锁后自动重置（INTENTION_RESET_BY_UNLOCK） |
+| 内容安全 | POI、留言、活动、失物招领、集市标题/描述均需敏感词校验；联系方式豁免 6 位数字屏蔽；活动：ADMIN/SUPER_ADMIN 豁免 title/description 过滤，link 永不经过 validateContent |
 | 认证架构 | 业务 CRUD 优先使用 Server Actions（`lib/*-actions.ts`），移除物理 API 路由；认证依赖 HTTP Only Cookie |
 
 ### 8.3 兼容性
 
 - 移动端：Chrome for Android、Safari iOS 最近两个大版本。
 
-### 8.4 渲染策略 (Rendering Strategy)
+### 8.4 渲染策略
 
 | 项目 | 要求 |
 |------|------|
 | **Suspense 边界** | 所有使用 `useSearchParams()` 的动态页面均以 `<Suspense>` 包裹，保证预渲染稳定 |
 | **force-dynamic** | 依赖 `cookies()`、`headers()`、`searchParams` 的 API 路由导出 `export const dynamic = 'force-dynamic'`，避免静态生成报错 |
 
-### 8.5 代码规范 (Code Standards)
+### 8.5 代码规范
 
 | 项目 | 要求 |
 |------|------|
 | **数据获取** | 优先使用类型化 Server Actions，统一返回 `{ success, data?, error? }` 结构；避免在组件内直接 `fetch` 业务 API |
 | **API 路由** | 仅保留认证、第三方回调等必须使用 Route Handler 的场景；业务 CRUD 迁移至 `lib/*-actions.ts` |
 
-### 8.6 视觉与交互规范 (UI/UX Standards)
+### 8.6 视觉与交互规范
 
 #### 扁平化 Marker
 
 - 24×24px 圆形；`offset: (-12, -12)` 锚点；`--primary-theme` 主题变量
 
-#### 模态框/Portal（v1.3.1）
+#### 模态框/Portal
 
 - **Portal**：`createPortal(content, document.body)` 渲染到 body
 - **布局**：`modal-overlay`（flex 居中）、`modal-header`/`modal-body`（overflow-y-auto）/`modal-footer`；`max-height: min(85vh, calc(100vh - 40px))`
-- **Z-Index**：Navbar 40、Sidebar 45、Modal 100/110、覆盖 Drawer 时 200/210
+- **Z-Index**：Navbar 40、Sidebar 45、Modal 100/110、UserProfile/LostFoundDetailModal 覆盖抽屉时 z-[200]/z-[210]
 - **遮罩**：`fixed inset-0 bg-black/50` 全屏
 
 #### 滚动与手势
@@ -522,7 +515,7 @@ flowchart LR
 - 列表接口必须 `take`/`skip` 分页，单页上限 100。
 - 使用 `select` 精确指定字段，避免大文本、冗余 JSON。
 
-### 9.3 生存集市数据实体（v1.3.1）
+### 9.3 生存集市数据实体
 
 | 实体 | 说明 |
 |------|------|
@@ -530,7 +523,7 @@ flowchart LR
 | **MarketCategory** | 2 级分类，parentId；MarketTypeCategory 多对多 |
 | **MarketItem** | schoolId、poiId、categoryId、typeId、selectedBuyerId、lockedAt、buyerConfirmed、sellerConfirmed、expiresAt 7d |
 | **MarketIntention** | itemId+userId 唯一，contactInfo |
-| **MarketLog** | 审计日志，actionType：INTENTION_CREATED、ITEM_LOCKED、ITEM_UNLOCKED、TRANSACTION_COMPLETED、ADMIN_* |
+| **MarketLog** | 审计日志，actionType：INTENTION_CREATED、ITEM_LOCKED、ITEM_UNLOCKED、INTENTION_RESET_BY_UNLOCK、AUTO_UNLOCKED、AUTO_COMPLETED、TRANSACTION_COMPLETED、ADMIN_* |
 
 - **生命周期**：expiresAt 7d；reportCount≥3 入审核，≥5 自动 isHidden
 
@@ -545,7 +538,7 @@ flowchart LR
 | Category 扩展 | isMicroCategory、schoolId |
 | LostFoundEvent（v1.2） | schoolId、poiId、expiresAt、createdAt |
 | MarketCategory（v1.3.0） | parentId、order、isActive |
-| MarketItem（v1.3.0） | schoolId、poiId、userId、type、categoryId、expiresAt、reportCount、isHidden |
+| MarketItem（v1.3.0） | schoolId、poiId、userId、typeId、categoryId、expiresAt、reportCount、isHidden |
 
 ---
 
@@ -554,7 +547,7 @@ flowchart LR
 ### 10.1 管理员配置需求
 
 - 围栏编辑器、POI 审核池、功能开关
-- 超管：微观分类、集市分类、交易类型与分类动态配置
+- 超管：便民公共设施分类、集市分类、交易类型与分类动态配置
 - 校管：活动、POI 图片、失物招领、集市审核（`/admin/audit` 集市 Tab）
 
 ### 10.2 灰度策略
@@ -568,7 +561,6 @@ flowchart LR
 ### 11.1 参考资料
 
 - [高德地图 JS API 2.0 文档](https://lbs.amap.com/api/jsapi-v2/summary)
-- 敏感词库 v1.0
 
 ### 11.2 相关文档
 

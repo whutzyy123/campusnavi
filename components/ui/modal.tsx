@@ -16,6 +16,10 @@ export interface ModalProps {
   closeOnEscape?: boolean;
   /** 内容容器额外 class（如 max-w-md、max-w-lg） */
   containerClassName?: string;
+  /** 遮罩层额外 class（如 z-[200] 覆盖高层级元素） */
+  overlayClassName?: string;
+  /** 内容区额外 class（如 z-[210]） */
+  contentClassName?: string;
 }
 
 /**
@@ -29,6 +33,8 @@ export function Modal({
   closeOnOverlayClick = true,
   closeOnEscape = true,
   containerClassName = "",
+  overlayClassName = "",
+  contentClassName = "",
 }: ModalProps) {
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -49,13 +55,13 @@ export function Modal({
     <>
       {/* 遮罩：覆盖整个视口，使用 z-modal-overlay 确保高于 Sidebar */}
       <div
-        className="fixed inset-0 z-modal-overlay bg-black/50 modal-overlay"
+        className={`fixed inset-0 z-modal-overlay bg-black/50 modal-overlay ${overlayClassName}`.trim()}
         onClick={closeOnOverlayClick ? onClose : undefined}
         role="presentation"
       >
         {/* 弹窗内容：z-modal-content 确保在遮罩之上，阻止点击冒泡 */}
         <div
-          className={`modal-container z-modal-content relative ${containerClassName}`.trim()}
+          className={`modal-container z-modal-content relative ${containerClassName} ${contentClassName}`.trim()}
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

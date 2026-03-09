@@ -12,8 +12,9 @@ interface CategoryItem {
 }
 
 interface GroupedCategories {
+  [key: string]: CategoryItem[];
   regular: CategoryItem[];
-  micro: CategoryItem[];
+  convenience: CategoryItem[];
 }
 
 interface POIFilterPanelProps {
@@ -24,14 +25,17 @@ interface POIFilterPanelProps {
 
 /**
  * 地图 POI 分类筛选面板
- * 浮动于地图之上，支持常规分类与微观设施的分组勾选
+ * 浮动于地图之上，支持常规分类与便民公共设施的分组勾选
  */
 export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
   const { activeSchool } = useSchoolStore();
   const { selectedCategoryIds, toggleCategory, setAllCategories } = useFilterStore();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [categories, setCategories] = useState<GroupedCategories>({ regular: [], micro: [] });
+  const [categories, setCategories] = useState<GroupedCategories>({
+    regular: [],
+    convenience: [],
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [hasInitialized, setHasInitialized] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -41,7 +45,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
   // 加载分类列表
   useEffect(() => {
     if (!effectiveSchoolId) {
-      setCategories({ regular: [], micro: [] });
+      setCategories({ regular: [], convenience: [] });
       setHasInitialized(false);
       return;
     }
@@ -52,8 +56,8 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
         const response = await fetch(`/api/categories?schoolId=${effectiveSchoolId}`);
         const data = await response.json();
         if (data.success && data.data) {
-          const { regular = [], micro = [] } = data.data;
-          setCategories({ regular, micro });
+          const { regular = [], convenience = [] } = data.data;
+          setCategories({ regular, convenience });
         }
       } catch (error) {
         console.error("获取分类列表失败:", error);
@@ -69,7 +73,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
   useEffect(() => {
     if (isLoading || hasInitialized || !effectiveSchoolId) return;
 
-    const allIds = [...categories.regular, ...categories.micro].map((c) => c.id);
+    const allIds = [...categories.regular, ...categories.convenience].map((c) => c.id);
     if (allIds.length > 0) {
       setAllCategories(allIds);
       setHasInitialized(true);
@@ -94,7 +98,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const allIds = [...categories.regular, ...categories.micro].map((c) => c.id);
+  const allIds = [...(categories.regular ?? []), ...(categories.convenience ?? [])].map((c) => c.id);
 
   const handleSelectAll = () => {
     setAllCategories(allIds);
@@ -178,14 +182,14 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
                   </div>
                 )}
 
-                {/* 微观设施：移动端横向滚动，桌面端垂直列表 */}
-                {categories.micro.length > 0 && (
+                {/* 便民公共设施：移动端横向滚动，桌面端垂直列表 */}
+                {categories.convenience.length > 0 && (
                   <div>
                     <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-                      微观设施
+                      便民公共设施
                     </div>
                     <div className="flex flex-nowrap md:flex-wrap overflow-x-auto md:overflow-x-visible no-scrollbar snap-x snap-mandatory md:snap-none gap-2 space-x-3 md:space-x-0 md:space-y-1.5 px-1 md:px-0 -mx-1 md:mx-0">
-                      {categories.micro.map((cat) => (
+                      {categories.convenience.map((cat) => (
                         <label
                           key={cat.id}
                           className="flex flex-none snap-center md:snap-align-none cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-gray-50 md:w-full"

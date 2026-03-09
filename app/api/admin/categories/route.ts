@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/auth-server-actions";
 import { getMergedCategories } from "@/lib/category-utils";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
+import { CATEGORY_GROUP_CONVENIENCE, CATEGORY_GROUP_REGULAR } from "@/types/category";
 
 // GET /api/admin/categories
 // 获取当前学校的分类（合并全局分类和私有分类，应用覆盖逻辑）
@@ -35,18 +36,25 @@ export async function GET(request: NextRequest) {
       mergedCategories = [];
     }
 
-    // all=true&grouped=true：返回分组分类（常规 + 微观），用于 POI 表单下拉
+    // all=true&grouped=true：返回分组分类（常规 + 便民公共设施），用于 POI 表单下拉
     if (all && grouped) {
       const regular = mergedCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }));
-      const microCategories = await prisma.category.findMany({
+      const convenienceCategories = await prisma.category.findMany({
         where: { isMicroCategory: true, schoolId: null },
         select: { id: true, name: true, icon: true },
         orderBy: { createdAt: "asc" },
       });
-      const micro = microCategories.map((c) => ({ id: c.id, name: c.name, icon: c.icon }));
+      const convenience = convenienceCategories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        icon: c.icon,
+      }));
       return NextResponse.json({
         success: true,
-        data: { regular, micro },
+        data: {
+          [CATEGORY_GROUP_REGULAR]: regular,
+          [CATEGORY_GROUP_CONVENIENCE]: convenience,
+        },
       });
     }
 

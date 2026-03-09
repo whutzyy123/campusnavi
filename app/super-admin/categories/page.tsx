@@ -2,11 +2,12 @@
 
 import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { EmptyState } from "@/components/empty-state";
-import Link from "next/link";
 import { Tags, Plus, Trash2, Pencil, Droplets, LayoutGrid } from "lucide-react";
 import toast from "react-hot-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
@@ -31,7 +32,7 @@ type TabType = "regular" | "micro";
 
 /**
  * 超级管理员分类管理页面
- * 支持常规全局分类与微观分类的切换管理
+ * 支持常规全局分类与便民公共设施的切换管理
  */
 export default function SuperAdminCategoriesPage() {
   return (
@@ -98,11 +99,11 @@ function SuperAdminCategoriesPageContent() {
       if (result.success && result.data) {
         setMicroCategories(result.data);
       } else {
-        toast.error(result.error || "获取微观分类列表失败");
+        toast.error(result.error || "获取便民公共设施列表失败");
       }
     } catch (error) {
-      console.error("获取微观分类列表失败:", error);
-      toast.error("获取微观分类列表失败");
+      console.error("获取便民公共设施列表失败:", error);
+      toast.error("获取便民公共设施列表失败");
     } finally {
       setIsLoadingMicro(false);
     }
@@ -158,7 +159,7 @@ function SuperAdminCategoriesPageContent() {
           icon: modalIcon.trim() || null,
         });
         if (result.success) {
-          toast.success("微观分类更新成功");
+          toast.success("便民公共设施更新成功");
           closeModal();
           fetchMicroCategories();
         } else {
@@ -171,7 +172,7 @@ function SuperAdminCategoriesPageContent() {
             icon: modalIcon.trim() || null,
           });
           if (result.success) {
-            toast.success("微观分类创建成功");
+            toast.success("便民公共设施创建成功");
             closeModal();
             fetchMicroCategories();
           } else {
@@ -221,14 +222,14 @@ function SuperAdminCategoriesPageContent() {
   };
 
   const handleDeleteMicro = async (id: string, name: string) => {
-    if (!confirm(`确定要删除微观分类"${name}"吗？此操作不可恢复。`)) {
+    if (!confirm(`确定要删除便民公共设施"${name}"吗？此操作不可恢复。`)) {
       return;
     }
     setDeletingMicroId(id);
     try {
       const result = await deleteMicroCategory(id);
       if (result.success) {
-        toast.success("微观分类已删除");
+        toast.success("便民公共设施已删除");
         fetchMicroCategories();
       } else {
         toast.error(result.message || "删除失败");
@@ -240,71 +241,82 @@ function SuperAdminCategoriesPageContent() {
     }
   };
 
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <Link
+        href="/super-admin/categories/all"
+        className="flex items-center gap-2 rounded-lg border border-[#FF4500]/40 bg-[#FFE5DD] px-4 py-2 text-sm font-medium text-[#FF4500] transition-colors hover:bg-[#FFE5DD]/80"
+      >
+        <LayoutGrid className="h-4 w-4" />
+        全量分类监控
+      </Link>
+      <button
+        onClick={() => openCreateModal(activeTab === "micro")}
+        className="flex items-center gap-2 rounded-full bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+      >
+        <Plus className="h-4 w-4" />
+        {activeTab === "regular" ? "新增常规全局分类" : "新增便民公共设施"}
+      </button>
+    </div>
+  );
+
+  const tabs = (
+    <div className="border-b border-[#EDEFF1]">
+      <div className="flex gap-6">
+        <button
+          onClick={() => setActiveTab("regular")}
+          className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
+            activeTab === "regular"
+              ? "border-[#FF4500] text-[#FF4500]"
+              : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
+          }`}
+        >
+          <Tags className="h-4 w-4" />
+          常规全局分类
+        </button>
+        <button
+          onClick={() => setActiveTab("micro")}
+          className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
+            activeTab === "micro"
+              ? "border-[#FF4500] text-[#FF4500]"
+              : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
+          }`}
+        >
+          <Droplets className="h-4 w-4" />
+          便民公共设施
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-4 md:p-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h1 className="text-xl font-semibold text-[#1A1A1B]">分类管理</h1>
-              <p className="mt-1 text-sm text-[#7C7C7C]">
-                管理全平台默认分类与微观分类（饮水机、卫生间等）
-              </p>
-            </div>
-            <Link
-              href="/super-admin/categories/all"
-              className="flex items-center gap-2 rounded-lg border border-[#FF4500]/40 bg-[#FFE5DD] px-4 py-2 text-sm font-medium text-[#FF4500] transition-colors hover:bg-[#FFE5DD]/80"
-            >
-              <LayoutGrid className="h-4 w-4" />
-              全量分类监控
-            </Link>
-          </div>
-
-          {/* Tabs */}
-          <div className="mb-6 border-b border-[#EDEFF1]">
-            <div className="flex gap-6">
-              <button
-                onClick={() => setActiveTab("regular")}
-                className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-                  activeTab === "regular"
-                    ? "border-[#FF4500] text-[#FF4500]"
-                    : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
-                }`}
-              >
-                <Tags className="h-4 w-4" />
-                常规全局分类
-              </button>
-              <button
-                onClick={() => setActiveTab("micro")}
-                className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-                  activeTab === "micro"
-                    ? "border-[#FF4500] text-[#FF4500]"
-                    : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
-                }`}
-              >
-                <Droplets className="h-4 w-4" />
-                微观分类
-              </button>
-            </div>
-          </div>
-
-          {/* Add button - sticky */}
-          <div className="sticky top-0 z-10 mb-6 rounded-lg border border-[#EDEFF1] bg-white/95 backdrop-blur-sm p-4 shadow-sm">
-            <button
-              onClick={() => openCreateModal(activeTab === "micro")}
-              className="flex items-center gap-2 rounded-full bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
-            >
-              <Plus className="h-4 w-4" />
-              {activeTab === "regular" ? "新增常规全局分类" : "新增微观分类"}
-            </button>
-          </div>
-
-          {/* Tab content */}
-          <div className="min-h-[500px] flex flex-col">
+        <>
+          <AdminPageContainer
+          title="分类管理"
+          description="管理全平台默认分类与便民公共设施（饮水机、卫生间等）"
+          headerActions={headerActions}
+          headerExtra={tabs}
+          scrollKey={`${activeTab}-${searchParams.get("page") ?? "1"}`}
+          footer={
+            activeTab === "regular" &&
+            pagination &&
+            pagination.total > 0 ? (
+              <PaginationControls
+                total={pagination.total}
+                pageCount={pagination.pageCount}
+                currentPage={pagination.currentPage}
+              />
+            ) : null
+          }
+        >
+          {/* Tab content - scrollable list */}
+          <div className="flex flex-col">
             {activeTab === "regular" && (
               <>
                 {isLoadingRegular ? (
-                  <div className="flex justify-center py-12">
+                  <div className="flex justify-center py-8">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#FF4500] border-t-transparent" />
                   </div>
                 ) : categories.length === 0 ? (
@@ -315,11 +327,11 @@ function SuperAdminCategoriesPageContent() {
                   />
                 ) : (
                   <>
-                    <div className="flex-1 divide-y divide-[#EDEFF1] border border-[#EDEFF1] rounded-lg bg-white overflow-y-auto">
+                    <div className="divide-y divide-[#EDEFF1] border border-[#EDEFF1] rounded-lg bg-white">
                       {categories.map((category) => (
                         <div
                           key={category.id}
-                          className="px-4 py-3 transition-colors hover:bg-[#F6F7F8] h-16 flex items-center"
+                          className="px-4 py-2.5 transition-colors hover:bg-[#F6F7F8] h-14 flex items-center"
                         >
                           <div className="flex items-center justify-between gap-4 w-full">
                             <div className="flex-1 min-w-0">
@@ -359,15 +371,6 @@ function SuperAdminCategoriesPageContent() {
                         </div>
                       ))}
                     </div>
-                    {pagination && pagination.total > 0 && (
-                      <div className="mt-6 flex justify-center pb-8">
-                        <PaginationControls
-                          total={pagination.total}
-                          pageCount={pagination.pageCount}
-                          currentPage={pagination.currentPage}
-                        />
-                      </div>
-                    )}
                   </>
                 )}
               </>
@@ -376,21 +379,21 @@ function SuperAdminCategoriesPageContent() {
             {activeTab === "micro" && (
               <>
                 {isLoadingMicro ? (
-                  <div className="flex justify-center py-12">
+                  <div className="flex justify-center py-8">
                     <div className="h-6 w-6 animate-spin rounded-full border-2 border-[#FF4500] border-t-transparent" />
                   </div>
                 ) : microCategories.length === 0 ? (
                   <EmptyState
                     icon={Droplets}
-                    title="暂无微观分类"
-                    description="创建微观分类（如饮水机、卫生间）供各学校使用"
+                    title="暂无便民公共设施"
+                    description="创建便民公共设施（如饮水机、卫生间）供各学校使用"
                   />
                 ) : (
-                  <div className="flex-1 divide-y divide-[#EDEFF1] border border-[#EDEFF1] rounded-lg bg-white overflow-y-auto">
+                  <div className="divide-y divide-[#EDEFF1] border border-[#EDEFF1] rounded-lg bg-white">
                     {microCategories.map((category) => (
                       <div
                         key={category.id}
-                        className="px-4 py-3 transition-colors hover:bg-[#F6F7F8] h-16 flex items-center"
+                        className="px-4 py-2.5 transition-colors hover:bg-[#F6F7F8] h-14 flex items-center"
                       >
                         <div className="flex items-center justify-between gap-4 w-full">
                           <div className="flex-1 min-w-0">
@@ -400,7 +403,7 @@ function SuperAdminCategoriesPageContent() {
                                 {category.name}
                               </span>
                               <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
-                                微观
+                                便民
                               </span>
                             </div>
                             <div className="flex items-center gap-3 text-xs text-[#7C7C7C] ml-6">
@@ -422,7 +425,7 @@ function SuperAdminCategoriesPageContent() {
                               title={
                                 category.poiCount > 0
                                   ? "该分类下仍有 POI，无法删除"
-                                  : "删除微观分类"
+                                  : "删除便民公共设施"
                               }
                             >
                               {deletingMicroId === category.id ? (
@@ -441,14 +444,14 @@ function SuperAdminCategoriesPageContent() {
               </>
             )}
           </div>
-        </div>
+        </AdminPageContainer>
 
         {/* Create/Edit Modal */}
         {modalOpen && (
           <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
           <div className="modal-container max-w-md">
               <h2 className="modal-header px-6 pt-6 text-lg font-semibold text-[#1A1A1B]">
-                {modalMode === "edit" ? "编辑微观分类" : "新增分类"}
+                {modalMode === "edit" ? "编辑便民公共设施" : "新增分类"}
               </h2>
 
               <div className="modal-body space-y-4 px-6 py-4">
@@ -487,7 +490,7 @@ function SuperAdminCategoriesPageContent() {
                         onChange={(e) => setModalIsMicro(e.target.checked)}
                         className="h-4 w-4 rounded border-gray-300 text-[#FF4500] focus:ring-[#FF4500]"
                       />
-                      <span className="text-sm font-medium text-[#1A1A1B]">微观分类</span>
+                      <span className="text-sm font-medium text-[#1A1A1B]">便民公共设施</span>
                     </label>
                     {modalIsMicro && (
                       <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
@@ -519,6 +522,7 @@ function SuperAdminCategoriesPageContent() {
             </div>
           </div>
         )}
+        </>
       </AdminLayout>
     </AuthGuard>
   );

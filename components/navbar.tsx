@@ -11,7 +11,7 @@ import Image from "next/image";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useNotificationStore } from "@/store/use-notification-store";
-import { MapPin, LogOut, ChevronDown, LayoutDashboard, User, ShoppingBag, Loader2 } from "lucide-react";
+import { MapPin, LogOut, ChevronDown, LayoutDashboard, User, ShoppingBag, Calendar, Loader2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { POISearchBar } from "@/components/poi-search-bar";
 import { useMapSearchStore } from "@/store/use-map-search-store";
@@ -386,6 +386,14 @@ export function Navbar() {
                     <ShoppingBag className="h-4 w-4" />
                     生存集市
                   </button>
+                  <Link
+                    href="/activities"
+                    onClick={() => setShowUserMenu(false)}
+                    className="flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1B] transition-colors hover:bg-gray-100"
+                  >
+                    <Calendar className="h-4 w-4" />
+                    校园活动
+                  </Link>
                   {hasAdminAccess && (
                     <Link
                       href={isSuperAdmin ? "/super-admin" : "/admin"}

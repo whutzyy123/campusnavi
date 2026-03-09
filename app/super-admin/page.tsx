@@ -6,6 +6,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { StatCard } from "@/components/admin/stat-card";
 import { CommandShortcuts } from "@/components/admin/command-shortcuts";
+import { LiveClock } from "@/components/admin/live-clock";
 import { Users, Building2, ShoppingBag, Plus, Tags } from "lucide-react";
 import { getSuperAdminStats, type SuperAdminStats } from "@/lib/admin-actions";
 
@@ -51,11 +52,11 @@ export default function SuperAdminPage() {
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
         <div className="box-border p-6 lg:p-8">
-          <div className="mb-6">
+          <div className="mb-6 flex flex-col gap-1">
             <h1 className="text-2xl font-bold text-gray-900">
               欢迎回来，系统管理员 {currentUser?.nickname || "管理员"}。
             </h1>
-            <p className="mt-1 text-gray-600">当前全平台运行平稳。</p>
+            <LiveClock />
           </div>
 
           {/* 统计卡片：3 列 */}

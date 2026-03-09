@@ -8,6 +8,7 @@ import { ImageUpload } from "@/components/shared/image-upload";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/amap-loader";
 import toast from "react-hot-toast";
+
 interface CategoryItem {
   id: string;
   name: string;
@@ -16,7 +17,7 @@ interface CategoryItem {
 
 interface GroupedCategories {
   regular: CategoryItem[];
-  micro: CategoryItem[];
+  convenience: CategoryItem[];
 }
 
 interface POI {
@@ -67,7 +68,7 @@ export function POIEditDialog({
 
   const [categoryGroups, setCategoryGroups] = useState<GroupedCategories>({
     regular: [],
-    micro: [],
+    convenience: [],
   });
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -90,7 +91,7 @@ export function POIEditDialog({
     },
   });
 
-  // 加载分类列表（常规 + 微观，分组）
+  // 加载分类列表（常规 + 便民公共设施，分组）
   useEffect(() => {
     const fetchCategories = async () => {
       if (!schoolId) return;
@@ -102,7 +103,7 @@ export function POIEditDialog({
         if (data.success && data.data) {
           setCategoryGroups({
             regular: data.data.regular || [],
-            micro: data.data.micro || [],
+            convenience: data.data.convenience || [],
           });
         }
       } catch (error) {
@@ -362,7 +363,7 @@ export function POIEditDialog({
                 <div className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm text-gray-500">
                   加载分类中...
                 </div>
-              ) : categoryGroups.regular.length + categoryGroups.micro.length === 0 ? (
+              ) : categoryGroups.regular.length + categoryGroups.convenience.length === 0 ? (
                 <div className="w-full rounded-lg border border-orange-300 bg-orange-50 px-4 py-2.5 text-sm text-orange-700">
                   暂无分类，请先前往「分类管理」创建分类
                 </div>
@@ -382,9 +383,9 @@ export function POIEditDialog({
                       ))}
                     </optgroup>
                   )}
-                  {categoryGroups.micro.length > 0 && (
-                    <optgroup label="微观设施">
-                      {categoryGroups.micro.map((cat) => (
+                  {categoryGroups.convenience.length > 0 && (
+                    <optgroup label="便民公共设施">
+                      {categoryGroups.convenience.map((cat) => (
                         <option key={cat.id} value={cat.id}>
                           {cat.name}
                         </option>

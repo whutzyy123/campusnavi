@@ -3,10 +3,13 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerUser } from "@/lib/auth-server-actions";
+import { getAgreementContent } from "@/lib/agreement-actions";
 import { validateInvitationCode } from "@/lib/invitation-actions";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
-import { UserPlus, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { UserPlus, CheckCircle, AlertCircle, Loader2, Lock } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AgreementModal } from "@/components/auth/agreement-modal";
 import toast from "react-hot-toast";
 
 /**
@@ -38,6 +41,11 @@ export default function RegisterPage() {
     message?: string;
   } | null>(null);
   const [isVerifyingCode, setIsVerifyingCode] = useState(false);
+  const [isAgreed, setIsAgreed] = useState(false);
+  const [agreementModalContent, setAgreementModalContent] = useState<string>("");
+  const [agreementModalTitle, setAgreementModalTitle] = useState<string>("");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAgreementLoading, setIsAgreementLoading] = useState(false);
 
   /** 邀请码已验证通过时，锁定学校和角色（Code-First） */
   const codeVerified = invitationCodeStatus?.valid === true;
@@ -66,7 +74,7 @@ export default function RegisterPage() {
     fetchSchools();
   }, [setSchools]);
 
-  /** 验证邀请码（Code-First：验证成功后自动填充学校和角色） */
+  /** 验证邀请码（Code-First：验证成功后立即锁定学校和角色） */
   const handleVerifyInvitationCode = async () => {
     const code = formData.invitationCode.trim().toUpperCase();
     if (!code || code.length < 4) {
@@ -81,6 +89,7 @@ export default function RegisterPage() {
       const result = await validateInvitationCode(code);
 
       if (result.valid) {
+        // 立即更新状态，确保 UI 即时反映验证结果
         setInvitationCodeStatus({
           valid: true,
           schoolName: result.schoolName,
@@ -94,6 +103,10 @@ export default function RegisterPage() {
           role: result.roleType,
           invitationCode: code,
         }));
+        // 收起键盘并触发任何依赖 blur 的 UI 效果
+        if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur();
+        }
         toast.success(
           `邀请码有效！将加入 ${result.schoolName} 作为${result.roleType === "ADMIN" ? "校级管理员" : "工作人员"}`
         );
@@ -111,6 +124,23 @@ export default function RegisterPage() {
     } finally {
       setIsVerifyingCode(false);
     }
+  };
+
+  /** 查看协议/免责声明 */
+  const handleViewAgreement = async (type: "user" | "disclaimer") => {
+    setIsAgreementLoading(true);
+    setAgreementModalTitle(type === "user" ? "用户协议" : "免责声明");
+    setAgreementModalContent("");
+    setIsModalOpen(true);
+
+    const result = await getAgreementContent(type);
+    if (result.success) {
+      setAgreementModalContent(result.data);
+    } else {
+      toast.error(result.error || "文档未找到");
+      setIsModalOpen(false);
+    }
+    setIsAgreementLoading(false);
   };
 
   /** 清空邀请码时重置 Code-First 状态 */
@@ -167,6 +197,7 @@ export default function RegisterPage() {
       if (formData.invitationCode) {
         formDataObj.append("invitationCode", formData.invitationCode.trim().toUpperCase());
       }
+      formDataObj.append("agreed", isAgreed ? "true" : "false");
 
       // 调用 Server Action
       const result = await registerUser(formDataObj);
@@ -321,7 +352,7 @@ export default function RegisterPage() {
                 邀请码（可选）
               </label>
               <div className="flex gap-2">
-                <div className="relative flex-1">
+                <div className="relative min-w-0 flex-1">
                   <input
                     id="invitationCode"
                     type="text"
@@ -329,11 +360,6 @@ export default function RegisterPage() {
                     onChange={(e) =>
                       setFormData({ ...formData, invitationCode: e.target.value.toUpperCase().trim() })
                     }
-                    onBlur={() => {
-                      if (formData.invitationCode.trim().length >= 4 && !codeVerified) {
-                        handleVerifyInvitationCode();
-                      }
-                    }}
                     placeholder="输入邀请码后点击验证"
                     disabled={codeVerified}
                     className={`w-full rounded-lg border px-4 py-2.5 font-mono focus:outline-none focus:ring-2 disabled:bg-gray-50 ${
@@ -344,19 +370,30 @@ export default function RegisterPage() {
                         : "border-gray-300 focus:border-[#FF4500] focus:ring-[#FF4500]/20"
                     }`}
                   />
-                  {isVerifyingCode && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Loader2 className="h-4 w-4 animate-spin text-[#FF4500]" />
-                    </div>
-                  )}
                 </div>
                 <button
                   type="button"
-                  onClick={codeVerified ? handleClearInvitationCode : handleVerifyInvitationCode}
-                  disabled={isVerifyingCode || !formData.invitationCode.trim()}
-                  className="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    if (codeVerified) {
+                      handleClearInvitationCode();
+                    } else {
+                      handleVerifyInvitationCode();
+                    }
+                  }}
+                  disabled={!codeVerified && (isVerifyingCode || !formData.invitationCode.trim())}
+                  className="flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {codeVerified ? "清除" : "验证"}
+                  {!codeVerified && isVerifyingCode ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>验证中</span>
+                    </>
+                  ) : codeVerified ? (
+                    "清除"
+                  ) : (
+                    "验证"
+                  )}
                 </button>
               </div>
 
@@ -377,13 +414,33 @@ export default function RegisterPage() {
               )}
             </div>
 
-            {/* 选择角色和学校（邀请码验证通过时隐藏，Code-First 锁定） */}
-            {!codeVerified && (
-              <>
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-gray-700">
-                    注册身份 <span className="text-red-500">*</span>
-                  </label>
+            {/* 选择角色和学校（邀请码验证通过时锁定显示，否则可编辑） */}
+            <div>
+              <label className="mb-2 block text-sm font-medium text-gray-700">
+                注册身份 <span className="text-red-500">*</span>
+                {codeVerified && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-xs font-normal text-amber-600">
+                    <Lock className="h-3.5 w-3.5" />
+                    已由邀请码锁定
+                  </span>
+                )}
+              </label>
+              {codeVerified ? (
+                /* 邀请码锁定：只读展示 */
+                <div className="space-y-4">
+                  <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-700">
+                    {formData.role === "ADMIN" ? "我是管理员" : formData.role === "STAFF" ? "我是工作人员" : "我是学生"}
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-gray-500">所属学校</label>
+                    <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm text-gray-700">
+                      {invitationCodeStatus?.schoolName ?? "—"}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 未验证：可编辑 */
+                <>
                   <div className="flex gap-2 border-b border-gray-200">
                     <button
                       type="button"
@@ -419,39 +476,39 @@ export default function RegisterPage() {
                       我是工作人员
                     </button>
                   </div>
-                </div>
 
-                {/* 选择学校（仅学生显示） */}
-                {formData.role === "STUDENT" && (
-                  <div>
-                    <label htmlFor="schoolId" className="mb-2 block text-sm font-medium text-gray-700">
-                      选择学校 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      id="schoolId"
-                      value={formData.schoolId}
-                      onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
-                      className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
-                      required={formData.role === "STUDENT"}
-                    >
-                      <option value="">请选择学校</option>
-                      {schools.map((school) => (
-                        <option key={school.id} value={school.id}>
-                          {school.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                  {/* 选择学校（仅学生显示） */}
+                  {formData.role === "STUDENT" && (
+                    <div className="mt-4">
+                      <label htmlFor="schoolId" className="mb-2 block text-sm font-medium text-gray-700">
+                        选择学校 <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="schoolId"
+                        value={formData.schoolId}
+                        onChange={(e) => setFormData({ ...formData, schoolId: e.target.value })}
+                        className="w-full rounded-lg border border-gray-300 px-4 py-2.5 focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                        required={formData.role === "STUDENT"}
+                      >
+                        <option value="">请选择学校</option>
+                        {schools.map((school) => (
+                          <option key={school.id} value={school.id}>
+                            {school.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
-                {formData.role !== "STUDENT" && (
-                  <p className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                    <span>管理员/工作人员需先输入并验证邀请码</span>
-                  </p>
-                )}
-              </>
-            )}
+                  {formData.role !== "STUDENT" && (
+                    <p className="mt-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                      <AlertCircle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                      <span>管理员/工作人员需先输入并验证邀请码</span>
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
 
             {/* 错误提示 */}
             {error && (
@@ -461,11 +518,39 @@ export default function RegisterPage() {
               </div>
             )}
 
+            {/* 协议勾选 */}
+            <div className="flex flex-row items-start gap-2">
+              <Checkbox
+                checked={isAgreed}
+                onChange={(e) => setIsAgreed(e.target.checked)}
+                className="mt-0.5 flex-shrink-0"
+              />
+              <span className="text-sm text-gray-700">
+                我已阅读并同意{" "}
+                <button
+                  type="button"
+                  onClick={() => handleViewAgreement("user")}
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  用户协议
+                </button>{" "}
+                与{" "}
+                <button
+                  type="button"
+                  onClick={() => handleViewAgreement("disclaimer")}
+                  className="text-primary underline-offset-2 hover:underline"
+                >
+                  免责条款
+                </button>
+              </span>
+            </div>
+
             {/* 提交按钮 */}
             <button
               type="submit"
               disabled={
                 isSubmitting ||
+                !isAgreed ||
                 !formData.email ||
                 !formData.nickname ||
                 !formData.password ||
@@ -490,6 +575,15 @@ export default function RegisterPage() {
           </form>
           )}
         </div>
+
+        {/* 协议弹窗 */}
+        <AgreementModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          title={agreementModalTitle}
+          content={agreementModalContent}
+          isLoading={isAgreementLoading}
+        />
 
         {/* 底部 */}
         <div className="border-t border-gray-200 px-8 py-6 text-center">

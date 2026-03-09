@@ -8,7 +8,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { POIManagerTable } from "@/components/poi-manager-table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { deletePOI, getPOIsBySchool } from "@/lib/poi-actions";
+import { createPOI, deletePOI, getPOIsBySchool } from "@/lib/poi-actions";
 import toast from "react-hot-toast";
 import { X, MapPin, Plus } from "lucide-react";
 import { Select } from "@/components/ui/select";
@@ -91,18 +91,18 @@ export default function POIManagementPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // 动态分类列表（分组：常规 + 微观）
+  // 动态分类列表（分组：常规 + 便民公共设施）
   const [categoryGroups, setCategoryGroups] = useState<{
     regular: Array<{ id: string; name: string }>;
-    micro: Array<{ id: string; name: string }>;
-  }>({ regular: [], micro: [] });
+    convenience: Array<{ id: string; name: string }>;
+  }>({ regular: [], convenience: [] });
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
 
-  // 加载分类列表（常规 + 微观，分组）
+  // 加载分类列表（常规 + 便民公共设施，分组）
   useEffect(() => {
     const fetchCategories = async () => {
       if (!currentUser?.schoolId) {
-        setCategoryGroups({ regular: [], micro: [] });
+        setCategoryGroups({ regular: [], convenience: [] });
         setIsLoadingCategories(false);
         return;
       }
@@ -118,21 +118,21 @@ export default function POIManagementPage() {
         const result = await response.json();
 
         if (result.success && result.data?.regular !== undefined) {
-          const { regular = [], micro = [] } = result.data;
-          setCategoryGroups({ regular, micro });
+          const { regular = [], convenience = [] } = result.data;
+          setCategoryGroups({ regular, convenience });
           const firstRegular = regular[0];
-          const firstMicro = micro[0];
+          const firstConvenience = convenience[0];
           setFormData((prev) => {
             if (prev.categoryId) return prev;
-            const firstId = firstRegular?.id ?? firstMicro?.id;
+            const firstId = firstRegular?.id ?? firstConvenience?.id;
             return firstId ? { ...prev, categoryId: firstId } : prev;
           });
         } else {
-          setCategoryGroups({ regular: [], micro: [] });
+          setCategoryGroups({ regular: [], convenience: [] });
           if (result.message) toast.error(result.message);
         }
       } catch (error) {
-        setCategoryGroups({ regular: [], micro: [] });
+        setCategoryGroups({ regular: [], convenience: [] });
         console.error("获取分类列表失败:", error);
         toast.error("获取分类列表失败");
       } finally {
@@ -203,7 +203,8 @@ export default function POIManagementPage() {
       previewMarkerRef.current = marker;
 
       // 填充表单并切换到表单视图
-      const firstCategoryId = categoryGroups.regular[0]?.id ?? categoryGroups.micro[0]?.id ?? "";
+      const firstCategoryId =
+        categoryGroups.regular[0]?.id ?? categoryGroups.convenience[0]?.id ?? "";
       setFormData((prev) => ({
         ...prev,
         lat,
@@ -439,10 +440,15 @@ export default function POIManagementPage() {
     loadAndRenderPOIs();
   }, [amap, activeSchool, refreshKey]);
 
-  // 保存 POI
+  // 保存 POI（使用 Server Action，避免调用已删除的 /api/pois）
   const handleSave = async () => {
     if (!formData.name.trim() || !selectedSchool) {
       setSaveMessage({ type: "error", text: "请填写 POI 名称并选择学校" });
+      return;
+    }
+
+    if (!formData.categoryId) {
+      setSaveMessage({ type: "error", text: "请选择分类" });
       return;
     }
 
@@ -450,34 +456,21 @@ export default function POIManagementPage() {
     setSaveMessage(null);
 
     try {
-      const response = await fetch("/api/pois", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          schoolId: selectedSchool,
-          name: formData.name.trim(),
-          alias: formData.alias?.trim() || undefined,
-          categoryId: formData.categoryId,
-          lat: formData.lat,
-          lng: formData.lng,
-          description: formData.description.trim() || undefined,
-          parentId: formData.parentId || undefined,
-        }),
+      const result = await createPOI({
+        schoolId: selectedSchool,
+        name: formData.name.trim(),
+        alias: formData.alias?.trim() || null,
+        categoryId: formData.categoryId,
+        lat: formData.lat,
+        lng: formData.lng,
+        description: formData.description.trim() || null,
+        parentId: formData.parentId || null,
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        // 根据状态码显示不同的错误信息
-        let errorMessage = data.message || "保存失败";
-        if (response.status === 403) {
-          errorMessage = data.message || "分类无效或无权使用，请检查分类选择";
-        } else if (response.status === 404) {
-          errorMessage = data.message || "分类不存在，请刷新页面后重试";
-        }
-        throw new Error(errorMessage);
+      if (!result.success) {
+        toast.error(result.error || "POI 创建失败");
+        setSaveMessage({ type: "error", text: result.error || "POI 创建失败，请重试" });
+        return;
       }
 
       setSaveMessage({ type: "success", text: "POI 创建成功！" });
@@ -492,7 +485,8 @@ export default function POIManagementPage() {
         setFormData({
           name: "",
           alias: null,
-          categoryId: categoryGroups.regular[0]?.id ?? categoryGroups.micro[0]?.id ?? "",
+          categoryId:
+            categoryGroups.regular[0]?.id ?? categoryGroups.convenience[0]?.id ?? "",
           description: "",
           lat: 0,
           lng: 0,
@@ -502,10 +496,9 @@ export default function POIManagementPage() {
         handlePOISaved();
       }, 1500);
     } catch (err) {
-      setSaveMessage({
-        type: "error",
-        text: err instanceof Error ? err.message : "保存失败，请重试",
-      });
+      const message = err instanceof Error ? err.message : "保存失败，请重试";
+      toast.error(message);
+      setSaveMessage({ type: "error", text: message });
     } finally {
       setIsSaving(false);
     }
@@ -674,7 +667,7 @@ export default function POIManagementPage() {
                       <div className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-500">
                         加载分类中...
                       </div>
-                    ) : (categoryGroups.regular.length + categoryGroups.micro.length) === 0 ? (
+                    ) : (categoryGroups.regular.length + categoryGroups.convenience.length) === 0 ? (
                       <div className="rounded-lg border border-orange-300 bg-orange-50 px-4 py-2 text-sm text-orange-700">
                         暂无分类，请先前往「分类管理」创建
                       </div>
@@ -688,8 +681,11 @@ export default function POIManagementPage() {
                             options: categoryGroups.regular.map((c) => ({ value: c.id, label: c.name })),
                           },
                           {
-                            label: "微观设施",
-                            options: categoryGroups.micro.map((c) => ({ value: c.id, label: c.name })),
+                            label: "便民公共设施",
+                            options: categoryGroups.convenience.map((c) => ({
+                              value: c.id,
+                              label: c.name,
+                            })),
                           },
                         ].filter((g) => g.options.length > 0)}
                         placeholder="选择分类"
@@ -738,7 +734,7 @@ export default function POIManagementPage() {
                         !selectedSchool ||
                         !formData.categoryId ||
                         isLoadingCategories ||
-                        (categoryGroups.regular.length + categoryGroups.micro.length) === 0
+                        (categoryGroups.regular.length + categoryGroups.convenience.length) === 0
                       }
                       className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF5500] disabled:cursor-not-allowed disabled:opacity-50"
                     >

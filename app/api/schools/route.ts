@@ -1,50 +1,25 @@
-import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { NextResponse } from "next/server";
+import { getSchoolsWithStats } from "@/lib/school-actions";
 
 /**
  * GET /api/schools
  * 获取所有学校列表（带聚合数据，用于超级管理员后台）
+ * 使用 getSchoolsWithStats，确保 0 用户的学校也会返回
  */
 export async function GET() {
   try {
-    const schools = await prisma.school.findMany({
-      where: {
-        schoolCode: {
-          not: "system", // 排除系统学校
-        },
-      },
-      take: 200,
-      select: {
-        id: true,
-        name: true,
-        schoolCode: true,
-        isActive: true,
-        createdAt: true,
-        updatedAt: true,
-        _count: {
-          select: {
-            users: true,
-            pois: true,
-          },
-        },
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    });
+    const result = await getSchoolsWithStats();
+
+    if (!result.success) {
+      return NextResponse.json(
+        { success: false, message: result.error },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      schools: schools.map((school) => ({
-        id: school.id,
-        name: school.name,
-        schoolCode: school.schoolCode,
-        isActive: school.isActive,
-        userCount: school._count.users,
-        poiCount: school._count.pois,
-        createdAt: school.createdAt.toISOString(),
-        updatedAt: school.updatedAt.toISOString(),
-      })),
+      schools: result.data,
     });
   } catch (error) {
     console.error("获取学校列表失败:", error);

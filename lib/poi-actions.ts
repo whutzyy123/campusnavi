@@ -278,6 +278,7 @@ export async function createPOI(
         select: { id: true, schoolId: true, name: true, isGlobal: true, isMicroCategory: true },
       });
       if (!cat) return { success: false, error: "分类不存在" };
+      // isMicroCategory：便民公共设施，全平台可用
       const allowed = cat.isGlobal || cat.isMicroCategory || cat.schoolId === schoolId;
       if (!allowed) return { success: false, error: "分类无效或无权使用" };
 
@@ -495,6 +496,7 @@ export async function updatePOI(
           select: { id: true, name: true, schoolId: true, isGlobal: true, isMicroCategory: true },
         });
         if (!category) return { success: false, error: "分类不存在" };
+        // isMicroCategory：便民公共设施，全平台可用
         const isAllowed =
           category.isGlobal ||
           category.isMicroCategory ||

@@ -1737,24 +1737,29 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       {/* 举报/活动/失物招领/用户资料等 Modal（isOpen 时渲染） */}
       {isOpen && (
         <>
-          {/* 举报弹窗 */}
-          <AnimatePresence>
-            {showReportModal && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50"
-                onClick={() => setShowReportModal(false)}
-              >
+          {/* 举报弹窗 - Portal 渲染到 body，z-index 高于 Drawer(110)，确保遮罩覆盖抽屉 */}
+          {showReportModal &&
+            createPortal(
+              <AnimatePresence>
                 <motion.div
-                  initial={{ scale: 0.9, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0.9, opacity: 0 }}
-                  onClick={(e) => e.stopPropagation()}
-                  className="modal-container max-w-md"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/50"
+                  onClick={() => setShowReportModal(false)}
+                  role="presentation"
                 >
-                  <h3 className="modal-header px-6 pt-6 text-lg font-semibold text-gray-900">举报 POI</h3>
+                  <motion.div
+                    initial={{ scale: 0.9, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.9, opacity: 0 }}
+                    onClick={(e) => e.stopPropagation()}
+                    className="z-[210] relative modal-container max-w-md w-full mx-auto bg-white rounded-xl shadow-xl overflow-hidden"
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="report-poi-title"
+                  >
+                  <h3 id="report-poi-title" className="modal-header px-6 pt-6 text-lg font-semibold text-gray-900">举报 POI</h3>
 
                   <div className="modal-body space-y-4 px-6 py-4 scrollbar-gutter-stable">
                     <div>
@@ -1808,8 +1813,9 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
                   </div>
                 </motion.div>
               </motion.div>
+            </AnimatePresence>,
+              document.body
             )}
-          </AnimatePresence>
 
           {/* 活动详情弹窗 - 独立组件，Portal + 严格居中 */}
           <ActivityDetailModal

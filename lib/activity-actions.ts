@@ -9,6 +9,14 @@ import { prisma } from "@/lib/prisma";
 import { getAuthCookie } from "@/lib/auth-server-actions";
 import { validateContent } from "@/lib/content-validator";
 
+// Re-export types for Server Components (sync getActivityStatus must be imported from @/types/activity)
+export type {
+  ActivityWithPOI,
+  ActivityStatus,
+  ActivityPOIInfo,
+  ActivityBase,
+} from "@/types/activity";
+
 export interface ActivityActionResult<T = unknown> {
   success: boolean;
   data?: T;
@@ -372,23 +380,10 @@ export async function deleteActivity(id: string): Promise<ActivityActionResult<v
  * 按学校获取活动列表（管理端）
  * - 权限：ADMIN 或 STAFF，仅返回本校活动
  * - 包含已过期活动，便于管理
+ * - 返回 ActivityWithPOI 格式（含 poi.id, poi.name, poi.address）
  */
 export async function getActivitiesBySchool(): Promise<
-  ActivityActionResult<
-    Array<{
-      id: string;
-      poiId: string;
-      poiName: string;
-      title: string;
-      description: string;
-      link: string | null;
-      startAt: string;
-      endAt: string;
-      createdBy: string;
-      createdAt: string;
-      updatedAt: string;
-    }>
-  >
+  ActivityActionResult<import("@/types/activity").ActivityWithPOI[]>
 > {
   try {
     const authResult = await requireAdminOrStaff();
@@ -401,6 +396,7 @@ export async function getActivitiesBySchool(): Promise<
       where: { schoolId },
       select: {
         id: true,
+        schoolId: true,
         poiId: true,
         title: true,
         description: true,
@@ -410,7 +406,7 @@ export async function getActivitiesBySchool(): Promise<
         createdBy: true,
         createdAt: true,
         updatedAt: true,
-        poi: { select: { name: true } },
+        poi: { select: { id: true, name: true } },
       },
       orderBy: [{ endAt: "desc" }, { startAt: "desc" }],
     });
@@ -419,8 +415,8 @@ export async function getActivitiesBySchool(): Promise<
       success: true,
       data: activities.map((a) => ({
         id: a.id,
+        schoolId: a.schoolId,
         poiId: a.poiId,
-        poiName: a.poi?.name ?? "未知 POI",
         title: a.title,
         description: a.description,
         link: a.link,
@@ -429,6 +425,11 @@ export async function getActivitiesBySchool(): Promise<
         createdBy: a.createdBy,
         createdAt: a.createdAt.toISOString(),
         updatedAt: a.updatedAt.toISOString(),
+        poi: {
+          id: a.poi?.id ?? a.poiId,
+          name: a.poi?.name ?? "未知 POI",
+          address: null, // POI 暂无 address 字段，预留扩展
+        },
       })),
     };
   } catch (err) {
@@ -436,6 +437,64 @@ export async function getActivitiesBySchool(): Promise<
     return {
       success: false,
       error: err instanceof Error ? err.message : "获取活动列表失败",
+    };
+  }
+}
+
+/**
+ * 获取当前进行中的活动（Ongoing: startAt <= now <= endAt）
+ * - 不要求登录，由调用方传入 schoolId
+ * - 返回 ActivityWithPOI 格式，按 endAt 升序（即将结束的优先）
+ */
+export async function getOngoingActivities(
+  schoolId: string,
+  limit?: number
+): Promise<ActivityActionResult<import("@/types/activity").ActivityWithPOI[]>> {
+  try {
+    if (!schoolId?.trim()) {
+      return { success: false, error: "schoolId 为必填项" };
+    }
+
+    const now = new Date();
+    const activities = await prisma.activity.findMany({
+      where: {
+        schoolId: schoolId.trim(),
+        startAt: { lte: now },
+        endAt: { gte: now },
+      },
+      include: {
+        poi: { select: { id: true, name: true } },
+      },
+      orderBy: { endAt: "asc" },
+      ...(limit != null && limit > 0 ? { take: limit } : {}),
+    });
+
+    return {
+      success: true,
+      data: activities.map((a) => ({
+        id: a.id,
+        schoolId: a.schoolId,
+        poiId: a.poiId,
+        title: a.title,
+        description: a.description,
+        link: a.link,
+        startAt: a.startAt.toISOString(),
+        endAt: a.endAt.toISOString(),
+        createdBy: a.createdBy,
+        createdAt: a.createdAt.toISOString(),
+        updatedAt: a.updatedAt.toISOString(),
+        poi: {
+          id: a.poi?.id ?? a.poiId,
+          name: a.poi?.name ?? "未知 POI",
+          address: null, // POI 暂无 address 字段，预留扩展
+        },
+      })),
+    };
+  } catch (err) {
+    console.error("[getOngoingActivities]", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取进行中活动失败",
     };
   }
 }

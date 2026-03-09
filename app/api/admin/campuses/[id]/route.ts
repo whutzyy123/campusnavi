@@ -21,6 +21,14 @@ export async function PUT(
 ) {
   try {
     const auth = await requireAdmin();
+
+    if (auth.role === "STAFF") {
+      return NextResponse.json(
+        { success: false, message: "工作人员无权修改校区边界数据。" },
+        { status: 403 }
+      );
+    }
+
     const campusId = params.id;
     const body = await request.json();
     const { name, boundary } = body;
@@ -158,6 +166,14 @@ export async function DELETE(
 ) {
   try {
     const auth = await requireAdmin();
+
+    if (auth.role === "STAFF") {
+      return NextResponse.json(
+        { success: false, message: "工作人员无权修改校区边界数据。" },
+        { status: 403 }
+      );
+    }
+
     const campusId = params.id;
 
     // 获取校区信息

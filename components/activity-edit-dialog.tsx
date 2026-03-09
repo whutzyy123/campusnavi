@@ -7,7 +7,7 @@ import {
   createActivity,
   updateActivity,
   validateActivityContent,
-  type ActivityItem,
+  type ActivityWithPOI,
 } from "@/lib/activity-actions";
 import { getPOIsBySchool } from "@/lib/poi-actions";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -18,11 +18,8 @@ interface POIItem {
   category?: string;
 }
 
-/** 编辑时传入的列表项，含 poiName */
-type ActivityForEdit = ActivityItem & { poiName?: string };
-
 interface ActivityEditDialogProps {
-  activity: ActivityForEdit | null;
+  activity: ActivityWithPOI | null;
   schoolId: string;
   isOpen: boolean;
   onClose: () => void;
@@ -134,7 +131,7 @@ export function ActivityEditDialog({
   useEffect(() => {
     if (isOpen) {
       if (activity) {
-        const poiName = ("poiName" in activity ? activity.poiName : "") ?? "";
+        const poiName = activity.poi?.name ?? "";
         setFormData({
           poiId: activity.poiId,
           poiName,

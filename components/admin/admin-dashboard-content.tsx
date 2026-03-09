@@ -16,6 +16,7 @@ import {
 import { StatCard } from "@/components/admin/stat-card";
 import { CommandShortcuts } from "@/components/admin/command-shortcuts";
 import { SetupGuide } from "@/components/admin/setup-guide";
+import { LiveClock } from "@/components/admin/live-clock";
 import type { SchoolAdminStats } from "@/lib/admin-actions";
 
 interface AdminDashboardContentProps {
@@ -51,13 +52,11 @@ export function AdminDashboardContent({
 
   return (
     <div className="box-border p-6 lg:p-8">
-      <div className="mb-6">
+      <div className="mb-6 flex flex-col gap-1">
         <h1 className="text-2xl font-bold text-gray-900">
           您好，{schoolName} 管理员 {userNickname}。
         </h1>
-        <p className="mt-1 text-gray-600">
-          今日校园内有 {stats?.activeEvents ?? 0} 项正在进行的活动。
-        </p>
+        <LiveClock />
       </div>
 
       {stats &&

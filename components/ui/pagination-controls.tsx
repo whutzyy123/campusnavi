@@ -18,7 +18,7 @@ interface PaginationControlsProps {
  */
 export function PaginationControls(props: PaginationControlsProps) {
   return (
-    <Suspense fallback={<div className="h-10" />}>
+    <Suspense fallback={<div className="h-8" />}>
       <PaginationControlsInner {...props} />
     </Suspense>
   );
@@ -94,12 +94,12 @@ function PaginationControlsInner({
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className="flex items-center justify-center gap-2 py-4">
+    <div className="flex w-full items-center justify-center gap-1.5 py-1">
       {/* 上一页按钮 */}
       <button
         onClick={() => updatePage(currentPage - 1)}
         disabled={currentPage === 1}
-        className="flex items-center gap-1 rounded-lg border border-[#EDEFF1] bg-white px-3 py-1.5 text-sm font-medium text-[#1A1A1B] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+        className="flex items-center gap-1 rounded-md border border-[#EDEFF1] bg-white px-2.5 py-1 text-sm font-medium text-[#1A1A1B] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
         aria-label="上一页"
       >
         <ChevronLeft className="h-4 w-4" />
@@ -113,7 +113,7 @@ function PaginationControlsInner({
             return (
               <span
                 key={`ellipsis-${index}`}
-                className="px-2 text-sm text-[#7C7C7C]"
+                className="px-1.5 text-xs text-[#7C7C7C]"
               >
                 ...
               </span>
@@ -127,7 +127,7 @@ function PaginationControlsInner({
             <button
               key={pageNum}
               onClick={() => updatePage(pageNum)}
-              className={`min-w-[32px] rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`min-w-[28px] rounded-md px-2 py-1 text-sm font-medium transition-colors ${
                 isActive
                   ? "bg-[#FF4500] text-white hover:bg-[#FF4500]/90"
                   : "border border-[#EDEFF1] bg-white text-[#1A1A1B] hover:bg-[#F6F7F8]"
@@ -145,7 +145,7 @@ function PaginationControlsInner({
       <button
         onClick={() => updatePage(currentPage + 1)}
         disabled={currentPage === pageCount}
-        className="flex items-center gap-1 rounded-lg border border-[#EDEFF1] bg-white px-3 py-1.5 text-sm font-medium text-[#1A1A1B] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
+        className="flex items-center gap-1 rounded-md border border-[#EDEFF1] bg-white px-2.5 py-1 text-sm font-medium text-[#1A1A1B] transition-colors hover:bg-[#F6F7F8] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white"
         aria-label="下一页"
       >
         <span className="hidden sm:inline">下一页</span>
@@ -153,7 +153,7 @@ function PaginationControlsInner({
       </button>
 
       {/* 页码信息（可选，显示在右侧） */}
-      <div className="ml-4 hidden text-sm text-[#7C7C7C] sm:block">
+      <div className="ml-2 hidden text-xs text-[#7C7C7C] sm:block">
         第 {currentPage} 页，共 {pageCount} 页
       </div>
     </div>

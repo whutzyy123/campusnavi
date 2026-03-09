@@ -7,7 +7,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
-import { Building2, Plus, MoreVertical, Edit, Power, PowerOff, Trash2, Save, X, Check, Copy } from "lucide-react";
+import { Building2, Plus, MoreVertical, Edit, Power, PowerOff, Trash2, Save, X, Check, Copy, ArrowUpDown } from "lucide-react";
 import toast from "react-hot-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/table";
@@ -48,6 +48,10 @@ export default function SchoolsManagementPage() {
   const [generatedCode, setGeneratedCode] = useState<string>("");
   const [copied, setCopied] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+
+  // 表格排序：'userCount' | 'poiCount' | null（默认按 API 返回顺序）
+  const [sortBy, setSortBy] = useState<"userCount" | "poiCount" | null>(null);
+  const [sortDesc, setSortDesc] = useState(true);
 
   // 检查是否为超级管理员
   const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
@@ -249,6 +253,23 @@ export default function SchoolsManagementPage() {
     }
   };
 
+  // 排序后的学校列表（兼容 userCount/poiCount 为 undefined 的旧数据）
+  const sortedSchools = [...schools].sort((a, b) => {
+    if (!sortBy) return 0;
+    const aVal = (a[sortBy] ?? 0) as number;
+    const bVal = (b[sortBy] ?? 0) as number;
+    return sortDesc ? bVal - aVal : aVal - bVal;
+  });
+
+  const handleSort = (column: "userCount" | "poiCount") => {
+    if (sortBy === column) {
+      setSortDesc((d) => !d);
+    } else {
+      setSortBy(column);
+      setSortDesc(true);
+    }
+  };
+
   if (!isSuperAdmin) {
     return (
       <AuthGuard requiredRole="SUPER_ADMIN">
@@ -299,14 +320,32 @@ export default function SchoolsManagementPage() {
                       <TableHead className="w-[200px]">学校名称</TableHead>
                       <TableHead className="w-[120px]">唯一代码</TableHead>
                       <TableHead className="w-[100px]">状态</TableHead>
-                      <TableHead className="w-[100px] text-center">用户数</TableHead>
-                      <TableHead className="w-[100px] text-center">POI 数</TableHead>
+                      <TableHead className="w-[100px] text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleSort("userCount")}
+                          className="inline-flex items-center gap-1 text-gray-700 hover:text-gray-900"
+                        >
+                          用户数
+                          <ArrowUpDown className="h-3.5 w-3.5" />
+                        </button>
+                      </TableHead>
+                      <TableHead className="w-[100px] text-center">
+                        <button
+                          type="button"
+                          onClick={() => handleSort("poiCount")}
+                          className="inline-flex items-center gap-1 text-gray-700 hover:text-gray-900"
+                        >
+                          POI 数
+                          <ArrowUpDown className="h-3.5 w-3.5" />
+                        </button>
+                      </TableHead>
                       <TableHead className="w-[120px]">创建日期</TableHead>
                       <TableHead className="w-[100px] text-right">操作</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {schools.map((school) => (
+                    {sortedSchools.map((school) => (
                       <TableRow key={school.id}>
                         <TableCell className="font-medium">{school.name}</TableCell>
                         <TableCell>
@@ -317,8 +356,16 @@ export default function SchoolsManagementPage() {
                         <TableCell>
                           <StatusBadge domain="school" status={school.isActive} />
                         </TableCell>
-                        <TableCell className="text-center">{school.userCount}</TableCell>
-                        <TableCell className="text-center">{school.poiCount}</TableCell>
+                        <TableCell
+                          className={`text-center ${(school.userCount ?? 0) === 0 ? "text-gray-500" : ""}`}
+                        >
+                          {school.userCount ?? 0}
+                        </TableCell>
+                        <TableCell
+                          className={`text-center ${(school.poiCount ?? 0) === 0 ? "text-gray-500" : ""}`}
+                        >
+                          {school.poiCount ?? 0}
+                        </TableCell>
                         <TableCell>
                           {new Date(school.createdAt).toLocaleDateString("zh-CN", {
                             year: "numeric",

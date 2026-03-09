@@ -2,7 +2,7 @@
 
 /**
  * 分类 Server Actions
- * - 微观分类（Micro Category）CRUD：仅超级管理员可管理
+ * - 便民公共设施（DB 字段 isMicroCategory）CRUD：仅超级管理员可管理
  * - POI 分类（System/Local）更新与删除：按角色区分权限
  *
  * 分类类型定义：
@@ -14,6 +14,7 @@ import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { upsertCategoryOverride, removeCategoryOverride } from "@/lib/category-utils";
 
+/** 便民公共设施分类项（对应 DB isMicroCategory === true，字段未更名避免迁移） */
 export interface MicroCategoryItem {
   id: string;
   name: string;
@@ -23,6 +24,9 @@ export interface MicroCategoryItem {
   updatedAt: string;
 }
 
+/** 便民公共设施分类项（MicroCategoryItem 的语义化别名，供新代码使用） */
+export type ConvenienceCategoryItem = MicroCategoryItem;
+
 export interface CategoryActionResult {
   success: boolean;
   data?: MicroCategoryItem | MicroCategoryItem[];
@@ -31,8 +35,8 @@ export interface CategoryActionResult {
 }
 
 /**
- * 获取所有微观分类
- * 条件：isMicroCategory === true 且 schoolId === null
+ * 获取所有便民公共设施分类
+ * 条件：isMicroCategory === true 且 schoolId === null（DB 字段未更名，避免迁移）
  * 无需鉴权，供校管创建 POI、用户筛选等场景使用
  */
 export async function getMicroCategories(): Promise<{
@@ -70,7 +74,7 @@ export async function getMicroCategories(): Promise<{
 
     return { success: true, data };
   } catch (error) {
-    console.error("获取微观分类失败:", error);
+    console.error("获取便民公共设施失败:", error);
     return {
       success: false,
       error: error instanceof Error ? error.message : "未知错误",
@@ -90,16 +94,17 @@ async function requireSuperAdminForMicroCategory(): Promise<
   }
 
   if (auth.role !== "SUPER_ADMIN") {
-    return { ok: false, error: "仅超级管理员可管理微观分类" };
+    return { ok: false, error: "仅超级管理员可管理便民公共设施" };
   }
 
   return { ok: true };
 }
 
 /**
- * 创建微观分类
+ * 创建便民公共设施分类
  * 权限：仅 SUPER_ADMIN
  * 多租户：schoolId 强制为 null，忽略客户端传入
+ * DB 字段：isMicroCategory
  */
 export async function createMicroCategory(input: {
   name: string;
@@ -120,7 +125,7 @@ export async function createMicroCategory(input: {
       return { success: false, message: "分类名称过长（最多 50 字）" };
     }
 
-    // 检查是否已存在同名微观分类
+    // 检查是否已存在同名便民公共设施
     const existing = await prisma.category.findFirst({
       where: {
         isMicroCategory: true,
@@ -130,7 +135,7 @@ export async function createMicroCategory(input: {
     });
 
     if (existing) {
-      return { success: false, message: "该微观分类名称已存在" };
+      return { success: false, message: "该便民公共设施名称已存在" };
     }
 
     // 创建时强制 schoolId 为 null，忽略客户端传入
@@ -154,7 +159,7 @@ export async function createMicroCategory(input: {
 
     return {
       success: true,
-      message: "微观分类创建成功",
+      message: "便民公共设施创建成功",
       data: {
         id: category.id,
         name: category.name,
@@ -165,7 +170,7 @@ export async function createMicroCategory(input: {
       },
     };
   } catch (error) {
-    console.error("创建微观分类失败:", error);
+    console.error("创建便民公共设施失败:", error);
     return {
       success: false,
       message: "创建失败，请重试",
@@ -175,7 +180,7 @@ export async function createMicroCategory(input: {
 }
 
 /**
- * 更新微观分类
+ * 更新便民公共设施分类
  * 权限：仅 SUPER_ADMIN
  * 仅允许更新 isMicroCategory === true 且 schoolId === null 的分类
  */
@@ -199,7 +204,7 @@ export async function updateMicroCategory(
     }
 
     if (!existing.isMicroCategory || existing.schoolId !== null) {
-      return { success: false, message: "只能更新微观分类" };
+      return { success: false, message: "只能更新便民公共设施" };
     }
 
     const trimmedName = input.name?.trim();
@@ -210,7 +215,7 @@ export async function updateMicroCategory(
       if (trimmedName.length > 50) {
         return { success: false, message: "分类名称过长（最多 50 字）" };
       }
-      // 若改名，检查是否与其它微观分类重名
+      // 若改名，检查是否与其它便民公共设施重名
       const duplicate = await prisma.category.findFirst({
         where: {
           isMicroCategory: true,
@@ -220,7 +225,7 @@ export async function updateMicroCategory(
         },
       });
       if (duplicate) {
-        return { success: false, message: "该微观分类名称已存在" };
+        return { success: false, message: "该便民公共设施名称已存在" };
       }
     }
 
@@ -243,7 +248,7 @@ export async function updateMicroCategory(
 
     return {
       success: true,
-      message: "微观分类更新成功",
+      message: "便民公共设施更新成功",
       data: {
         id: category.id,
         name: category.name,
@@ -254,7 +259,7 @@ export async function updateMicroCategory(
       },
     };
   } catch (error) {
-    console.error("更新微观分类失败:", error);
+    console.error("更新便民公共设施失败:", error);
     return {
       success: false,
       message: "更新失败，请重试",
@@ -264,7 +269,7 @@ export async function updateMicroCategory(
 }
 
 /**
- * 删除微观分类
+ * 删除便民公共设施分类
  * 权限：仅 SUPER_ADMIN
  * 仅允许删除 isMicroCategory === true 且 schoolId === null 的分类
  */
@@ -285,16 +290,16 @@ export async function deleteMicroCategory(id: string): Promise<CategoryActionRes
     }
 
     if (!existing.isMicroCategory || existing.schoolId !== null) {
-      return { success: false, message: "只能删除微观分类" };
+      return { success: false, message: "只能删除便民公共设施" };
     }
 
     await prisma.category.delete({
       where: { id },
     });
 
-    return { success: true, message: "微观分类已删除" };
+    return { success: true, message: "便民公共设施已删除" };
   } catch (error) {
-    console.error("删除微观分类失败:", error);
+    console.error("删除便民公共设施失败:", error);
     return {
       success: false,
       message: "删除失败，请重试",
@@ -344,9 +349,9 @@ export async function updateCategory(
       return { success: false, error: "分类不存在" };
     }
 
-    // 微观分类使用 updateMicroCategory
+    // 便民公共设施使用 updateMicroCategory
     if (category.isMicroCategory) {
-      return { success: false, error: "请使用微观分类的更新接口" };
+      return { success: false, error: "请使用便民公共设施的更新接口" };
     }
 
     if (isSystemCategory(category)) {
@@ -541,9 +546,9 @@ export async function deleteCategory(id: string): Promise<CategoryUpdateResult> 
       return { success: false, error: "分类不存在" };
     }
 
-    // 微观分类使用 deleteMicroCategory
+    // 便民公共设施使用 deleteMicroCategory
     if (category.isMicroCategory) {
-      return { success: false, error: "请使用微观分类的删除接口" };
+      return { success: false, error: "请使用便民公共设施的删除接口" };
     }
 
     if (category._count.pois > 0) {
@@ -630,7 +635,7 @@ export async function getAllUniqueCategories(filters?: {
     const keyword = filters?.keyword?.trim();
     const schoolIdFilter = filters?.schoolId || undefined;
 
-    // 1. 系统分类（isGlobal + schoolId null，排除微观分类）
+    // 1. 系统分类（isGlobal + schoolId null，排除便民公共设施）
     const systemCategories = await prisma.category.findMany({
       where: {
         isGlobal: true,
@@ -648,7 +653,7 @@ export async function getAllUniqueCategories(filters?: {
       orderBy: { createdAt: "asc" },
     });
 
-    // 2. 校内分类（schoolId !== null，排除微观分类）
+    // 2. 校内分类（schoolId !== null，排除便民公共设施）
     const localCategories = await prisma.category.findMany({
       where: {
         schoolId: schoolIdFilter ? schoolIdFilter : { not: null },

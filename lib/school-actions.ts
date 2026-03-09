@@ -2,11 +2,71 @@
 
 /**
  * 学校管理 Server Actions
- * 超级管理员专用：切换学校状态、删除学校
+ * 超级管理员专用：切换学校状态、删除学校、获取学校列表（含统计）
  */
 
 import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
+
+export interface SchoolWithStats {
+  id: string;
+  name: string;
+  schoolCode: string;
+  isActive: boolean;
+  userCount: number;
+  poiCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 获取所有学校列表（含用户数、POI 数）
+ * 不按用户数过滤，确保 0 用户的学校也会返回（Left Join 语义）
+ */
+export async function getSchoolsWithStats(): Promise<
+  { success: true; data: SchoolWithStats[] } | { success: false; error: string }
+> {
+  try {
+    const schools = await prisma.school.findMany({
+      where: {
+        schoolCode: { not: "system" },
+      },
+      take: 200,
+      select: {
+        id: true,
+        name: true,
+        schoolCode: true,
+        isActive: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: {
+          select: { users: true, pois: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      success: true,
+      data: schools.map((s) => ({
+        id: s.id,
+        name: s.name,
+        schoolCode: s.schoolCode,
+        isActive: s.isActive,
+        userCount: s._count.users,
+        poiCount: s._count.pois,
+        createdAt: s.createdAt.toISOString(),
+        updatedAt: s.updatedAt.toISOString(),
+      })),
+    };
+  } catch (err) {
+    console.error("getSchoolsWithStats 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取学校列表失败",
+    };
+  }
+}
 
 export type SchoolStatus = "ACTIVE" | "INACTIVE";
 

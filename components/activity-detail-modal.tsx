@@ -1,17 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { createPortal } from "react-dom";
-import { X, ExternalLink } from "lucide-react";
+import { X, ExternalLink, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ActivityWithPOI } from "@/types/activity";
 
-export interface ActivityDetailData {
-  id: string;
-  title: string;
-  description: string;
-  link: string | null;
-  startAt: string;
-  endAt: string;
-}
+/** 活动详情弹窗所需的最小数据（兼容无 poi 的旧数据） */
+export type ActivityDetailData = Pick<
+  ActivityWithPOI,
+  "id" | "title" | "description" | "link" | "startAt" | "endAt"
+> & { poi?: ActivityWithPOI["poi"] };
 
 interface ActivityDetailModalProps {
   activity: ActivityDetailData | null;
@@ -84,6 +83,17 @@ export function ActivityDetailModal({ activity, isOpen, onClose }: ActivityDetai
             <p className="mb-4 w-full break-words whitespace-pre-wrap text-sm text-gray-700">
               {activity.description}
             </p>
+          )}
+          {activity.poi && (
+            <Link
+              href={`/?poiId=${activity.poi.id}`}
+              onClick={onClose}
+              className="mb-4 inline-flex items-center gap-2 text-sm text-[#7C7C7C] transition-colors hover:text-[#FF4500]"
+            >
+              <MapPin className="h-4 w-4 shrink-0 text-[#FF4500]" />
+              At: {activity.poi.name}
+              {activity.poi.address && ` · ${activity.poi.address}`}
+            </Link>
           )}
           {activity.link && (
             <a

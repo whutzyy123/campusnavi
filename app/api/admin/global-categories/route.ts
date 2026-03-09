@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie } from "@/lib/auth-server-actions";
-import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
+import { getPaginationMeta } from "@/lib/utils";
 
 // GET /api/admin/global-categories
 // 获取所有全局分类（仅超级管理员）
@@ -16,11 +16,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 获取分页参数
+    // 分页：固定每页 10 条
+    const PAGE_SIZE = 10;
     const searchParams = request.nextUrl.searchParams;
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
-    const { skip, take } = getPaginationParams(page, limit);
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const skip = (page - 1) * PAGE_SIZE;
 
     // 并行查询：总数和分页数据
     const [total, categories] = await Promise.all([
@@ -51,12 +51,12 @@ export async function GET(request: NextRequest) {
           createdAt: "asc",
         },
         skip,
-        take,
+        take: PAGE_SIZE,
       }),
     ]);
 
-    // 计算分页元数据
-    const pagination = getPaginationMeta(total, page, limit);
+    // 计算分页元数据（total 用于前端分页组件计算总页数）
+    const pagination = getPaginationMeta(total, page, PAGE_SIZE);
 
     return NextResponse.json({
       success: true,

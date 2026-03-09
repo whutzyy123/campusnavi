@@ -86,7 +86,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       name: "校区管理",
       href: "/admin/school/campuses",
       icon: Building2,
-      roles: ["ADMIN", "STAFF"], // 校级管理员和校内工作人员
+      roles: ["ADMIN"], // 仅校级管理员，STAFF 不可见
     },
     {
       name: "活动管理",
@@ -263,14 +263,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-1 overflow-hidden bg-gray-50">
-      {/* 侧边栏（固定高度，不参与主滚动） */}
+    <div className="flex h-full w-full overflow-hidden bg-slate-50">
+      {/* 侧边栏 */}
       <aside
-        className={`fixed left-0 below-nav bottom-0 z-sidebar w-64 flex-shrink-0 transform bg-white shadow-lg transition-transform duration-300 lg:static lg:top-auto lg:bottom-auto lg:translate-x-0 ${
+        className={`fixed left-0 below-nav bottom-0 z-sidebar w-64 flex-shrink-0 border-r overflow-y-auto bg-white shadow-lg transition-transform duration-300 lg:static lg:top-auto lg:bottom-auto lg:h-full lg:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-full flex-col overflow-hidden">
+        <div className="flex h-full min-h-0 flex-col">
           {/* 侧边栏头部 */}
           <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 px-6">
             <h2 className="text-lg font-bold text-gray-900">管理后台</h2>
@@ -337,8 +337,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
         />
       )}
 
-      {/* 主内容区：唯一垂直滚动容器 */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      {/* 主内容区 */}
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {/* 面包屑导航（固定，不滚动） */}
         <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-3 lg:px-6">
           <div className="flex items-center gap-4">
@@ -370,10 +370,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
         </div>
 
-        {/* 内容区域：overflow-y-auto 仅在需要时显示滚动条，scrollbar-gutter 防止布局抖动，pb-24 确保底部留白可滚动到底部 */}
+        {/* 内容区域：overflow-y-auto 仅在需要时显示滚动条，scrollbar-gutter 防止布局抖动，pb-24 底部留白（用 padding 避免触发外层滚动条） */}
         <main
-          className={`min-h-0 flex-1 overflow-x-hidden bg-gray-50 scrollbar-gutter-stable pb-24 ${
-            pathname?.includes("/campuses") || pathname?.includes("/pois")
+          className={`min-h-0 flex-1 overflow-x-hidden bg-slate-50 scrollbar-gutter-stable pb-24 ${
+            pathname?.includes("/campuses") ||
+            pathname?.includes("/pois") ||
+            pathname?.includes("/super-admin/categories")
               ? "overflow-hidden"
               : "overflow-y-auto"
           }`}

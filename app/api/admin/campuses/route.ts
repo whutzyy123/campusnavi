@@ -107,6 +107,14 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const auth = await requireAdmin();
+
+    if (auth.role === "STAFF") {
+      return NextResponse.json(
+        { success: false, message: "工作人员无权修改校区边界数据。" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
     const { schoolId: schoolIdParam, name, boundary } = body;
 

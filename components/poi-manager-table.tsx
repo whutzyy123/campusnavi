@@ -125,7 +125,7 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
     }
   }, [schoolId, searchParams, hierarchical, embedded]);
 
-  // 加载分类列表（用于筛选，含常规+微观）
+  // 加载分类列表（用于筛选，含常规+便民公共设施）
   useEffect(() => {
     const fetchCategories = async () => {
       if (!schoolId) return;
@@ -133,8 +133,8 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
         const response = await fetch("/api/admin/categories?all=true&grouped=true");
         const data = await response.json();
         if (data.success && data.data) {
-          const { regular = [], micro = [] } = data.data;
-          setCategories([...regular, ...micro]);
+          const { regular = [], convenience = [] } = data.data;
+          setCategories([...regular, ...convenience]);
         }
       } catch (error) {
         console.error("获取分类列表失败:", error);

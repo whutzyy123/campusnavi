@@ -265,13 +265,16 @@ function UserManagementPageContent() {
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-6">
-          <Card
-            title="全局用户管理"
-            description="查看和管理所有注册用户"
-          >
-            {/* 筛选器 */}
-            <div className="mb-6 flex flex-wrap gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="flex flex-col h-full p-4 md:p-6 gap-4">
+          {/* Header Section */}
+          <div>
+            <h2 className="text-xl font-semibold text-gray-900">全局用户管理</h2>
+            <p className="mt-1 text-sm text-gray-500">查看和管理所有注册用户</p>
+          </div>
+
+          {/* Filter Bar Card */}
+          <Card className="flex-shrink-0">
+            <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-500" />
                 <span className="text-sm font-medium text-gray-700">筛选：</span>
@@ -349,9 +352,12 @@ function UserManagementPageContent() {
                 </button>
               )}
             </div>
+          </Card>
 
-            {/* 数据表格 - 自然高度，由主内容区滚动 */}
-            <div>
+          {/* Table Container */}
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            <div className="h-full min-h-0 rounded-lg bg-white shadow overflow-hidden flex flex-col">
+              <div className="h-full min-h-0 overflow-y-auto custom-scrollbar p-6">
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent"></div>
@@ -364,8 +370,10 @@ function UserManagementPageContent() {
                 />
               ) : (
                 <>
-                  <Table>
-                    <TableHeader>
+                  <div className="h-full min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex-1 min-h-0 min-w-0 overflow-y-auto overflow-x-auto custom-scrollbar">
+                      <Table>
+                        <TableHeader className="sticky top-0 z-10 bg-white shadow-sm [&_tr]:border-b [&_tr]:border-gray-200">
                       <TableRow>
                         <TableHead>用户昵称</TableHead>
                         <TableHead>电子邮箱</TableHead>
@@ -446,21 +454,24 @@ function UserManagementPageContent() {
                         </TableRow>
                       ))}
                     </TableBody>
-                    </Table>
-                  {/* 分页控件 */}
-                  {pagination && pagination.total > 0 && (
-                    <div className="mt-6 flex justify-center pb-8">
-                      <PaginationControls
-                        total={pagination.total}
-                        pageCount={pagination.pageCount}
-                        currentPage={pagination.currentPage}
-                      />
+                      </Table>
                     </div>
-                  )}
+                    {/* 分页控件 */}
+                    {pagination && pagination.total > 0 && (
+                      <div className="flex-shrink-0 flex justify-center border-t border-gray-100 py-4">
+                        <PaginationControls
+                        total={pagination.total}
+                          pageCount={pagination.pageCount}
+                          currentPage={pagination.currentPage}
+                        />
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
+              </div>
             </div>
-          </Card>
+          </div>
 
           {/* 删除确认弹窗 */}
           {deleteTarget && (
