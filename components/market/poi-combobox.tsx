@@ -76,12 +76,10 @@ export function POICombobox({
       setIsSearching(true);
       setHasSearched(true);
       try {
-        const res = await fetch(
-          `/api/pois/search?schoolId=${encodeURIComponent(schoolId)}&q=${encodeURIComponent(query.trim())}`
-        );
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setOptions(data.data);
+        const { searchPOIs } = await import("@/lib/poi-actions");
+        const result = await searchPOIs(schoolId, { q: query.trim() });
+        if (result.success && Array.isArray(result.data)) {
+          setOptions(result.data);
         } else {
           setOptions([]);
         }

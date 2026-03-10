@@ -16,15 +16,22 @@ import { StatusBadge } from "@/components/status-badge";
 import { SearchInput } from "@/components/shared/search-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { getAdminUserDetail, type AdminUserDetail } from "@/lib/user-actions";
+import {
+  getAdminUserDetail,
+  adminResetUserPassword,
+  getAdminUsers,
+  deactivateUser,
+  deleteUser,
+  type AdminUserDetail,
+} from "@/lib/user-actions";
 import { AdminUserDetailModal } from "@/components/admin/admin-user-detail-modal";
 import { ResetPasswordModal } from "@/components/admin/reset-password-modal";
-import { adminResetUserPassword } from "@/lib/user-actions";
+import { getSchoolsList } from "@/lib/school-actions";
 
 interface User {
   id: string;
-  nickname: string;
-  email: string;
+  nickname: string | null;
+  email: string | null;
   role: string;
   roleNumber: number;
   schoolId: string | null;
@@ -81,10 +88,9 @@ function UserManagementPageContent() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const response = await fetch("/api/schools/list");
-        const data = await response.json();
-        if (data.success) {
-          setSchools(data.schools);
+        const result = await getSchoolsList();
+        if (result.success && result.data) {
+          setSchools(result.data.map((s) => ({ id: s.id, name: s.name })));
         }
       } catch (error) {
         console.error("获取学校列表失败:", error);
@@ -100,37 +106,20 @@ function UserManagementPageContent() {
 
     setIsLoading(true);
     try {
-      // 从 URL 获取分页参数
       const currentPage = parseInt(searchParams.get("page") || "1", 10);
-      
-      // 构建查询参数（认证通过 Cookie）
-      const params = new URLSearchParams();
-      params.append("page", currentPage.toString());
-      params.append("limit", "10");
-      
-      if (roleFilter !== "all") {
-        params.append("role", roleFilter);
-      }
-      
-      if (schoolFilter !== "all") {
-        params.append("schoolId", schoolFilter);
-      }
-      
-      if (debouncedSearchQuery.trim()) {
-        params.append("search", debouncedSearchQuery.trim());
-        params.append("field", searchField);
-      }
-
-      const response = await fetch(`/api/admin/users?${params.toString()}`);
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.message || "获取用户列表失败");
-      }
-
-      if (data.success) {
-        setUsers(data.data || []);
-        setPagination(data.pagination || null);
+      const result = await getAdminUsers({
+        page: currentPage,
+        limit: 10,
+        role: roleFilter !== "all" ? roleFilter : undefined,
+        schoolId: schoolFilter !== "all" ? schoolFilter : undefined,
+        search: debouncedSearchQuery.trim() || undefined,
+        field: searchField,
+      });
+      if (result.success && result.data) {
+        setUsers(result.data);
+        setPagination(result.pagination || null);
+      } else {
+        toast.error(result.error || "获取用户列表失败");
       }
     } catch (error) {
       console.error("获取用户列表失败:", error);
@@ -157,18 +146,11 @@ function UserManagementPageContent() {
     setIsPatching(true);
 
     try {
-      const response = await fetch("/api/admin/users", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: user.id, status: newStatus }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "操作失败");
+      const result = await deactivateUser(user.id, newStatus);
+      if (!result.success) {
+        throw new Error(result.message || "操作失败");
       }
-
-      toast.success(newStatus === "ACTIVE" ? "已激活" : "已停用");
+      toast.success(result.message || (newStatus === "ACTIVE" ? "已激活" : "已停用"));
       await fetchUsers();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "操作失败");
@@ -191,18 +173,11 @@ function UserManagementPageContent() {
 
     setIsDeleting(true);
     try {
-      const response = await fetch("/api/admin/users", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: deleteTarget.id }),
-      });
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "删除失败");
+      const result = await deleteUser(deleteTarget.id);
+      if (!result.success) {
+        throw new Error(result.message || "删除失败");
       }
-
-      toast.success("用户已永久删除");
+      toast.success(result.message || "用户已永久删除");
       setDeleteTarget(null);
       setDeleteConfirm("");
       await fetchUsers();
@@ -388,13 +363,13 @@ function UserManagementPageContent() {
                       {users.map((user) => (
                         <TableRow key={user.id}>
                           <TableCell className="min-w-0 max-w-[180px] font-medium">
-                            <div className="truncate" title={user.nickname}>
-                              {user.nickname}
+                            <div className="truncate" title={user.nickname ?? undefined}>
+                              {user.nickname ?? "—"}
                             </div>
                           </TableCell>
                           <TableCell className="min-w-0 max-w-[200px] text-sm text-gray-600">
-                            <div className="truncate" title={user.email}>
-                              {user.email}
+                            <div className="truncate" title={user.email ?? undefined}>
+                              {user.email ?? "—"}
                             </div>
                           </TableCell>
                           <TableCell><StatusBadge domain="user" status={user.role} /></TableCell>

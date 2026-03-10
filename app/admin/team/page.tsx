@@ -41,6 +41,8 @@ import {
   extendInvitationCode,
   type InvitationCodeListItem,
 } from "@/lib/invitation-actions";
+import { getSchoolUsers } from "@/lib/user-actions";
+import { getSchoolsList } from "@/lib/school-actions";
 
 interface StaffMember {
   id: string;
@@ -186,10 +188,17 @@ function TeamManagementPageContent() {
 
     const fetchStaff = async () => {
       try {
-        const response = await fetch(`/api/users?schoolId=${schoolId}&role=3`);
-        const data = await response.json();
-        if (data.success) {
-          setStaffMembers(data.users);
+        const result = await getSchoolUsers({ role: "STAFF" });
+        if (result.success && result.data) {
+          setStaffMembers(
+            result.data.map((u) => ({
+              id: u.id,
+              email: u.email ?? "",
+              nickname: u.nickname ?? "",
+              role: u.roleNumber,
+              createdAt: u.createdAt,
+            }))
+          );
         }
       } catch (error) {
         console.error("获取 STAFF 列表失败:", error);
@@ -204,10 +213,9 @@ function TeamManagementPageContent() {
     if (!schoolId) return;
     const fetchSchools = async () => {
       try {
-        const res = await fetch("/api/schools");
-        const data = await res.json();
-        if (data.success) {
-          const all = data.schools as School[];
+        const result = await getSchoolsList();
+        if (result.success && result.data) {
+          const all = result.data.map((s) => ({ id: s.id, name: s.name }));
           setSchools(all.filter((s) => s.id === schoolId));
         }
       } catch (error) {

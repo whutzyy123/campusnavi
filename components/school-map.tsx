@@ -9,14 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAMap } from "@/hooks/use-amap";
 import { ensureLngLat } from "@/lib/campus-label-utils";
 import type { School } from "@/store/use-school-store";
-
-interface CampusArea {
-  id: string;
-  name: string;
-  boundary: unknown;
-  center: [number, number];
-  labelCenter?: [number, number] | unknown;
-}
+import { getCampuses, type CampusAreaItem } from "@/lib/school-actions";
 
 interface SchoolMapProps {
   school: School | null;
@@ -59,7 +52,7 @@ export function SchoolMap({ school, userLocation, className = "w-full h-screen" 
   const userMarkerRef = useRef<any>(null);
   const campusPolygonsRef = useRef<Map<string, any>>(new Map());
   const campusLabelsRef = useRef<Map<string, any>>(new Map());
-  const [campuses, setCampuses] = useState<CampusArea[]>([]);
+  const [campuses, setCampuses] = useState<CampusAreaItem[]>([]);
   const { amap, loading, error } = useAMap();
 
   // 初始化地图
@@ -101,11 +94,10 @@ export function SchoolMap({ school, userLocation, className = "w-full h-screen" 
       return;
     }
     let cancelled = false;
-    fetch(`/api/schools/${school.id}/campuses`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (!cancelled && data.success && Array.isArray(data.data)) {
-          setCampuses(data.data);
+    getCampuses(school.id)
+      .then((result) => {
+        if (!cancelled && result.success && Array.isArray(result.data)) {
+          setCampuses(result.data);
         }
       })
       .catch(() => {});

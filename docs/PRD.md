@@ -8,8 +8,8 @@
 |------|------|
 | 产品名称 | 校园生存指北 |
 | 文档类型 | 产品需求文档 |
-| 当前版本 | v1.3.3 |
-| 最后更新 | 2026-03-02|
+| 当前版本 | v1.3.4 |
+| 最后更新 | 2026-03-08 |
 | 文档状态 | 正式版 |
 
 ---
@@ -18,11 +18,12 @@
 
 | 版本 | 修订日期 | 修订内容 | 修订人 | 审核人 | 状态 |
 |------|----------|----------|--------|--------|------|
-| v1.3.3 | 2026-03-02| 中控台UI优化；实现交易审计日志与声誉系统；角色化仪表盘优化；新增便民公共设施字段 | Whutzyy | Whutzyy | 定稿 |
-| v1.3.2 | 2026-02-28 | 统一 Server Actions 架构；实现个人中控台重构；集市评价系统；角色化审核分离；集市信息流优化；UI调优 | Whutzyy | Whutzyy | 定稿 |
-| v1.3.1 | 2026-02-27 | 生存集市交易闭环（R35）：动态配置、意向系统、选定买家锁定、双确认完成、MarketLog 审计；自适应抽屉（R36）：移动端 vaul 手势、桌面侧边栏；全屏 Modal Portal、Z-Index 标准化；管理后台响应式表格、Phase 5 完整性检查、Phase 6 GIS 组件 Lint 安全修复、文档同步 | Whutzyy | Whutzyy | 定稿 |
-| v1.3.0 | 2026-02-24 | 生存集市完整上线：P2P 资源分享、2 级分类、举报审核、GIS 关联、隐私保护、7 天自动过期；全局搜索防抖、视口感知 Modal、Polylabel 标签定位 | Whutzyy | Whutzyy | 定稿 |
-| v1.2.1 | 2026-01-17 | 存储与媒体（Vercel Blob、图片压缩）、分级举报、邀请码停用、关键词引擎（6 位数字屏蔽、批量导入、搜索）、个人资料 7 天冷却、通知深度链接、视口约束 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.4 | 2026-03-08 | 实现状态核对；校对文档内容 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.3 | 2026-03-02 | 中控台UI优化；实现交易审计日志与声誉系统；角色化仪表盘优化；新增便民公共设施字段 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.2 | 2026-02-28 | 统一 API 架构；个人中控台界面重构；集市评价逻辑闭环；审核机制 RBAC 重划分；集市信息流优化；UI调优 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.1 | 2026-02-27 | 生存集市交易逻辑闭环；意向系统重设计；移动端UI调优；管理后台表格调优；项目文档同步 | Whutzyy | Whutzyy | 定稿 |
+| v1.3.0 | 2026-02-24 | 生存集市完善；全局搜索防抖、视口感知 Modal、Polylabel 标签定位 | Whutzyy | Whutzyy | 定稿 |
+| v1.2.1 | 2026-01-17 | 图片等媒体存储；邀请码逻辑闭环；个人资料修改冷却；个人中控台UI优化 | Whutzyy | Whutzyy | 定稿 |
 | v1.2.0 | 2026-12-02 | 消息管理系统、别称搜索、子POI、失物招领优化 | Whutzyy | Whutzyy | 定稿 |
 | v1.2 | 2025-10-08 | 底图分类筛选、活动、微观 POI、POI 图片、失物招领 | Whutzyy | Whutzyy | 定稿 |
 | v1.1 | 2026-07-22 | 地图 Marker 聚合与性能优化、数据访问优化 | Whutzyy | Whutzyy | 定稿 |
@@ -62,16 +63,7 @@
 - **业务目标**：打造 B2B2C 精细化校区 GIS，实现导航「最后一米」交付
 - **产品范围**：Web App + 校级管理后台 + 超级管理员后台
 
-### 3.3 核心指标
-
-| 指标类型 | 指标名称 | 说明 |
-|----------|----------|------|
-| 北极星指标 | 导航任务完成率 | 用户发起导航后到达终点的比例 |
-| 过程指标 | POI 状态更新频次 | 众包状态上报的活跃度 |
-| 过程指标 | 多租户覆盖数 | 接入系统的学校数量 |
-| 过程指标 | 用户纠错采纳率 | 用户反馈被管理员采纳的比例 |
-
-### 3.4 风险与依赖
+### 3.3 风险与依赖
 
 - **技术依赖**：高德地图 JS SDK 2.0、MySQL 8.0、Next.js 14、Vercel Blob Storage。
 - **合规风险**：用户生成内容需进行主动敏感词过滤，符合内容安全要求。
@@ -114,11 +106,11 @@
 | R24 | 认证 | RBAC 五级权限 | 已完成 | P0 | Guest/Student/Admin/Staff/SuperAdmin |
 | R25 | 认证 | 邀请码系统 | 已完成 | P0 | ADMIN/STAFF 权限分发 |
 | R26 | 搜索 | 别称搜索支持 | 已完成 | P0 | POI alias 模糊匹配 |
-| R26a | 搜索 | 「正在进行」条件展示 | 已完成 | P1 | 仅当该校有进行中活动时显示快捷入口 |
+| R26a | 搜索 | 正在进行条件展示 | 已完成 | P1 | 仅当该校有进行中活动时显示快捷入口 |
 | R27 | 社交 | 消息与互动通知 | 已完成 | P1 | LIKE/REPLY/MENTION/SYSTEM/LOST_FOUND_FOUND |
 | R28 | 个人中心 | 我的发布与消息管理 Tab | 已完成 | P1 | My Lost & Found、消息列表 |
-| R29 | 生存集市 | 分类管理（二级层级） | 已完成 | P1 | 超管维护全局 2 级分类（如 Books > Textbooks） |
-| R30 | 生存集市 | 发布与列表 | 已完成 | P1 | SALE/SWAP/BORROW 三种类型；必选 2 级分类；绑定 POI |
+| R29 | 生存集市 | 分类管理（动态配置） | 已完成 | P1 | 超管维护交易类型与扁平分类池；MarketTypeCategory 多对多按类型关联 |
+| R30 | 生存集市 | 发布与列表 | 已完成 | P1 | SALE/SWAP/BORROW 三种类型；可选分类（按类型过滤）；必选 POI |
 | R31 | 生存集市 | 举报与审核 | 已完成 | P1 | 3 次入审核、5 次自动隐藏；与留言审核统一入口 |
 | R32 | 生存集市 | GIS 关联与「在地图中查看」 | 已完成 | P1 | 每商品必链 POI；详情页支持跳转地图定位 |
 | R33 | 生存集市 | 隐私保护 | 已完成 | P1 | 联系方式默认隐藏，点击后展示；联系字段豁免 6 位数字屏蔽 |
@@ -343,20 +335,20 @@
 
 ### 6.9 模块 I：生存集市
 
-#### R29 分类管理（动态配置 + 二级层级）
+#### R29 分类管理（动态配置）
 
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | MarketTransactionType、MarketCategory 动态表；MarketTypeCategory 多对多；超管维护 2 级分类（parentId） |
-| **发布** | 按 typeId 过滤可用分类；`optgroup` 展示一级+二级 |
+| **功能描述** | MarketTransactionType、MarketCategory 动态表；MarketTypeCategory 多对多；超管维护扁平分类池，按交易类型动态关联 |
+| **发布** | 按 typeId 过滤可用分类；发布时选择交易类型后展示该类型关联的分类列表 |
 
 #### R30 发布与列表
 
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | SALE/SWAP/BORROW；必选 POI；POICombobox 300ms 防抖；title/description 敏感词+6 位数字屏蔽；contact 豁免数字屏蔽 |
+| **功能描述** | SALE/SWAP/BORROW；必选 POI；可选分类（按交易类型过滤）；POICombobox 300ms 防抖；title/description 敏感词+6 位数字屏蔽；contact 豁免数字屏蔽 |
 | **交互** | post-item-modal、market/page 列表与详情 |
 
 #### R31 举报与审核
@@ -520,10 +512,10 @@ flowchart LR
 | 实体 | 说明 |
 |------|------|
 | **MarketTransactionType** | 动态交易类型（SALE/SWAP/BORROW） |
-| **MarketCategory** | 2 级分类，parentId；MarketTypeCategory 多对多 |
+| **MarketCategory** | 扁平分类池（id、name、order、isActive）；MarketTypeCategory 多对多按交易类型关联 |
 | **MarketItem** | schoolId、poiId、categoryId、typeId、selectedBuyerId、lockedAt、buyerConfirmed、sellerConfirmed、expiresAt 7d |
 | **MarketIntention** | itemId+userId 唯一，contactInfo |
-| **MarketLog** | 审计日志，actionType：INTENTION_CREATED、ITEM_LOCKED、ITEM_UNLOCKED、INTENTION_RESET_BY_UNLOCK、AUTO_UNLOCKED、AUTO_COMPLETED、TRANSACTION_COMPLETED、ADMIN_* |
+| **MarketLog** | 审计日志，actionType：INTENTION_CREATED、INTENTION_WITHDRAWN、ITEM_LOCKED、ITEM_UNLOCKED、INTENTION_RESET_BY_UNLOCK、BUYER_CONFIRMED、SELLER_CONFIRMED、TRANSACTION_COMPLETED、AUTO_UNLOCKED、AUTO_COMPLETED、ITEM_EDITED、ADMIN_HIDDEN、ADMIN_RELISTED、ITEM_DELETED 等 |
 
 - **生命周期**：expiresAt 7d；reportCount≥3 入审核，≥5 自动 isHidden
 
@@ -537,7 +529,7 @@ flowchart LR
 | Activity（v1.2） | schoolId、poiId、startAt、endAt |
 | Category 扩展 | isMicroCategory、schoolId |
 | LostFoundEvent（v1.2） | schoolId、poiId、expiresAt、createdAt |
-| MarketCategory（v1.3.0） | parentId、order、isActive |
+| MarketCategory（v1.3.0） | order、isActive |
 | MarketItem（v1.3.0） | schoolId、poiId、userId、typeId、categoryId、expiresAt、reportCount、isHidden |
 
 ---

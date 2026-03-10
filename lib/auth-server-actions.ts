@@ -88,22 +88,6 @@ export async function loginUser(formData: FormData) {
   const password = formData.get("password")?.toString();
 
   if (!email || !password) {
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "login-initial",
-        hypothesisId: "H1",
-        location: "lib/auth-server-actions.ts:loginUser:missing-params",
-        message: "Login called with missing email or password",
-        data: { hasEmail: !!email, hasPassword: !!password },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
-
     return {
       success: false,
       message: "请填写邮箱和密码",
@@ -111,22 +95,6 @@ export async function loginUser(formData: FormData) {
   }
 
   try {
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "login-initial",
-        hypothesisId: "H2",
-        location: "lib/auth-server-actions.ts:loginUser:before-find",
-        message: "About to query user by email",
-        data: { email: email.trim().toLowerCase() },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
-
     // 查找用户
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
@@ -148,22 +116,6 @@ export async function loginUser(formData: FormData) {
     });
 
     if (!user) {
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "login-initial",
-          hypothesisId: "H3",
-          location: "lib/auth-server-actions.ts:loginUser:user-not-found",
-          message: "No user found for email",
-          data: { email: email.trim().toLowerCase() },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion agent log
-
       return {
         success: false,
         message: "邮箱或密码错误",
@@ -186,40 +138,8 @@ export async function loginUser(formData: FormData) {
       };
     }
 
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "login-initial",
-        hypothesisId: "H4",
-        location: "lib/auth-server-actions.ts:loginUser:before-verify",
-        message: "Verifying password",
-        data: { userId: user.id },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
-
     const isPasswordValid = await verifyPassword(password, user.password);
     if (!isPasswordValid) {
-      // #region agent log
-      fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: "debug-session",
-          runId: "login-initial",
-          hypothesisId: "H5",
-          location: "lib/auth-server-actions.ts:loginUser:password-invalid",
-          message: "Password verification failed",
-          data: { userId: user.id },
-          timestamp: Date.now(),
-        }),
-      }).catch(() => {});
-      // #endregion agent log
-
       return {
         success: false,
         message: "邮箱或密码错误",
@@ -257,22 +177,6 @@ export async function loginUser(formData: FormData) {
       schoolId: user.schoolId || null,
     });
 
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "login-initial",
-        hypothesisId: "H6",
-        location: "lib/auth-server-actions.ts:loginUser:success",
-        message: "Login success, returning user data",
-        data: { userId: user.id, role: userRole },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
-
     // 返回用户信息，由前端决定跳转逻辑
     return {
       success: true,
@@ -292,24 +196,6 @@ export async function loginUser(formData: FormData) {
     }
 
     console.error("Login Error:", error);
-
-    // #region agent log
-    fetch("http://127.0.0.1:7242/ingest/b472256d-1378-49e8-89eb-a68106acb0f4", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        sessionId: "debug-session",
-        runId: "login-initial",
-        hypothesisId: "H7",
-        location: "lib/auth-server-actions.ts:loginUser:catch",
-        message: "Login threw a non-redirect error",
-        data: {
-          errorMessage: error instanceof Error ? error.message : "未知错误",
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion agent log
 
     return {
       success: false,
@@ -525,5 +411,90 @@ export async function requireAdmin(): Promise<AuthCookieData> {
  */
 export async function getCurrentUser(): Promise<AuthCookieData | null> {
   return await getAuthCookie();
+}
+
+/** getMe 返回的用户对象（与 /api/auth/me 一致） */
+export interface MeUser {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+  bio: string | null;
+  avatar: string | null;
+  lastProfileUpdateAt: string | null;
+  role: string; // "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN"
+  schoolId: string | null;
+  schoolName: string | null;
+}
+
+export type GetMeResult =
+  | { success: true; user: MeUser }
+  | { success: false; error: string };
+
+/**
+ * 获取当前登录用户完整信息（替代 /api/auth/me）
+ * 用于客户端初始化认证状态、个人资料表单等
+ */
+export async function getMe(): Promise<GetMeResult> {
+  try {
+    const authData = await getAuthCookie();
+
+    if (!authData) {
+      return { success: false, error: "未登录" };
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: authData.userId },
+      select: {
+        id: true,
+        email: true,
+        nickname: true,
+        bio: true,
+        avatar: true,
+        lastProfileUpdateAt: true,
+        role: true,
+        schoolId: true,
+        status: true,
+        school: { select: { id: true, name: true } },
+      },
+    });
+
+    if (!user) {
+      return { success: false, error: "用户不存在" };
+    }
+
+    if (user.status === "INACTIVE") {
+      await removeAuthCookie();
+      return { success: false, error: "该账户已被停用" };
+    }
+
+    const roleMap: Record<number, string> = {
+      1: "STUDENT",
+      2: "ADMIN",
+      3: "STAFF",
+      4: "SUPER_ADMIN",
+    };
+    const userRole = roleMap[user.role] ?? "STUDENT";
+
+    return {
+      success: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        nickname: user.nickname,
+        bio: user.bio,
+        avatar: user.avatar ?? null,
+        lastProfileUpdateAt: user.lastProfileUpdateAt?.toISOString() ?? null,
+        role: userRole,
+        schoolId: user.schoolId ?? null,
+        schoolName: user.school?.name ?? null,
+      },
+    };
+  } catch (err) {
+    console.error("getMe 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "服务器内部错误",
+    };
+  }
 }
 

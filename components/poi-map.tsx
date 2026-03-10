@@ -18,6 +18,7 @@ import type { School, MapViewState } from "@/store/use-school-store";
 import type { POIWithStatus } from "@/lib/poi-utils";
 import { getCategoryIcon } from "@/lib/poi-utils";
 import { getActiveStatusesBySchool } from "@/lib/status-actions";
+import { getCampuses, type CampusAreaItem } from "@/lib/school-actions";
 
 interface POIMapProps {
   school: School | null;
@@ -364,13 +365,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
   }, [selectMode]);
 
   // 校区列表状态
-  const [campuses, setCampuses] = useState<Array<{
-    id: string;
-    name: string;
-    boundary: any;
-    center: [number, number];
-    labelCenter?: [number, number] | unknown;
-  }>>([]);
+  const [campuses, setCampuses] = useState<CampusAreaItem[]>([]);
 
   // POI 实时状态映射（poiId -> statusType），用于 Marker 徽章展示
   const [poiStatusMap, setPoiStatusMap] = useState<Record<string, string>>({});
@@ -385,10 +380,9 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
 
     const fetchCampuses = async () => {
       try {
-        const response = await fetch(`/api/schools/${school.id}/campuses`);
-        const data = await response.json();
-        if (data.success && data.data) {
-          setCampuses(data.data);
+        const result = await getCampuses(school.id);
+        if (result.success && result.data) {
+          setCampuses(result.data);
         }
       } catch (error) {
         console.error("加载校区列表失败:", error);
@@ -472,11 +466,12 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
           }
         }
 
-        if (!boundary || boundary.type !== "Polygon") {
+        const b = boundary as { type?: string; coordinates?: unknown[][] } | null;
+        if (!b || b.type !== "Polygon") {
           return;
         }
 
-        const coordinates = boundary.coordinates[0];
+        const coordinates = b.coordinates?.[0];
         if (!Array.isArray(coordinates) || coordinates.length === 0) {
           return;
         }

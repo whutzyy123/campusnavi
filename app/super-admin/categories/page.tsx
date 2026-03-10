@@ -16,6 +16,9 @@ import {
   createMicroCategory,
   updateMicroCategory,
   deleteMicroCategory,
+  getGlobalCategories,
+  createGlobalCategory,
+  deleteGlobalCategory,
   type MicroCategoryItem,
 } from "@/lib/category-actions";
 
@@ -75,13 +78,12 @@ function SuperAdminCategoriesPageContent() {
     setIsLoadingRegular(true);
     try {
       const currentPage = parseInt(searchParams.get("page") || "1", 10);
-      const response = await fetch(`/api/admin/global-categories?page=${currentPage}&limit=10`);
-      const data = await response.json();
-      if (data.success) {
-        setCategories(data.data || []);
-        setPagination(data.pagination || null);
+      const result = await getGlobalCategories({ page: currentPage, limit: 10 });
+      if (result.success && result.data) {
+        setCategories(result.data);
+        setPagination(result.pagination || null);
       } else {
-        toast.error(data.message || "获取全局分类列表失败");
+        toast.error(result.error || "获取全局分类列表失败");
       }
     } catch (error) {
       console.error("获取全局分类列表失败:", error);
@@ -179,17 +181,12 @@ function SuperAdminCategoriesPageContent() {
             toast.error(result.message || "创建失败");
           }
         } else {
-          const response = await fetch("/api/admin/global-categories", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: trimmedName,
-              icon: modalIcon.trim() || null,
-            }),
+          const result = await createGlobalCategory({
+            name: trimmedName,
+            icon: modalIcon.trim() || null,
           });
-          const data = await response.json();
-          if (!response.ok) {
-            throw new Error(data.message || "创建失败");
+          if (!result.success) {
+            throw new Error(result.error || "创建失败");
           }
           toast.success("全局分类创建成功");
           closeModal();
@@ -209,9 +206,8 @@ function SuperAdminCategoriesPageContent() {
     }
     setDeletingRegularId(id);
     try {
-      const response = await fetch(`/api/admin/global-categories/${id}`, { method: "DELETE" });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "删除失败");
+      const result = await deleteGlobalCategory(id);
+      if (!result.success) throw new Error(result.error || "删除失败");
       toast.success("全局分类已删除");
       fetchRegularCategories();
     } catch (error) {

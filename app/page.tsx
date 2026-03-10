@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { LocateFixed, Route, Eye, X } from "lucide-react";
 import type { POIWithStatus } from "@/lib/poi-utils";
 import { getPOIsBySchool } from "@/lib/poi-actions";
+import { getSchoolById, getSchoolsList, detectSchoolByLocation } from "@/lib/school-actions";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { NavInfoCard } from "@/components/nav-info-card";
 import { NavigationPanel } from "@/components/navigation-panel";
@@ -85,10 +86,9 @@ function HomeContent() {
       if (!currentUser?.schoolId) return;
 
       try {
-        const response = await fetch(`/api/schools/${currentUser.schoolId}`);
-        const data = await response.json();
-        if (data.success && data.school) {
-          setActiveSchool(data.school);
+        const result = await getSchoolById(currentUser.schoolId);
+        if (result.success && result.data) {
+          setActiveSchool(result.data);
         }
       } catch (error) {
         console.error("加载锁定学校失败:", error);
@@ -102,10 +102,9 @@ function HomeContent() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const response = await fetch("/api/schools/list");
-        const data = await response.json();
-        if (data.success) {
-          setSchools(data.schools);
+        const result = await getSchoolsList();
+        if (result.success && result.data) {
+          setSchools(result.data);
         }
       } catch (error) {
         console.error("获取学校列表失败:", error);
@@ -262,14 +261,13 @@ function HomeContent() {
             hasCheckedSchoolRef.current = true;
             try {
               const [lng, lat] = location;
-              const response = await fetch(`/api/schools/detect?lat=${lat}&lng=${lng}`);
-              const data = await response.json();
+              const result = await detectSchoolByLocation(lat, lng);
 
-              if (!data.success || !data.school) {
-                // 不在任何学校范围内，仅提示一次
+              if (result.success && result.data) {
+                setActiveSchool(result.data);
+              } else {
                 toast.error("您当前不在支持的校区内");
               }
-              // 如果检测到学校，由 detectSchool 自动设置 activeSchool
             } catch (error) {
               console.error("检测学校失败:", error);
               // 静默失败，不显示错误提示

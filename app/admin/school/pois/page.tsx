@@ -9,6 +9,8 @@ import { AdminLayout } from "@/components/admin-layout";
 import { POIManagerTable } from "@/components/poi-manager-table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { createPOI, deletePOI, getPOIsBySchool } from "@/lib/poi-actions";
+import { getSchoolById, getCampuses } from "@/lib/school-actions";
+import { getSchoolCategoriesForAdmin } from "@/lib/category-actions";
 import toast from "react-hot-toast";
 import { X, MapPin, Plus } from "lucide-react";
 import { Select } from "@/components/ui/select";
@@ -56,12 +58,18 @@ export default function POIManagementPage() {
       }
 
       try {
-        const response = await fetch(`/api/schools/${currentUser.schoolId}`);
-        const data = await response.json();
-        if (data.success && data.school) {
-          setActiveSchool(data.school);
+        const result = await getSchoolById(currentUser.schoolId);
+        if (result.success && result.data) {
+          const school = result.data;
+          setActiveSchool({
+            id: school.id,
+            name: school.name,
+            schoolCode: school.schoolCode,
+            centerLng: school.centerLng,
+            centerLat: school.centerLat,
+          });
         } else {
-          console.error("加载锁定学校失败:", data.message);
+          console.error("加载锁定学校失败:", result.success === false ? result.error : "未知错误");
         }
       } catch (error) {
         console.error("加载锁定学校失败:", error);
@@ -109,16 +117,15 @@ export default function POIManagementPage() {
 
       setIsLoadingCategories(true);
       try {
-        const response = await fetch("/api/admin/categories?all=true&grouped=true");
+        const result = await getSchoolCategoriesForAdmin(currentUser.schoolId, {
+          all: true,
+          grouped: true,
+        });
 
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-
-        if (result.success && result.data?.regular !== undefined) {
-          const { regular = [], convenience = [] } = result.data;
+        if (result.success && result.data && typeof result.data === "object") {
+          const data = result.data as { regular?: Array<{ id: string; name: string }>; convenience?: Array<{ id: string; name: string }> };
+          const regular = data.regular ?? [];
+          const convenience = data.convenience ?? [];
           setCategoryGroups({ regular, convenience });
           const firstRegular = regular[0];
           const firstConvenience = convenience[0];
@@ -129,7 +136,7 @@ export default function POIManagementPage() {
           });
         } else {
           setCategoryGroups({ regular: [], convenience: [] });
-          if (result.message) toast.error(result.message);
+          if (result.error) toast.error(result.error);
         }
       } catch (error) {
         setCategoryGroups({ regular: [], convenience: [] });
@@ -300,9 +307,8 @@ export default function POIManagementPage() {
 
     const fetchAndDrawCampuses = async () => {
       try {
-        const response = await fetch(`/api/schools/${activeSchool.id}/campuses`);
-        const data = await response.json();
-        if (!data.success || !Array.isArray(data.data) || data.data.length === 0) {
+        const result = await getCampuses(activeSchool.id);
+        if (!result.success || !Array.isArray(result.data) || result.data.length === 0) {
           const fallbackCenter: [number, number] =
             activeSchool.centerLng != null && activeSchool.centerLat != null
               ? [activeSchool.centerLng, activeSchool.centerLat]
@@ -316,7 +322,7 @@ export default function POIManagementPage() {
           boundaryPolygonRef.current = null;
         }
 
-        const campuses = data.data as Array<{ boundary: unknown; center: [number, number] }>;
+        const campuses = result.data as Array<{ boundary: unknown; center: [number, number] }>;
         const first = campuses[0];
         const boundary = first.boundary as { type?: string; coordinates?: unknown[][] } | null;
         if (boundary?.type === "Polygon" && Array.isArray(boundary.coordinates?.[0])) {

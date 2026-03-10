@@ -391,6 +391,167 @@ export async function adminResetUserPassword(
   }
 }
 
+/** 超级管理员用户列表项 */
+export interface AdminUserListItem {
+  id: string;
+  nickname: string | null;
+  email: string | null;
+  role: string;
+  roleNumber: number;
+  schoolId: string | null;
+  schoolName: string;
+  schoolCode: string | null;
+  createdAt: string;
+  status: string;
+}
+
+/**
+ * 获取所有用户数据（仅超级管理员）
+ */
+export async function getAdminUsers(params: {
+  page?: number;
+  limit?: number;
+  role?: string;
+  schoolId?: string;
+  search?: string;
+  field?: "email" | "nickname";
+}): Promise<{
+  success: boolean;
+  data?: AdminUserListItem[];
+  pagination?: { total: number; pageCount: number; currentPage: number };
+  error?: string;
+}> {
+  try {
+    const authResult = await requireSuperAdmin();
+    if (!authResult.ok) {
+      return { success: false, error: authResult.error };
+    }
+
+    const whereConditions: Array<Record<string, unknown>> = [];
+    if (params.role && ROLE_MAP[params.role]) {
+      whereConditions.push({ role: ROLE_MAP[params.role] });
+    }
+    if (params.schoolId !== undefined) {
+      if (params.schoolId === "null") {
+        whereConditions.push({ schoolId: null });
+      } else {
+        whereConditions.push({ schoolId: params.schoolId });
+      }
+    }
+    const searchField = params.field === "email" ? "email" : "nickname";
+    if (params.search?.trim()) {
+      whereConditions.push({
+        [searchField]: { contains: params.search.trim() },
+      });
+    }
+    const where = whereConditions.length > 0 ? { AND: whereConditions } : {};
+
+    const page = Math.max(1, params.page ?? 1);
+    const limit = Math.min(100, Math.max(1, params.limit ?? 10));
+    const { skip, take } = getPaginationParams(page, limit);
+
+    const [total, users] = await Promise.all([
+      prisma.user.count({ where }),
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          nickname: true,
+          email: true,
+          role: true,
+          schoolId: true,
+          createdAt: true,
+          status: true,
+          school: { select: { id: true, name: true, schoolCode: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip,
+        take,
+      }),
+    ]);
+
+    const roleMapReverse: Record<number, string> = {
+      1: "STUDENT",
+      2: "ADMIN",
+      3: "STAFF",
+      4: "SUPER_ADMIN",
+    };
+
+    const data: AdminUserListItem[] = users.map((u) => ({
+      id: u.id,
+      nickname: u.nickname,
+      email: u.email,
+      role: roleMapReverse[u.role] ?? "UNKNOWN",
+      roleNumber: u.role,
+      schoolId: u.schoolId,
+      schoolName: u.school?.name ?? "系统",
+      schoolCode: u.school?.schoolCode ?? null,
+      createdAt: u.createdAt.toISOString(),
+      status: u.status ?? "ACTIVE",
+    }));
+
+    const pagination = getPaginationMeta(total, page, limit);
+    return { success: true, data, pagination };
+  } catch (err) {
+    console.error("[getAdminUsers]", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取用户列表失败",
+    };
+  }
+}
+
+/**
+ * 永久删除用户（仅超级管理员）
+ * 禁止删除自己；禁止删除其他超级管理员
+ */
+export async function deleteUser(userId: string): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const authResult = await requireSuperAdmin();
+    if (!authResult.ok) {
+      return { success: false, error: authResult.error };
+    }
+
+    if (!userId?.trim()) {
+      return { success: false, error: "用户 ID 不能为空" };
+    }
+
+    if (userId.trim() === authResult.userId) {
+      return { success: false, error: "不能删除自己的账户" };
+    }
+
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId.trim() },
+      select: { id: true, role: true, nickname: true },
+    });
+
+    if (!targetUser) {
+      return { success: false, error: "用户不存在" };
+    }
+
+    if (targetUser.role === 4) {
+      return { success: false, error: "不能删除其他超级管理员" };
+    }
+
+    await prisma.user.delete({ where: { id: userId.trim() } });
+
+    return {
+      success: true,
+      message: `用户 "${targetUser.nickname || userId}" 已永久删除`,
+    };
+  } catch (err) {
+    console.error("[deleteUser]", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "删除失败",
+    };
+  }
+}
+
 /**
  * 停用/激活用户（超级管理员或本校校级管理员可执行）
  * 禁止停用自己；禁止停用其他超级管理员

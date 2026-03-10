@@ -1501,60 +1501,6 @@ export async function toggleTypeCategory(
   }
 }
 
-/**
- * 更新商品状态（ACTIVE / LOCKED / COMPLETED）
- * @deprecated 建议使用 lockMarketItem / unlockMarketItem / confirmTransaction
- */
-export async function updateMarketItemStatus(
-  itemId: string,
-  status: MarketItemStatus
-): Promise<MarketActionResult> {
-  try {
-    const auth = await getAuthCookie();
-    if (!auth?.userId) {
-      return { success: false, error: "请先登录" };
-    }
-
-    if (
-      status !== MarketItemStatus.ACTIVE &&
-      status !== MarketItemStatus.LOCKED &&
-      status !== MarketItemStatus.COMPLETED
-    ) {
-      return { success: false, error: "状态只能设置为 ACTIVE、LOCKED 或 COMPLETED" };
-    }
-
-    const item = await prisma.marketItem.findUnique({
-      where: { id: itemId.trim() },
-      select: { id: true, userId: true, schoolId: true },
-    });
-
-    if (!item) {
-      return { success: false, error: "商品不存在" };
-    }
-
-    const isOwner = item.userId === auth.userId;
-    const isAdmin = auth.role === "ADMIN" || auth.role === "STAFF";
-    const sameSchool = auth.schoolId !== null && auth.schoolId === item.schoolId;
-
-    if (!isOwner && !(isAdmin && sameSchool)) {
-      return { success: false, error: "无权修改该商品状态" };
-    }
-
-    await prisma.marketItem.update({
-      where: { id: item.id },
-      data: { status },
-    });
-
-    return { success: true };
-  } catch (err) {
-    console.error("[updateMarketItemStatus]", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "更新失败",
-    };
-  }
-}
-
 /** 意向记录（含用户信息与买家声誉） */
 export interface MarketIntentionWithUser {
   id: number;
@@ -1876,11 +1822,6 @@ export async function withdrawIntention(itemId: string): Promise<MarketActionRes
     };
   }
 }
-
-/**
- * @deprecated 请使用 submitIntention(itemId, contactInfo)。保留以兼容旧调用。
- */
-export const requestMarketItem = submitIntention;
 
 /**
  * 卖家锁定商品：选定买家后锁定（需先调用 selectBuyerAndLock）
@@ -2813,6 +2754,224 @@ export async function adminMarketItemAction(
     return {
       success: false,
       error: err instanceof Error ? err.message : "操作失败",
+    };
+  }
+}
+
+/** 管理端集市商品列表项 */
+export interface AdminMarketItemRow {
+  id: string;
+  title: string;
+  typeId: number;
+  transactionType: { id: number; name: string; code: string };
+  status: string;
+  reportCount: number;
+  isHidden: boolean;
+  expiresAt: string;
+  createdAt: string;
+  user: { id: string; nickname: string | null; email: string | null };
+  buyer: { id: string; nickname: string | null; email: string | null } | null;
+  buyerId: string | null;
+  category: { id: string; name: string } | null;
+  poi: { id: string; name: string } | null;
+  images: string[];
+  price: number | null;
+}
+
+/**
+ * 校级管理员获取本校生存集市商品列表
+ * 权限：ADMIN/STAFF/SUPER_ADMIN，非超管只能查看本校
+ */
+export async function getAdminMarketItems(
+  schoolId: string,
+  params: {
+    search?: string;
+    categoryId?: string;
+    status?: string;
+    page?: number;
+    limit?: number;
+  }
+): Promise<{
+  success: boolean;
+  data?: { data: AdminMarketItemRow[]; pagination: { total: number; pageCount: number; currentPage: number; limit: number } };
+  error?: string;
+}> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId) {
+      return { success: false, error: "请先登录" };
+    }
+    const isAdmin = auth.role === "ADMIN" || auth.role === "STAFF" || auth.role === "SUPER_ADMIN";
+    if (!isAdmin) {
+      return { success: false, error: "无权限" };
+    }
+    if (!schoolId?.trim()) {
+      return { success: false, error: "schoolId 为必填项" };
+    }
+    if (auth.role !== "SUPER_ADMIN" && auth.schoolId !== schoolId) {
+      return { success: false, error: "只能查看本校数据" };
+    }
+
+    const page = params.page ?? 1;
+    const limit = Math.min(params.limit ?? 20, 100);
+    const where: Record<string, unknown> = { schoolId: schoolId.trim() };
+    if (params.categoryId) where.categoryId = params.categoryId;
+    if (params.status && ["ACTIVE", "LOCKED", "COMPLETED", "DELETED"].includes(params.status)) {
+      where.status = params.status;
+    }
+    if (params.search?.trim()) {
+      where.OR = [
+        { title: { contains: params.search } },
+        { user: { nickname: { contains: params.search } } },
+        { user: { email: { contains: params.search } } },
+      ];
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.marketItem.count({ where }),
+      prisma.marketItem.findMany({
+        where,
+        select: {
+          id: true,
+          title: true,
+          typeId: true,
+          status: true,
+          reportCount: true,
+          isHidden: true,
+          expiresAt: true,
+          createdAt: true,
+          selectedBuyerId: true,
+          user: { select: { id: true, nickname: true, email: true } },
+          selectedBuyer: { select: { id: true, nickname: true, email: true } },
+          category: { select: { id: true, name: true } },
+          poi: { select: { id: true, name: true } },
+          images: true,
+          price: true,
+          transactionType: { select: { id: true, name: true, code: true } },
+        },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+    ]);
+
+    const data: AdminMarketItemRow[] = items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      typeId: item.typeId,
+      transactionType: item.transactionType,
+      status: item.status,
+      reportCount: item.reportCount,
+      isHidden: item.isHidden,
+      expiresAt: item.expiresAt.toISOString(),
+      createdAt: item.createdAt.toISOString(),
+      user: item.user,
+      buyer: item.selectedBuyer,
+      buyerId: item.selectedBuyerId,
+      category: item.category,
+      poi: item.poi,
+      images: (item.images as string[]) ?? [],
+      price: item.price,
+    }));
+
+    return {
+      success: true,
+      data: {
+        data,
+        pagination: {
+          total,
+          pageCount: Math.ceil(total / limit),
+          currentPage: page,
+          limit,
+        },
+      },
+    };
+  } catch (err) {
+    console.error("getAdminMarketItems 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "服务器错误",
+    };
+  }
+}
+
+/** 集市分类配置（超管用） */
+export interface AdminMarketCategoriesConfig {
+  categories: Array<{
+    id: string;
+    name: string;
+    order: number;
+    isActive: boolean;
+    createdAt: string;
+    updatedAt: string;
+    _count: { marketItems: number };
+  }>;
+  typeLinks: Record<string, number[]>;
+  transactionTypes: Array<{ id: number; name: string; code: string; order: number; isActive: boolean }>;
+}
+
+/**
+ * 获取物品分类池 + 各交易类型的关联状态（仅超级管理员）
+ */
+export async function getAdminMarketCategoriesConfig(): Promise<{
+  success: boolean;
+  data?: AdminMarketCategoriesConfig;
+  error?: string;
+}> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth || auth.role !== "SUPER_ADMIN") {
+      return { success: false, error: "仅超级管理员可访问" };
+    }
+
+    const [categories, links, transactionTypes] = await Promise.all([
+      prisma.marketCategory.findMany({
+        orderBy: [{ order: "asc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          order: true,
+          isActive: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { marketItems: true } },
+        },
+      }),
+      prisma.marketTypeCategory.findMany({
+        select: { transactionTypeId: true, categoryId: true },
+      }),
+      prisma.marketTransactionType.findMany({
+        orderBy: { order: "asc" },
+        select: { id: true, name: true, code: true, order: true, isActive: true },
+      }),
+    ]);
+
+    const typeLinks: Record<string, number[]> = {};
+    for (const link of links) {
+      if (!typeLinks[link.categoryId]) typeLinks[link.categoryId] = [];
+      typeLinks[link.categoryId].push(link.transactionTypeId);
+    }
+
+    const data: AdminMarketCategoriesConfig = {
+      categories: categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        order: c.order,
+        isActive: c.isActive,
+        createdAt: c.createdAt.toISOString(),
+        updatedAt: c.updatedAt.toISOString(),
+        _count: c._count ?? { marketItems: 0 },
+      })),
+      typeLinks,
+      transactionTypes,
+    };
+
+    return { success: true, data };
+  } catch (err) {
+    console.error("getAdminMarketCategoriesConfig 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "未知错误",
     };
   }
 }

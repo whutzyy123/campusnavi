@@ -53,7 +53,6 @@ interface SchoolState {
   /** 聚焦到指定校区，并清除 POI 选中状态 */
   triggerFocusToCampus: (payload: FocusCampusPayload) => void;
   setHighlightSubPOI: (poi: HighlightSubPOI | null) => void;
-  detectSchool: (lat: number, lng: number) => Promise<School | null>;
 
   /** 选中父 POI，并保存当前地图视图 */
   selectParentPOI: (poi: POIWithStatus | null, currentView: MapViewState | null) => void;
@@ -110,27 +109,6 @@ export const useSchoolStore = create<SchoolState>((set, get) => ({
 
   setHighlightSubPOI: (poi) => {
     set({ highlightSubPOI: poi });
-  },
-
-  /**
-   * 根据经纬度检测用户所属学校（已废弃：不再用于自动切换学校，仅保留兼容性）
-   */
-  detectSchool: async (lat: number, lng: number) => {
-    try {
-      const response = await fetch(`/api/schools/detect?lat=${lat}&lng=${lng}`);
-      const data = await response.json();
-
-      if (data.success && data.school) {
-        const school = data.school;
-        set({ activeSchool: school });
-        return school;
-      }
-
-      return null;
-    } catch (error) {
-      console.error("检测学校失败:", error);
-      return null;
-    }
   },
 
   selectParentPOI: (poi, currentView) => {

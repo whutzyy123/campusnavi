@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { X, MapPin, Save, Loader2, Trash2 } from "lucide-react";
 import { uploadPOIImage } from "@/lib/upload-actions";
 import { updatePOI, deletePOI } from "@/lib/poi-actions";
+import { getSchoolCategoriesForAdmin } from "@/lib/category-actions";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/amap-loader";
@@ -98,12 +99,15 @@ export function POIEditDialog({
 
       setIsLoadingCategories(true);
       try {
-        const response = await fetch("/api/admin/categories?all=true&grouped=true");
-        const data = await response.json();
-        if (data.success && data.data) {
+        const result = await getSchoolCategoriesForAdmin(schoolId, {
+          all: true,
+          grouped: true,
+        });
+        if (result.success && result.data && typeof result.data === "object") {
+          const data = result.data as { regular?: Array<{ id: string; name: string; icon?: string | null }>; convenience?: Array<{ id: string; name: string; icon?: string | null }> };
           setCategoryGroups({
-            regular: data.data.regular || [],
-            convenience: data.data.convenience || [],
+            regular: data.regular || [],
+            convenience: data.convenience || [],
           });
         }
       } catch (error) {

@@ -256,7 +256,7 @@ const LIVE_STATUS_BUTTONS = {
   ],
 } as const;
 
-/** 子 POI 结构（来自 API /api/pois/[id]） */
+/** 子 POI 结构（来自 getPOIDetail / POI 详情） */
 interface SubPOI {
   id: string;
   name: string;
@@ -1534,23 +1534,15 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     setIsReporting(true);
 
     try {
-      const response = await fetch("/api/audit/report", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          poiId: displayPoi.id,
-          reason: reportReason,
-          description: reportDescription || undefined,
-          userId: currentUser?.id || null,
-        }),
-      });
+      const { reportPOI } = await import("@/lib/poi-actions");
+      const result = await reportPOI(
+        displayPoi.id,
+        reportReason,
+        reportDescription || undefined
+      );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "举报失败");
+      if (!result.success) {
+        throw new Error(result.error || "举报失败");
       }
 
       toast.success("举报成功，感谢您的反馈！");

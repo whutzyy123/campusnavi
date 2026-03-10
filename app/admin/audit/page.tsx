@@ -9,6 +9,12 @@ import { EmptyState } from "@/components/empty-state";
 import { Badge } from "@/components/badge";
 import { AlertTriangle, Trash2, RotateCcw, ShoppingBag, MapPin } from "lucide-react";
 import toast from "react-hot-toast";
+import {
+  getAuditReports,
+  getAuditMarketItems,
+  resolveAudit,
+  resolveMarketAudit,
+} from "@/lib/audit-actions";
 
 interface ReportedPOI {
   id: string;
@@ -66,10 +72,17 @@ export default function AuditPage() {
       if (!schoolId) return;
       setIsLoadingPOI(true);
       try {
-        const response = await fetch(`/api/audit/reports?schoolId=${schoolId}&minReportCount=1`);
-        const data = await response.json();
-        if (data.success) setReportedPOIs(data.pois ?? []);
-        else toast.error(data.message || "获取举报列表失败");
+        const result = await getAuditReports(schoolId, 1);
+        if (result.success && result.data) {
+          setReportedPOIs(
+            result.data.map((p) => ({
+              ...p,
+              category: p.category ?? "",
+            }))
+          );
+        } else if (!result.success) {
+          toast.error(result.error || "获取举报列表失败");
+        }
       } catch (e) {
         toast.error("获取举报列表失败");
       } finally {
@@ -84,10 +97,22 @@ export default function AuditPage() {
     const fetchMarketItems = async () => {
       setIsLoadingMarket(true);
       try {
-        const response = await fetch(`/api/audit/market-items?schoolId=${schoolId}&minReportCount=1`);
-        const data = await response.json();
-        if (data.success) setMarketItems(data.data ?? []);
-        else toast.error(data.message || "获取集市举报列表失败");
+        const result = await getAuditMarketItems(schoolId, 1);
+        if (result.success && result.data) {
+          setMarketItems(
+            result.data.map((m) => ({
+              ...m,
+              user: {
+                ...m.user,
+                email: m.user.email ?? "",
+              },
+              category: m.category ?? { id: "", name: "未分类" },
+              poi: m.poi ?? { id: "", name: "" },
+            }))
+          );
+        } else if (!result.success) {
+          toast.error(result.error || "获取集市举报列表失败");
+        }
       } catch (e) {
         toast.error("获取集市举报列表失败");
       } finally {
@@ -101,14 +126,9 @@ export default function AuditPage() {
     if (processingId) return;
     setProcessingId(poiId);
     try {
-      const response = await fetch("/api/audit/resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ poiId, action }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "处理失败");
-      toast.success(data.message || "处理成功");
+      const result = await resolveAudit(poiId, action);
+      if (!result.success) throw new Error(result.error || "处理失败");
+      toast.success("处理成功");
       setReportedPOIs((prev) => prev.filter((p) => p.id !== poiId));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "处理失败，请重试");
@@ -121,14 +141,9 @@ export default function AuditPage() {
     if (processingMarketId) return;
     setProcessingMarketId(itemId);
     try {
-      const response = await fetch("/api/audit/market-resolve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemId, action }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "处理失败");
-      toast.success(data.message || "处理成功");
+      const result = await resolveMarketAudit(itemId, action);
+      if (!result.success) throw new Error(result.error || "处理失败");
+      toast.success("处理成功");
       setMarketItems((prev) => prev.filter((m) => m.id !== itemId));
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "处理失败，请重试");

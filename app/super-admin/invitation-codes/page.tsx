@@ -39,6 +39,7 @@ import {
   extendInvitationCode,
   type InvitationCodeListItem,
 } from "@/lib/invitation-actions";
+import { getSchoolsWithStats } from "@/lib/school-actions";
 
 interface School {
   id: string;
@@ -169,9 +170,16 @@ function InvitationCodesManagementPageContent() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const res = await fetch("/api/schools");
-        const data = await res.json();
-        if (data.success) setSchools(data.schools);
+        const result = await getSchoolsWithStats();
+        if (result.success && result.data) {
+          setSchools(
+            result.data.map((s) => ({
+              id: s.id,
+              name: s.name,
+              schoolCode: s.schoolCode,
+            }))
+          );
+        }
       } catch (error) {
         console.error("获取学校列表失败:", error);
       }

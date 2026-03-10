@@ -17,6 +17,7 @@ import { POISearchBar } from "@/components/poi-search-bar";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { useFilterStore } from "@/store/use-filter-store";
 import { useMarketStore } from "@/store/use-market-store";
+import { getCampuses } from "@/lib/school-actions";
 
 export function Navbar() {
   const pathname = usePathname();
@@ -63,10 +64,9 @@ export function Navbar() {
     }
     const fetchCampuses = async () => {
       try {
-        const response = await fetch(`/api/schools/${activeSchool.id}/campuses`);
-        const data = await response.json();
-        if (data.success && Array.isArray(data.data)) {
-          setCampuses(data.data);
+        const result = await getCampuses(activeSchool.id);
+        if (result.success && Array.isArray(result.data)) {
+          setCampuses(result.data);
         } else {
           setCampuses([]);
         }

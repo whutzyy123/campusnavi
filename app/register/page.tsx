@@ -61,10 +61,10 @@ export default function RegisterPage() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const response = await fetch("/api/schools/list");
-        const data = await response.json();
-        if (data.success) {
-          setSchools(data.schools);
+        const { getSchoolsList } = await import("@/lib/school-actions");
+        const result = await getSchoolsList();
+        if (result.success && result.data) {
+          setSchools(result.data);
         }
       } catch (error) {
         console.error("获取学校列表失败:", error);
@@ -215,15 +215,12 @@ export default function RegisterPage() {
         setSuccess(true);
         
         // 获取用户信息
-        const response = await fetch("/api/auth/me");
-        if (!response.ok) {
-          return;
-        }
-        const data = await response.json();
-        if (data.success && data.user) {
-          setUser(data.user);
-          if (data.user.schoolId) {
-            const selectedSchool = schools.find((s) => s.id === data.user.schoolId);
+        const { getMe } = await import("@/lib/auth-server-actions");
+        const meResult = await getMe();
+        if (meResult.success && meResult.user) {
+          setUser(meResult.user);
+          if (meResult.user.schoolId) {
+            const selectedSchool = schools.find((s) => s.id === meResult.user!.schoolId);
             if (selectedSchool) {
               setActiveSchool(selectedSchool);
             }

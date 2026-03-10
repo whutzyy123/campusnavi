@@ -1,18 +1,18 @@
 import { create } from "zustand";
-import { logoutUser } from "@/lib/auth-server-actions";
+import { logoutUser, getMe } from "@/lib/auth-server-actions";
 import { useNotificationStore } from "@/store/use-notification-store";
 
 export type UserRole = "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
 
 export interface User {
   id: string;
-  email?: string;
-  nickname: string;
-  bio?: string; // 个人简介
-  avatar?: string | null; // 头像 URL
-  lastProfileUpdateAt?: string | null; // 昵称/头像最后修改时间
-  role: UserRole;
-  schoolId: string | null; // 可选：超级管理员为 null
+  email?: string | null;
+  nickname: string | null;
+  bio?: string | null;
+  avatar?: string | null;
+  lastProfileUpdateAt?: string | null;
+  role: UserRole | string; // 兼容 getMe 返回的 string
+  schoolId: string | null;
   schoolName?: string | null;
 }
 
@@ -84,22 +84,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
 
     try {
-      const response = await fetch("/api/auth/me");
-
-      // 非 2xx（如 401/405）时，视为未登录
-      if (!response.ok) {
+      const result = await getMe();
+      if (result.success && result.user) {
         set({
-          currentUser: null,
-          isAuthenticated: false,
-          isInitialized: true, // 即使失败也标记为已初始化
-        });
-        return;
-      }
-
-      const data = await response.json();
-      if (data.success && data.user) {
-        set({
-          currentUser: data.user,
+          currentUser: result.user,
           isAuthenticated: true,
           isInitialized: true,
         });

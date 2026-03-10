@@ -2,6 +2,7 @@
 
 /**
  * 分类 Server Actions
+ * - 公开：getCategoriesForFilter（地图筛选面板）
  * - 便民公共设施（DB 字段 isMicroCategory）CRUD：仅超级管理员可管理
  * - POI 分类（System/Local）更新与删除：按角色区分权限
  *
@@ -12,7 +13,363 @@
 
 import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
-import { upsertCategoryOverride, removeCategoryOverride } from "@/lib/category-utils";
+import { getPaginationMeta } from "@/lib/utils";
+import { getMergedCategories, upsertCategoryOverride, removeCategoryOverride, type MergedCategory } from "@/lib/category-utils";
+import { CATEGORY_GROUP_REGULAR, CATEGORY_GROUP_CONVENIENCE } from "@/types/category";
+
+/** 筛选面板分类项（id、name、icon） */
+export interface FilterCategoryItem {
+  id: string;
+  name: string;
+  icon: string | null;
+}
+
+/** 筛选面板返回结构 */
+export interface CategoriesForFilterResult {
+  [CATEGORY_GROUP_REGULAR]: FilterCategoryItem[];
+  [CATEGORY_GROUP_CONVENIENCE]: FilterCategoryItem[];
+}
+
+/**
+ * 获取指定学校的分类列表（公开，用于地图筛选面板）
+ * 返回常规分类 + 便民公共设施分组
+ */
+export async function getCategoriesForFilter(schoolId: string): Promise<{
+  success: boolean;
+  data?: CategoriesForFilterResult;
+  error?: string;
+}> {
+  try {
+    if (!schoolId?.trim()) {
+      return { success: false, error: "缺少 schoolId 参数" };
+    }
+
+    const mergedCategories = await getMergedCategories(schoolId.trim());
+    const regular = mergedCategories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+    }));
+
+    const convenienceCategories = await prisma.category.findMany({
+      where: { isMicroCategory: true, schoolId: null },
+      select: { id: true, name: true, icon: true },
+      orderBy: { createdAt: "asc" },
+    });
+    const convenience = convenienceCategories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+    }));
+
+    return {
+      success: true,
+      data: {
+        [CATEGORY_GROUP_REGULAR]: regular,
+        [CATEGORY_GROUP_CONVENIENCE]: convenience,
+      },
+    };
+  } catch (err) {
+    console.error("getCategoriesForFilter 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取分类列表失败",
+    };
+  }
+}
+
+/** getSchoolCategoriesForAdmin 选项 */
+export type GetSchoolCategoriesOptions =
+  | { page: number; limit: number }
+  | { all?: true; grouped?: true };
+
+/**
+ * 获取学校分类（管理员用，支持分页或分组）
+ * - { page, limit }: 分页列表，用于管理表格
+ * - { all: true, grouped: true }: 分组格式 { regular, convenience }，用于 POI 表单
+ */
+export async function getSchoolCategoriesForAdmin(
+  schoolId: string,
+  options: GetSchoolCategoriesOptions
+): Promise<{
+  success: boolean;
+  data?: MergedCategory[] | CategoriesForFilterResult;
+  pagination?: { total: number; pageCount: number; currentPage: number };
+  error?: string;
+}> {
+  try {
+    if (!schoolId?.trim()) {
+      return { success: false, error: "缺少 schoolId" };
+    }
+
+    const merged = await getMergedCategories(schoolId.trim());
+
+    if ("all" in options && options.all && "grouped" in options && options.grouped) {
+      const regular = merged.map((c) => ({ id: c.id, name: c.name, icon: c.icon }));
+      const convenience = await prisma.category.findMany({
+        where: { isMicroCategory: true, schoolId: null },
+        select: { id: true, name: true, icon: true },
+        orderBy: { createdAt: "asc" },
+      });
+      return {
+        success: true,
+        data: {
+          [CATEGORY_GROUP_REGULAR]: regular,
+          [CATEGORY_GROUP_CONVENIENCE]: convenience.map((c) => ({
+            id: c.id,
+            name: c.name,
+            icon: c.icon,
+          })),
+        },
+      };
+    }
+
+    if ("page" in options && "limit" in options) {
+      const { page, limit } = options;
+      const total = merged.length;
+      const skip = (Math.max(1, page) - 1) * Math.max(1, limit);
+      const take = Math.max(1, limit);
+      const paginated = merged.slice(skip, skip + take);
+      const pageCount = Math.ceil(total / take);
+      return {
+        success: true,
+        data: paginated,
+        pagination: { total, pageCount, currentPage: page },
+      };
+    }
+
+    return { success: true, data: merged };
+  } catch (err) {
+    console.error("getSchoolCategoriesForAdmin 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取分类列表失败",
+    };
+  }
+}
+
+/** 创建学校分类（校内私有分类，非全局） */
+export async function createSchoolCategory(input: {
+  schoolId: string;
+  name: string;
+  icon?: string | null;
+}): Promise<{ success: boolean; data?: MergedCategory; error?: string }> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId) return { success: false, error: "请先登录" };
+    const isAdmin = auth.role === "ADMIN" || auth.role === "STAFF" || auth.role === "SUPER_ADMIN";
+    if (!isAdmin) return { success: false, error: "仅管理员可创建分类" };
+    if (auth.role !== "SUPER_ADMIN" && auth.schoolId !== input.schoolId) {
+      return { success: false, error: "无权为其他学校创建分类" };
+    }
+
+    const name = input.name?.trim();
+    if (!name) return { success: false, error: "分类名称不能为空" };
+    if (name.length > 50) return { success: false, error: "分类名称过长（最多 50 字）" };
+
+    const existing = await prisma.category.findUnique({
+      where: { schoolId_name: { schoolId: input.schoolId, name } },
+    });
+    if (existing) return { success: false, error: "该分类名称已存在" };
+
+    const category = await prisma.category.create({
+      data: {
+        schoolId: input.schoolId,
+        name,
+        icon: input.icon?.trim() || null,
+        isGlobal: false,
+        isMicroCategory: false,
+      },
+    });
+
+    const poiCount = await prisma.pOI.count({
+      where: { categoryId: category.id, schoolId: input.schoolId },
+    });
+
+    return {
+      success: true,
+      data: {
+        id: category.id,
+        name: category.name,
+        icon: category.icon,
+        isGlobal: false,
+        isHidden: false,
+        customName: null,
+        poiCount,
+        createdAt: category.createdAt.toISOString(),
+        updatedAt: category.updatedAt.toISOString(),
+      },
+    };
+  } catch (err) {
+    console.error("createSchoolCategory 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "创建分类失败",
+    };
+  }
+}
+
+/** 全局分类列表项（常规 POI 分类，isGlobal=true, schoolId=null，排除便民公共设施） */
+export interface GlobalCategoryItem {
+  id: string;
+  name: string;
+  icon: string | null;
+  poiCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * 获取全局分类列表（仅超级管理员）
+ * 分页：固定每页 10 条
+ */
+export async function getGlobalCategories(params: {
+  page?: number;
+  limit?: number;
+}): Promise<{
+  success: boolean;
+  data?: GlobalCategoryItem[];
+  pagination?: { total: number; pageCount: number; currentPage: number };
+  error?: string;
+}> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId || auth.role !== "SUPER_ADMIN") {
+      return { success: false, error: "仅超级管理员可访问" };
+    }
+
+    const PAGE_SIZE = params.limit ?? 10;
+    const page = Math.max(1, params.page ?? 1);
+    const skip = (page - 1) * PAGE_SIZE;
+
+    const [total, categories] = await Promise.all([
+      prisma.category.count({
+        where: { isGlobal: true, schoolId: null },
+      }),
+      prisma.category.findMany({
+        where: { isGlobal: true, schoolId: null },
+        select: {
+          id: true,
+          name: true,
+          icon: true,
+          createdAt: true,
+          updatedAt: true,
+          _count: { select: { pois: true } },
+        },
+        orderBy: { createdAt: "asc" },
+        skip,
+        take: PAGE_SIZE,
+      }),
+    ]);
+
+    const pagination = getPaginationMeta(total, page, PAGE_SIZE);
+    const data: GlobalCategoryItem[] = categories.map((c) => ({
+      id: c.id,
+      name: c.name,
+      icon: c.icon,
+      poiCount: c._count.pois,
+      createdAt: c.createdAt.toISOString(),
+      updatedAt: c.updatedAt.toISOString(),
+    }));
+
+    return { success: true, data, pagination };
+  } catch (err) {
+    console.error("getGlobalCategories 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取全局分类列表失败",
+    };
+  }
+}
+
+/**
+ * 创建全局分类（仅超级管理员）
+ */
+export async function createGlobalCategory(input: {
+  name: string;
+  icon?: string | null;
+}): Promise<{ success: boolean; data?: GlobalCategoryItem; error?: string }> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId || auth.role !== "SUPER_ADMIN") {
+      return { success: false, error: "仅超级管理员可创建全局分类" };
+    }
+
+    const name = input.name?.trim();
+    if (!name) return { success: false, error: "分类名称不能为空" };
+    if (name.length > 50) return { success: false, error: "分类名称过长（最多 50 字）" };
+
+    const existing = await prisma.category.findFirst({
+      where: { isGlobal: true, schoolId: null, name },
+    });
+    if (existing) return { success: false, error: "该全局分类名称已存在" };
+
+    const category = await prisma.category.create({
+      data: {
+        schoolId: null,
+        name,
+        icon: input.icon?.trim() || null,
+        isGlobal: true,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        id: category.id,
+        name: category.name,
+        icon: category.icon,
+        poiCount: 0,
+        createdAt: category.createdAt.toISOString(),
+        updatedAt: category.updatedAt.toISOString(),
+      },
+    };
+  } catch (err) {
+    console.error("createGlobalCategory 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "创建失败",
+    };
+  }
+}
+
+/**
+ * 删除全局分类（仅超级管理员）
+ * 删除后 POI 的 categoryId 会置为 null（onDelete: SetNull）
+ */
+export async function deleteGlobalCategory(id: string): Promise<{
+  success: boolean;
+  error?: string;
+}> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId || auth.role !== "SUPER_ADMIN") {
+      return { success: false, error: "仅超级管理员可访问" };
+    }
+
+    const existing = await prisma.category.findUnique({
+      where: { id },
+      select: { id: true, isGlobal: true, schoolId: true, isMicroCategory: true },
+    });
+
+    if (!existing) {
+      return { success: false, error: "分类不存在" };
+    }
+
+    if (!existing.isGlobal || existing.schoolId !== null || existing.isMicroCategory) {
+      return { success: false, error: "只能删除全局常规分类" };
+    }
+
+    await prisma.category.delete({ where: { id } });
+    return { success: true };
+  } catch (err) {
+    console.error("deleteGlobalCategory 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "删除失败",
+    };
+  }
+}
 
 /** 便民公共设施分类项（对应 DB isMicroCategory === true，字段未更名避免迁移） */
 export interface MicroCategoryItem {

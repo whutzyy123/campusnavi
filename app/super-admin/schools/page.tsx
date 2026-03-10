@@ -11,7 +11,15 @@ import { Building2, Plus, MoreVertical, Edit, Power, PowerOff, Trash2, Save, X, 
 import toast from "react-hot-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/table";
-import { updateSchoolStatus, deleteSchool } from "@/lib/school-actions";
+import {
+  getSchoolsWithStats,
+  getSchoolById,
+  updateSchool,
+  updateSchoolStatus,
+  deleteSchool,
+  createSchool,
+} from "@/lib/school-actions";
+import { createInvitationCode } from "@/lib/invitation-actions";
 
 interface School {
   id: string;
@@ -60,12 +68,11 @@ export default function SchoolsManagementPage() {
   const fetchSchools = async () => {
     setIsLoadingSchools(true);
     try {
-      const response = await fetch("/api/schools");
-      const data = await response.json();
-      if (data.success) {
-        setSchools(data.schools);
-      } else {
-        toast.error(data.message || "获取学校列表失败");
+      const result = await getSchoolsWithStats();
+      if (result.success && result.data) {
+        setSchools(result.data);
+      } else if (!result.success) {
+        toast.error(result.error || "获取学校列表失败");
       }
     } catch (error) {
       console.error("获取学校列表失败:", error);
@@ -108,18 +115,9 @@ export default function SchoolsManagementPage() {
     const toastId = toast.loading("正在更新学校信息...");
 
     try {
-      const response = await fetch(`/api/schools/${editingSchool.id}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ name: editName.trim() }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "更新失败");
+      const result = await updateSchool(editingSchool.id, { name: editName.trim() });
+      if (!result.success) {
+        throw new Error(result.error || "更新失败");
       }
 
       toast.success("学校信息更新成功", { id: toastId });
@@ -127,7 +125,6 @@ export default function SchoolsManagementPage() {
       setEditingSchool(null);
       setEditName("");
 
-      // 刷新学校列表
       await fetchSchools();
     } catch (error) {
       console.error("更新学校信息失败:", error);
@@ -145,28 +142,18 @@ export default function SchoolsManagementPage() {
     setIsCreatingSchool(true);
 
     try {
-      const response = await fetch("/api/admin/school", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: newSchoolName.trim(),
-          schoolCode: newSchoolCode.trim(),
-        }),
+      const result = await createSchool({
+        name: newSchoolName.trim(),
+        schoolCode: newSchoolCode.trim(),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "创建失败");
+      if (!result.success) {
+        throw new Error(result.error || "创建失败");
       }
 
       toast.success("学校创建成功！");
-      setCreatedSchoolId(data.data.id);
+      setCreatedSchoolId(result.data?.id ?? null);
       setShowGenerateInviteAfterCreate(true);
-      
-      // 刷新学校列表
+
       await fetchSchools();
     } catch (error) {
       console.error("创建学校失败:", error);
@@ -185,25 +172,12 @@ export default function SchoolsManagementPage() {
     setIsGenerating(true);
 
     try {
-      const response = await fetch("/api/invitation-codes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          schoolId: createdSchoolId,
-          role: 2, // 校级管理员
-          issuerId: currentUser.id,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "生成失败");
+      const result = await createInvitationCode(createdSchoolId, "ADMIN", 7);
+      if (!result.success) {
+        throw new Error(result.message || result.error || "生成失败");
       }
 
-      setGeneratedCode(data.invitationCode.code);
+      setGeneratedCode(result.data?.code ?? "");
       toast.success("邀请码生成成功！");
     } catch (error) {
       console.error("生成邀请码失败:", error);

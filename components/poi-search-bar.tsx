@@ -74,10 +74,10 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     if (showOngoingOnly) {
       setIsSearching(true);
       try {
-        const res = await fetch(`/api/pois/search?schoolId=${schoolId}&ongoingOnly=true`);
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setSearchResults(data.data);
+        const { searchPOIs } = await import("@/lib/poi-actions");
+        const result = await searchPOIs(schoolId, { ongoingOnly: true });
+        if (result.success && Array.isArray(result.data)) {
+          setSearchResults(result.data);
         } else {
           setSearchResults([]);
         }
@@ -94,10 +94,10 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     }
     setIsSearching(true);
     try {
-      const res = await fetch(`/api/pois/search?schoolId=${schoolId}&q=${encodeURIComponent(debouncedQ)}`);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        setSearchResults(data.data);
+      const { searchPOIs } = await import("@/lib/poi-actions");
+      const result = await searchPOIs(schoolId, { q: debouncedQ });
+      if (result.success && Array.isArray(result.data)) {
+        setSearchResults(result.data);
       } else {
         setSearchResults([]);
       }

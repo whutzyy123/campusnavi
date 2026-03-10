@@ -14,6 +14,7 @@ import {
   updateMarketCategory,
   deleteMarketCategory,
   toggleTypeCategory,
+  getAdminMarketCategoriesConfig,
 } from "@/lib/market-actions";
 import {
   ShoppingBag,
@@ -82,18 +83,17 @@ export default function SuperAdminMarketCategoriesPage() {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const res = await fetch("/api/admin/market-categories");
-      const data = await res.json();
-      if (data.success && data.data) {
-        setCategories(data.data.categories || []);
-        setTypeLinks(data.data.typeLinks || {});
-        setTransactionTypes(data.data.transactionTypes || []);
-        if (data.data.transactionTypes?.length && !initializedTypeRef.current) {
+      const result = await getAdminMarketCategoriesConfig();
+      if (result.success && result.data) {
+        setCategories(result.data.categories || []);
+        setTypeLinks(result.data.typeLinks || {});
+        setTransactionTypes(result.data.transactionTypes || []);
+        if (result.data.transactionTypes?.length && !initializedTypeRef.current) {
           initializedTypeRef.current = true;
-          setSelectedTypeId(data.data.transactionTypes[0].id);
+          setSelectedTypeId(result.data.transactionTypes[0].id);
         }
       } else {
-        toast.error(data.message || "获取数据失败");
+        toast.error(result.error || "获取数据失败");
       }
     } catch (error) {
       console.error("获取集市配置失败:", error);

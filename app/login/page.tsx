@@ -37,10 +37,10 @@ function LoginPageContent() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const response = await fetch("/api/schools/list");
-        const data = await response.json();
-        if (data.success) {
-          useSchoolStore.getState().setSchools(data.schools);
+        const { getSchoolsList } = await import("@/lib/school-actions");
+        const result = await getSchoolsList();
+        if (result.success && result.data) {
+          useSchoolStore.getState().setSchools(result.data);
         }
       } catch (error) {
         console.error("获取学校列表失败:", error);

@@ -10,6 +10,7 @@ import toast from "react-hot-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { POIEditDialog } from "@/components/poi-edit-dialog";
 import { getPOIsBySchool, deletePOI } from "@/lib/poi-actions";
+import { getSchoolCategoriesForAdmin } from "@/lib/category-actions";
 
 interface POI {
   id: string;
@@ -130,10 +131,14 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
     const fetchCategories = async () => {
       if (!schoolId) return;
       try {
-        const response = await fetch("/api/admin/categories?all=true&grouped=true");
-        const data = await response.json();
-        if (data.success && data.data) {
-          const { regular = [], convenience = [] } = data.data;
+        const result = await getSchoolCategoriesForAdmin(schoolId, {
+          all: true,
+          grouped: true,
+        });
+        if (result.success && result.data && typeof result.data === "object") {
+          const data = result.data as { regular?: Array<{ id: string; name: string }>; convenience?: Array<{ id: string; name: string }> };
+          const regular = data.regular ?? [];
+          const convenience = data.convenience ?? [];
           setCategories([...regular, ...convenience]);
         }
       } catch (error) {

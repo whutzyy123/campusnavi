@@ -10,7 +10,14 @@ import { EmptyState } from "@/components/empty-state";
 import { Tags, Plus, Trash2, AlertCircle, EyeOff, Edit2, RotateCcw } from "lucide-react";
 import toast from "react-hot-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { updateCategory } from "@/lib/category-actions";
+import {
+  getSchoolCategoriesForAdmin,
+  createSchoolCategory,
+  deleteCategory,
+  updateCategoryOverride,
+  removeCategoryOverrideAction,
+  updateCategory,
+} from "@/lib/category-actions";
 
 interface Category {
   id: string;
@@ -58,11 +65,14 @@ function CategoryManagementPageContent() {
   const refreshCategories = async () => {
     if (!schoolId) return;
     const currentPage = parseInt(searchParams.get("page") || "1", 10);
-    const response = await fetch(`/api/admin/categories?page=${currentPage}&limit=10`);
-    const data = await response.json();
-    if (data.success) {
-      setCategories(data.data || []);
-      setPagination(data.pagination || null);
+    const result = await getSchoolCategoriesForAdmin(schoolId, {
+      page: currentPage,
+      limit: 10,
+    });
+    if (result.success && result.data) {
+      const list = Array.isArray(result.data) ? result.data : [];
+      setCategories(list);
+      setPagination(result.pagination || null);
     }
   };
 
@@ -74,13 +84,16 @@ function CategoryManagementPageContent() {
       setIsLoading(true);
       try {
         const currentPage = parseInt(searchParams.get("page") || "1", 10);
-        const response = await fetch(`/api/admin/categories?page=${currentPage}&limit=10`);
-        const data = await response.json();
-        if (data.success) {
-          setCategories(data.data || []);
-          setPagination(data.pagination || null);
+        const result = await getSchoolCategoriesForAdmin(schoolId, {
+          page: currentPage,
+          limit: 10,
+        });
+        if (result.success && result.data) {
+          const list = Array.isArray(result.data) ? result.data : [];
+          setCategories(list);
+          setPagination(result.pagination || null);
         } else {
-          toast.error(data.message || "获取分类列表失败");
+          toast.error(result.error || "获取分类列表失败");
         }
       } catch (error) {
         console.error("获取分类列表失败:", error);
@@ -95,27 +108,19 @@ function CategoryManagementPageContent() {
 
   // 创建新分类（始终创建校内分类，schoolId 由后端从 Cookie 注入）
   const handleCreate = async () => {
-    if (!newCategoryName.trim()) {
+    if (!newCategoryName.trim() || !schoolId) {
       toast.error("请输入分类名称");
       return;
     }
 
     setIsCreating(true);
     try {
-      const response = await fetch("/api/admin/categories", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name: newCategoryName.trim(),
-          isGlobal: false, // 明确创建校内分类
-        }),
+      const result = await createSchoolCategory({
+        schoolId,
+        name: newCategoryName.trim(),
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "创建失败");
+      if (!result.success) {
+        throw new Error(result.error || "创建失败");
       }
 
       toast.success("分类创建成功");
@@ -155,16 +160,15 @@ function CategoryManagementPageContent() {
 
     setDeletingId(id);
     try {
-      const response = await fetch(`/api/admin/categories/${id}`, {
-        method: "DELETE",
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "操作失败");
+      if (isGlobal) {
+        const result = await updateCategoryOverride(id, { isHidden: true });
+        if (!result.success) throw new Error(result.error || "操作失败");
+        toast.success(result.message || "操作成功");
+      } else {
+        const result = await deleteCategory(id);
+        if (!result.success) throw new Error(result.error || "操作失败");
+        toast.success(result.message || "操作成功");
       }
-
-      toast.success(data.message || "操作成功");
       await refreshCategories();
     } catch (error) {
       console.error("操作失败:", error);
@@ -178,20 +182,9 @@ function CategoryManagementPageContent() {
   const handleHide = async (id: string) => {
     setDeletingId(id);
     try {
-      const response = await fetch(`/api/admin/categories/${id}/override`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ isHidden: true }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "隐藏失败");
-      }
-
-      toast.success("全局分类已在该学校隐藏");
+      const result = await updateCategoryOverride(id, { isHidden: true });
+      if (!result.success) throw new Error(result.error || "隐藏失败");
+      toast.success(result.message || "全局分类已在该学校隐藏");
       await refreshCategories();
     } catch (error) {
       console.error("隐藏分类失败:", error);
@@ -228,16 +221,9 @@ function CategoryManagementPageContent() {
   // 恢复默认显示
   const handleRestore = async (id: string) => {
     try {
-      const response = await fetch(`/api/admin/categories/${id}/override`, {
-        method: "DELETE",
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || "恢复失败");
-      }
-
-      toast.success("已恢复为默认显示");
+      const result = await removeCategoryOverrideAction(id);
+      if (!result.success) throw new Error(result.error || "恢复失败");
+      toast.success(result.message || "已恢复为默认显示");
       await refreshCategories();
     } catch (error) {
       console.error("恢复失败:", error);

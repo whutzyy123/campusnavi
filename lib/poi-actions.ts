@@ -53,6 +53,219 @@ export interface GetPOIsBySchoolOptions {
   limit?: number;
 }
 
+/** POI 搜索结果项（用于搜索框、集市 POI 选择等） */
+export interface POISearchItem {
+  id: string;
+  name: string;
+  alias: string | null;
+  matchedActivity?: { id: string; title: string };
+}
+
+/**
+ * 按学校搜索 POI（公开）
+ * - q: 关键词，匹配 name、alias、进行中活动 title/description
+ * - ongoingOnly: 仅返回有进行中活动的 POI
+ */
+export async function searchPOIs(
+  schoolId: string,
+  options?: { q?: string; ongoingOnly?: boolean }
+): Promise<POIActionResult<POISearchItem[]>> {
+  try {
+    if (!schoolId?.trim()) {
+      return { success: false, error: "schoolId 为必填项" };
+    }
+
+    const sid = schoolId.trim();
+    const q = options?.q?.trim();
+    const ongoingOnly = options?.ongoingOnly ?? false;
+    const baseWhere = { schoolId: sid, reportCount: { lt: 3 } };
+    const limit = 50;
+    const now = new Date();
+
+    if (ongoingOnly) {
+      const activities = await prisma.activity.findMany({
+        where: {
+          schoolId: sid,
+          startAt: { lte: now },
+          endAt: { gte: now },
+        },
+        select: {
+          id: true,
+          title: true,
+          poiId: true,
+          poi: {
+            select: { id: true, name: true, alias: true, reportCount: true },
+          },
+        },
+      });
+
+      const seenPoiIds = new Set<string>();
+      const data: POISearchItem[] = [];
+
+      for (const act of activities) {
+        if (!act.poi || act.poi.reportCount >= 3) continue;
+        if (seenPoiIds.has(act.poiId)) continue;
+        seenPoiIds.add(act.poiId);
+        data.push({
+          id: act.poi.id,
+          name: act.poi.name,
+          alias: act.poi.alias,
+          matchedActivity: { id: act.id, title: act.title },
+        });
+        if (data.length >= limit) break;
+      }
+
+      return { success: true, data };
+    }
+
+    if (!q || q.length === 0) {
+      const pois = await prisma.pOI.findMany({
+        where: baseWhere,
+        select: { id: true, name: true, alias: true },
+        orderBy: { name: "asc" },
+        take: limit,
+      });
+      return {
+        success: true,
+        data: pois.map((p) => ({ id: p.id, name: p.name, alias: p.alias })),
+      };
+    }
+
+    const nameMatchPois = await prisma.pOI.findMany({
+      where: { ...baseWhere, name: { contains: q } },
+      select: { id: true, name: true, alias: true },
+      orderBy: { name: "asc" },
+      take: limit,
+    });
+    const nameMatchIds = new Set(nameMatchPois.map((p) => p.id));
+
+    const remainingAfterName = limit - nameMatchPois.length;
+    let aliasMatchPois: Array<{ id: string; name: string; alias: string | null }> = [];
+    if (remainingAfterName > 0) {
+      aliasMatchPois = await prisma.pOI.findMany({
+        where: {
+          ...baseWhere,
+          id: { notIn: [...nameMatchIds] },
+          alias: { contains: q },
+        },
+        select: { id: true, name: true, alias: true },
+        orderBy: { name: "asc" },
+        take: remainingAfterName,
+      });
+    }
+    const aliasMatchIds = new Set(aliasMatchPois.map((p) => p.id));
+
+    const remainingAfterAlias = limit - nameMatchPois.length - aliasMatchPois.length;
+    const activityMatchItems: POISearchItem[] = [];
+
+    if (remainingAfterAlias > 0) {
+      const matchingActivities = await prisma.activity.findMany({
+        where: {
+          schoolId: sid,
+          startAt: { lte: now },
+          endAt: { gte: now },
+          OR: [
+            { title: { contains: q } },
+            { description: { contains: q } },
+          ],
+        },
+        include: {
+          poi: {
+            select: { id: true, name: true, alias: true, reportCount: true },
+          },
+        },
+      });
+
+      const excludeIds = new Set([...nameMatchIds, ...aliasMatchIds]);
+      const seenPoiIds = new Set<string>();
+
+      for (const act of matchingActivities) {
+        if (activityMatchItems.length >= remainingAfterAlias) break;
+        if (!act.poi || act.poi.reportCount >= 3) continue;
+        if (excludeIds.has(act.poiId) || seenPoiIds.has(act.poiId)) continue;
+        seenPoiIds.add(act.poiId);
+        activityMatchItems.push({
+          id: act.poi.id,
+          name: act.poi.name,
+          alias: act.poi.alias,
+          matchedActivity: { id: act.id, title: act.title },
+        });
+      }
+    }
+
+    const data: POISearchItem[] = [
+      ...nameMatchPois.map((p) => ({ id: p.id, name: p.name, alias: p.alias })),
+      ...aliasMatchPois.map((p) => ({ id: p.id, name: p.name, alias: p.alias })),
+      ...activityMatchItems,
+    ];
+
+    return { success: true, data };
+  } catch (err) {
+    console.error("searchPOIs 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "POI 搜索失败",
+    };
+  }
+}
+
+/**
+ * 举报 POI（需登录，可选匿名）
+ */
+export async function reportPOI(
+  poiId: string,
+  reason: string,
+  description?: string | null
+): Promise<POIActionResult<{ reportCount: number; isHidden: boolean }>> {
+  try {
+    const validReasons = ["定位不准", "信息错误", "有害内容"];
+    if (!validReasons.includes(reason)) {
+      return { success: false, error: "无效的举报原因" };
+    }
+
+    try {
+      await validateContent(reason, { checkNumbers: false });
+      if (description) {
+        await validateContent(description, { checkNumbers: true });
+      }
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : "内容包含敏感词汇，请修改后重试。",
+      };
+    }
+
+    const poi = await prisma.pOI.findUnique({
+      where: { id: poiId },
+      select: { id: true, schoolId: true, reportCount: true },
+    });
+
+    if (!poi) {
+      return { success: false, error: "POI 不存在" };
+    }
+
+    const updated = await prisma.pOI.update({
+      where: { id: poiId },
+      data: { reportCount: { increment: 1 } },
+      select: { id: true, reportCount: true },
+    });
+
+    return {
+      success: true,
+      data: {
+        reportCount: updated.reportCount,
+        isHidden: updated.reportCount >= 3,
+      },
+    };
+  } catch (err) {
+    console.error("reportPOI 失败:", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "举报失败",
+    };
+  }
+}
+
 /**
  * 根据学校获取 POI 列表
  * - rootOnly=true：仅返回根 POI（Primary POI）

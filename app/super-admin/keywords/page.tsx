@@ -21,6 +21,12 @@ import {
   TableRow,
 } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import {
+  getKeywords,
+  createKeyword,
+  bulkCreateKeywords,
+  deleteKeyword,
+} from "@/lib/keyword-actions";
 
 interface SensitiveWord {
   id: string;
@@ -66,16 +72,16 @@ function KeywordsManagementPageContent() {
   const fetchKeywords = useCallback(async () => {
     try {
       const currentPage = parseInt(searchParams.get("page") || "1", 10);
-      const params = new URLSearchParams({ page: String(currentPage), limit: "10" });
-      if (debouncedSearchInput.trim()) params.set("q", debouncedSearchInput.trim());
-      const response = await fetch(`/api/keywords?${params}`);
-      const data = await response.json();
-
-      if (data.success) {
-        setKeywords(data.data || data.keywords || []);
-        setPagination(data.pagination || null);
-      } else {
-        toast.error(data.message || "获取屏蔽词列表失败");
+      const result = await getKeywords({
+        page: currentPage,
+        limit: 10,
+        q: debouncedSearchInput.trim() || undefined,
+      });
+      if (result.success && result.data) {
+        setKeywords(result.data);
+        setPagination(result.pagination || null);
+      } else if (!result.success) {
+        toast.error(result.error || "获取屏蔽词列表失败");
       }
     } catch (error) {
       console.error("获取屏蔽词列表失败:", error);
@@ -126,23 +132,14 @@ function KeywordsManagementPageContent() {
     setBulkImporting(true);
     setLastImportResult(null);
     try {
-      const response = await fetch("/api/keywords/bulk", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          words,
-          addedById: currentUser.id,
-        }),
-      });
-      const data = await response.json();
-
-      if (data.success) {
-        setLastImportResult(data.data);
-        toast.success(data.message || "批量导入成功");
+      const result = await bulkCreateKeywords(words);
+      if (result.success && result.data) {
+        setLastImportResult(result.data);
+        toast.success(`批量导入成功，新增 ${result.data.added} 个，跳过 ${result.data.skipped} 个`);
         setBulkText("");
         await fetchKeywords();
-      } else {
-        toast.error(data.message || "批量导入失败");
+      } else if (!result.success) {
+        toast.error(result.error || "批量导入失败");
       }
     } catch (error) {
       console.error("批量导入失败:", error);
@@ -187,25 +184,13 @@ function KeywordsManagementPageContent() {
 
     setIsAdding(true);
     try {
-      const response = await fetch("/api/keywords", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          keyword: newKeyword.trim(),
-          addedById: currentUser.id,
-        }),
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const result = await createKeyword(newKeyword.trim());
+      if (result.success) {
         toast.success("屏蔽词添加成功");
         setNewKeyword("");
-        // 重新加载列表（保持当前页）
         await fetchKeywords();
-      } else {
-        toast.error(data.message || "添加屏蔽词失败");
+      } else if (!result.success) {
+        toast.error(result.error || "添加屏蔽词失败");
       }
     } catch (error) {
       console.error("添加屏蔽词失败:", error);
@@ -223,17 +208,12 @@ function KeywordsManagementPageContent() {
 
     setDeletingId(id);
     try {
-      const response = await fetch(`/api/keywords/${id}`, {
-        method: "DELETE",
-      });
-
-      const data = await response.json();
-      if (data.success) {
+      const result = await deleteKeyword(id);
+      if (result.success) {
         toast.success("屏蔽词删除成功");
-        // 重新加载列表（保持当前页）
         await fetchKeywords();
-      } else {
-        toast.error(data.message || "删除屏蔽词失败");
+      } else if (!result.success) {
+        toast.error(result.error || "删除屏蔽词失败");
       }
     } catch (error) {
       console.error("删除屏蔽词失败:", error);

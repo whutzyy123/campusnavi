@@ -13,6 +13,13 @@ import polylabel from "polylabel";
 import { ensureLngLat } from "@/lib/campus-label-utils";
 import toast from "react-hot-toast";
 import {
+  getSchoolById,
+  getCampuses,
+  createCampus,
+  updateCampus,
+  deleteCampus,
+} from "@/lib/school-actions";
+import {
   Plus,
   Edit2,
   Trash2,
@@ -119,16 +126,17 @@ export default function CampusManagementPage() {
 
     setIsLoadingCampuses(true);
     try {
-      const url = currentUser?.role === "SUPER_ADMIN"
-        ? `/api/admin/campuses?schoolId=${schoolId}`
-        : "/api/admin/campuses";
-      const response = await fetch(url);
-      const data = await response.json();
-
-      if (data.success) {
-        setCampuses(data.data || []);
+      const result = await getCampuses(schoolId);
+      if (result.success && result.data) {
+        setCampuses(
+          result.data.map((c) => ({
+            ...c,
+            center: parseLngLat(c.center) as [number, number],
+            labelCenter: c.labelCenter,
+          }))
+        );
       } else {
-        toast.error(data.message || "加载校区列表失败");
+        toast.error(result.success === false ? result.error : "加载校区列表失败");
       }
     } catch (error) {
       console.error("加载校区列表失败:", error);
@@ -136,7 +144,7 @@ export default function CampusManagementPage() {
     } finally {
       setIsLoadingCampuses(false);
     }
-  }, [getTargetSchoolId, currentUser?.role]);
+  }, [getTargetSchoolId]);
 
   useEffect(() => {
     fetchCampuses();
@@ -164,12 +172,18 @@ export default function CampusManagementPage() {
       }
 
       try {
-        const response = await fetch(`/api/schools/${currentUser.schoolId}`);
-        const data = await response.json();
-        if (data.success && data.school) {
-          setActiveSchool(data.school);
+        const result = await getSchoolById(currentUser.schoolId);
+        if (result.success && result.data) {
+          const school = result.data;
+          setActiveSchool({
+            id: school.id,
+            name: school.name,
+            schoolCode: school.schoolCode,
+            centerLng: school.centerLng,
+            centerLat: school.centerLat,
+          });
         } else {
-          console.error("加载锁定学校失败:", data.message);
+          console.error("加载锁定学校失败:", result.success === false ? result.error : "未知错误");
         }
       } catch (error) {
         console.error("加载锁定学校失败:", error);
@@ -1039,16 +1053,9 @@ export default function CampusManagementPage() {
 
       setIsSaving(true);
 
-      // 发送更新请求
-      const response = await fetch(`/api/admin/campuses/${editingCampusId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ boundary: coordinates }),
-      });
+      const result = await updateCampus(editingCampusId, { boundary: coordinates });
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (result.success) {
         toast.success("校区更新成功");
         
         // 关键修复：解除编辑锁定，允许 React 重新渲染
@@ -1062,7 +1069,7 @@ export default function CampusManagementPage() {
         // 刷新校区列表（这会重新渲染多边形和标签）
         await fetchCampuses();
       } else {
-        toast.error(data.message || "更新校区失败");
+        toast.error(result.error || "更新校区失败");
         // 重新打开编辑器，让用户可以继续编辑
         if (polygon && amap && mapInstanceRef.current) {
           try {
@@ -1137,30 +1144,20 @@ export default function CampusManagementPage() {
 
     setIsSaving(true);
     try {
-      const url = currentUser?.role === "SUPER_ADMIN"
-        ? `/api/admin/campuses`
-        : "/api/admin/campuses";
-      
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          schoolId: currentUser?.role === "SUPER_ADMIN" ? schoolId : undefined,
-          name: newCampusName.trim(),
-          boundary: newCampusBoundary,
-        }),
+      const result = await createCampus({
+        schoolId,
+        name: newCampusName.trim(),
+        boundary: newCampusBoundary,
       });
 
-      const data = await response.json();
-
-      if (data.success) {
+      if (result.success) {
         toast.success("校区创建成功");
         setShowNameInput(false);
         setNewCampusName("");
         setNewCampusBoundary(null);
         await fetchCampuses();
       } else {
-        toast.error(data.message || "创建校区失败");
+        toast.error(result.error || "创建校区失败");
       }
     } catch (error) {
       console.error("创建校区失败:", error);
@@ -1198,17 +1195,12 @@ export default function CampusManagementPage() {
     }
 
     try {
-      const response = await fetch(`/api/admin/campuses/${campusId}`, {
-        method: "DELETE",
-      });
-
-      const data = await response.json();
-
-      if (data.success) {
+      const result = await deleteCampus(campusId);
+      if (result.success) {
         toast.success("校区删除成功");
         await fetchCampuses();
       } else {
-        toast.error(data.message || "删除校区失败");
+        toast.error(result.error || "删除校区失败");
       }
     } catch (error) {
       console.error("删除校区失败:", error);

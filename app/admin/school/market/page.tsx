@@ -16,7 +16,11 @@ import toast from "react-hot-toast";
 import Image from "next/image";
 import { MarketAuditDrawer } from "@/components/admin/market-audit-drawer";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
-import { getMarketCategories } from "@/lib/market-actions";
+import {
+  getAdminMarketItems,
+  adminMarketItemAction,
+  getMarketCategories,
+} from "@/lib/market-actions";
 import { formatDate } from "@/lib/utils";
 
 const STATUS_FILTERS = [
@@ -71,19 +75,25 @@ export default function AdminMarketPage() {
     if (!schoolId) return;
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ schoolId });
-      if (debouncedSearch) params.set("search", debouncedSearch);
-      if (filterCategory) params.set("categoryId", filterCategory);
-      if (filterStatus) params.set("status", filterStatus);
-      params.set("page", "1");
-      params.set("limit", "20");
-      const res = await fetch(`/api/admin/market/items?${params}`);
-      const data = await res.json();
-      if (data.success) {
-        setItems(data.data ?? []);
-        setPagination(data.pagination ?? null);
+      const result = await getAdminMarketItems(schoolId, {
+        search: debouncedSearch || undefined,
+        categoryId: filterCategory || undefined,
+        status: filterStatus || undefined,
+        page: 1,
+        limit: 20,
+      });
+      if (result.success && result.data) {
+        const rows = (result.data.data ?? []).map((m) => ({
+          ...m,
+          user: { ...m.user, email: m.user.email ?? "" },
+          buyer: m.buyer ? { ...m.buyer, email: m.buyer.email ?? "" } : null,
+          category: m.category ?? { id: "", name: "未分类" },
+          poi: m.poi ?? { id: "", name: "" },
+        }));
+        setItems(rows);
+        setPagination(result.data.pagination ?? null);
       } else {
-        toast.error(data.message ?? "获取列表失败");
+        toast.error(result.success === false ? (result.error ?? "获取列表失败") : "获取列表失败");
       }
     } catch (e) {
       toast.error("获取列表失败");
@@ -97,20 +107,15 @@ export default function AdminMarketPage() {
       if (processingActionId) return;
       setProcessingActionId(itemId);
       try {
-        const res = await fetch(`/api/admin/market/items/${itemId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
-        });
-        const data = await res.json();
-        if (data.success) {
-          const msg = data.message ?? (action === "delete" ? "操作成功" : "已重新上架");
+        const result = await adminMarketItemAction(itemId, action);
+        if (result.success) {
+          const msg = result.data?.message ?? (action === "delete" ? "操作成功" : "已重新上架");
           toast.success(msg.includes("彻底删除") ? "物品已从数据库永久删除" : msg);
           await fetchItems();
           router.refresh();
         } else {
-          console.error("[AdminMarket] 操作失败:", res.status, data.message ?? data.error);
-          toast.error(data.message ?? "操作失败");
+          console.error("[AdminMarket] 操作失败:", result.error);
+          toast.error(result.error ?? "操作失败");
         }
       } catch (e) {
         console.error("[AdminMarket] 请求异常:", e);

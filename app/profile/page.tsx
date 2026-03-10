@@ -18,6 +18,7 @@ import {
   type NotificationItem,
 } from "@/lib/notification-actions";
 import { submitQuickReply } from "@/lib/comment-actions";
+import { getMe } from "@/lib/auth-server-actions";
 import {
   lockMarketItem,
   unlockMarketItem,
@@ -695,18 +696,15 @@ function ProfilePageContent() {
   useEffect(() => {
     const fetchUserInfo = async () => {
       try {
-        const response = await fetch("/api/auth/me");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            setUser(data.user);
-            setProfileForm({
-              nickname: data.user.nickname || "",
-              bio: data.user.bio || "",
-              avatar: data.user.avatar || "",
-            });
-            setLastProfileUpdateAt(data.user.lastProfileUpdateAt || null);
-          }
+        const result = await getMe();
+        if (result.success && result.user) {
+          setUser(result.user);
+          setProfileForm({
+            nickname: result.user.nickname || "",
+            bio: result.user.bio || "",
+            avatar: result.user.avatar || "",
+          });
+          setLastProfileUpdateAt(result.user.lastProfileUpdateAt || null);
         }
       } catch (error) {
         console.error("获取用户信息失败:", error);
@@ -901,13 +899,10 @@ function ProfilePageContent() {
           });
           setLastProfileUpdateAt((result.user as any).lastProfileUpdateAt ?? null);
         }
-        const response = await fetch("/api/auth/me");
-        if (response.ok) {
-          const data = await response.json();
-          if (data.success && data.user) {
-            setUser(data.user);
-            setLastProfileUpdateAt(data.user.lastProfileUpdateAt || null);
-          }
+        const meResult = await getMe();
+        if (meResult.success && meResult.user) {
+          setUser(meResult.user);
+          setLastProfileUpdateAt(meResult.user.lastProfileUpdateAt || null);
         }
       } else {
         toast.error(result.message || "更新失败");
