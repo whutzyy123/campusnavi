@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Search, X, MapPin, Clock, Flame } from "lucide-react";
+import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useSearchHistory } from "@/hooks/use-search-history";
@@ -78,6 +79,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
         const result = await searchPOIs(schoolId, { ongoingOnly: true });
         if (result.success && Array.isArray(result.data)) {
           setSearchResults(result.data);
+          analytics.poi.searchSubmit({ query: "ongoing_only", result_count: result.data.length });
         } else {
           setSearchResults([]);
         }
@@ -98,11 +100,14 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
       const result = await searchPOIs(schoolId, { q: debouncedQ });
       if (result.success && Array.isArray(result.data)) {
         setSearchResults(result.data);
+        analytics.poi.searchSubmit({ query: debouncedQ, result_count: result.data.length });
       } else {
         setSearchResults([]);
+        analytics.poi.searchSubmit({ query: debouncedQ, result_count: 0 });
       }
     } catch {
       setSearchResults([]);
+      analytics.poi.searchSubmit({ query: debouncedQ, result_count: 0 });
     } finally {
       setIsSearching(false);
     }
@@ -128,9 +133,10 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleSelectResult = (item: SearchResultItem) => {
+  const handleSelectResult = (item: SearchResultItem, rank?: number) => {
     const poi = resolvePOI(item);
     if (!poi) return;
+    analytics.poi.searchClick({ poi_id: poi.id, rank: rank ?? 0 });
     const query = inputValue.trim();
     if (query) addToHistory(query);
     onSelectPOI(poi);
@@ -142,7 +148,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     if (searchResults.length > 0) {
-      handleSelectResult(searchResults[0]);
+      handleSelectResult(searchResults[0], 0);
     }
   };
 
@@ -254,13 +260,13 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
                 {showOngoingOnly ? "暂无进行中的活动" : "未找到匹配的 POI"}
               </li>
             ) : (
-              searchResults.map((item) => {
+              searchResults.map((item, index) => {
                 const isActivityMatch = !!item.matchedActivity;
                 return (
                   <li key={item.id}>
                     <button
                       type="button"
-                      onClick={() => handleSelectResult(item)}
+                      onClick={() => handleSelectResult(item, index)}
                       className={`flex w-full cursor-pointer flex-col border-b border-gray-50 px-4 py-3 text-left transition-colors last:border-0 ${
                         isActivityMatch ? "hover:bg-violet-50/80" : "hover:bg-gray-50"
                       }`}

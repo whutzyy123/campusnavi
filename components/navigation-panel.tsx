@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { analytics } from "@/lib/analytics";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { loadAMap } from "@/lib/amap-loader";
@@ -135,8 +136,10 @@ export function NavigationPanel() {
             const { lng, lat } = result.position;
             const point = { lng, lat, name: "我的位置" };
             if (type === "start") {
+              analytics.nav.startSet({ source: "location" });
               setStartPoint(point);
             } else {
+              analytics.nav.endSet({ source: "location" });
               setEndPoint(point);
             }
             toast.success("已获取当前位置", { id: toastId });
@@ -162,12 +165,14 @@ export function NavigationPanel() {
   const handleSelectPOI = (poi: NavPOI) => {
     if (!searchMode) return;
     if (searchMode === "start") {
+      analytics.nav.startSet({ source: "panel_search", poi_id: poi.id });
       useNavigationStore.getState().setStartPoint({
         lng: poi.lng,
         lat: poi.lat,
         name: poi.name,
       });
     } else {
+      analytics.nav.endSet({ source: "panel_search", poi_id: poi.id });
       useNavigationStore.getState().setEndPoint({
         lng: poi.lng,
         lat: poi.lat,
@@ -192,14 +197,18 @@ export function NavigationPanel() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 8 }}
           transition={{ duration: 0.2 }}
-          className="pointer-events-auto fixed bottom-12 left-1/2 z-navbar-dropdown flex -translate-x-1/2 items-center gap-4 rounded-full bg-gray-900 px-4 py-2.5 text-white shadow-2xl"
+          className="pointer-events-auto fixed left-1/2 z-navbar-dropdown flex -translate-x-1/2 items-center gap-4 rounded-full bg-gray-900 px-4 py-3 text-white shadow-2xl"
+          style={{
+            bottom: "calc(1rem + env(safe-area-inset-bottom, 0px))",
+            maxWidth: "min(calc(100vw - 2rem), var(--mobile-content-max))",
+          }}
         >
           <span className="whitespace-nowrap text-sm font-medium">
-            请在地图上点击选择【{selectMode === "start" ? "起点" : "终点"}】
+            点击地图任意位置或 POI 标记选择【{selectMode === "start" ? "起点" : "终点"}】
           </span>
           <button
             onClick={() => setSelectMode(null)}
-            className="rounded-full px-2 py-1 text-sm font-medium text-white/90 transition-colors hover:bg-white/20"
+            className="min-h-[36px] min-w-[44px] rounded-full px-3 py-2 text-sm font-medium text-white/90 transition-colors hover:bg-white/20 active:bg-white/30"
           >
             取消
           </button>
@@ -226,12 +235,23 @@ export function NavigationPanel() {
             ? "mx-auto max-h-[30dvh] flex flex-col overflow-hidden rounded-2xl border-white/20 bg-white/70 shadow-none backdrop-blur-xl"
             : "border-gray-200 bg-white/90 shadow-lg backdrop-blur-md"
         }`}
-        style={isMobile ? { width: "clamp(320px, 90vw, 450px)" } : undefined}
+        style={
+          isMobile
+            ? {
+                width: "min(90vw, var(--mobile-content-max))",
+                marginLeft: "auto",
+                marginRight: "auto",
+              }
+            : undefined
+        }
       >
-        <div className={`flex shrink-0 items-center justify-between md:border-b md:border-gray-100 ${isMobile ? "px-2 py-1.5" : "px-4 py-2"}`}>
+        <div className={`flex shrink-0 items-center justify-between md:border-b md:border-gray-100 ${isMobile ? "px-3 py-2" : "px-4 py-2"}`}>
           <span className={`font-semibold text-gray-800 ${isMobile ? "text-xs" : "text-sm"}`}>校内步行导航</span>
           <button
-            onClick={clearNavigation}
+            onClick={() => {
+              analytics.nav.panelClose();
+              clearNavigation();
+            }}
             className="flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full bg-gray-100 p-2 text-gray-500 transition-colors hover:bg-gray-200 md:min-h-0 md:min-w-0 md:h-7 md:w-7"
             title="退出导航"
           >
@@ -356,9 +376,10 @@ export function NavigationPanel() {
                       setSearchQuery("");
                     }}
                     className="mb-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-[11px] text-gray-600 hover:bg-gray-100"
+                    title="点击地图任意位置或 POI 标记"
                   >
                     <MapPin className="h-3.5 w-3.5" />
-                    地图选点
+                    地图选点（自由点击或选 POI）
                   </button>
                   <div className="max-h-[min(20dvh,140px)] overflow-y-auto no-scrollbar text-[11px]">
                     {isLoadingPois ? (
@@ -414,7 +435,7 @@ export function NavigationPanel() {
                           setSelectMode("start");
                         }}
                         className="flex h-8 w-8 items-center justify-center rounded-md bg-white/80 text-gray-600 shadow-sm transition-colors hover:bg-white hover:text-[#FF4500]"
-                        title="地图选点"
+                        title="地图选点（自由点击或选 POI）"
                       >
                         <MapPin className="h-4 w-4" />
                       </button>
@@ -453,7 +474,7 @@ export function NavigationPanel() {
                           setSelectMode("end");
                         }}
                         className="flex h-8 w-8 items-center justify-center rounded-md bg-white/80 text-gray-600 shadow-sm transition-colors hover:bg-white hover:text-[#FF4500]"
-                        title="地图选点"
+                        title="地图选点（自由点击或选 POI）"
                       >
                         <MapPin className="h-4 w-4" />
                       </button>

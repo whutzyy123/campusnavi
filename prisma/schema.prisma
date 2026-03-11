@@ -251,7 +251,7 @@ model LiveStatus {
   description String?  @db.Text // 可选描述
   upvotes     Int      @default(0) @map("upvotes") // 点赞数，用于未来游戏化
   createdAt   DateTime @default(now()) @map("created_at")
-  expiresAt   DateTime @map("expires_at") // TTL：该状态应消失的精确时间（如 2 小时后）
+  expiresAt   DateTime @map("expires_at") // TTL：人流 20 分钟，事件/状态 8 小时
 
   // 关联关系
   poi    POI    @relation(fields: [poiId], references: [id], onDelete: Cascade)

@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
+import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useNotificationStore } from "@/store/use-notification-store";
@@ -102,6 +103,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
+    analytics.auth.logoutClick();
     toast.loading("正在退出...", { id: "logout" });
     try {
       await useAuthStore.getState().logout();
@@ -229,6 +231,11 @@ export function Navbar() {
                         <button
                           key={school.id}
                           onClick={() => {
+                            analytics.map.schoolSelect({
+                              school_id: school.id,
+                              school_code: school.schoolCode,
+                              from_detect: false,
+                            });
                             setActiveSchool(school);
                             useFilterStore.getState().resetFilters();
                             setShowSchoolSelector(false);

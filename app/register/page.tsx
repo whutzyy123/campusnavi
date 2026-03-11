@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { registerUser } from "@/lib/auth-server-actions";
 import { getAgreementContent } from "@/lib/agreement-actions";
+import { analytics } from "@/lib/analytics";
 import { validateInvitationCode } from "@/lib/invitation-actions";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
@@ -49,6 +50,11 @@ export default function RegisterPage() {
 
   /** 邀请码已验证通过时，锁定学校和角色（Code-First） */
   const codeVerified = invitationCodeStatus?.valid === true;
+
+  // 进入注册页埋点
+  useEffect(() => {
+    analytics.auth.registerStart();
+  }, []);
 
   // 如果已登录，重定向到首页
   useEffect(() => {
@@ -183,6 +189,7 @@ export default function RegisterPage() {
     }
 
     setIsSubmitting(true);
+    analytics.auth.registerSubmit({ has_invitation_code: !!formData.invitationCode?.trim() });
 
     try {
       // 创建 FormData
@@ -204,6 +211,7 @@ export default function RegisterPage() {
 
       // 如果返回错误（业务错误，非重定向）
       if (result && !result.success) {
+        analytics.auth.registerFail({ error_reason: result.message ?? "注册失败" });
         setError(result.message || "注册失败");
         setIsSubmitting(false);
         return;
@@ -211,6 +219,7 @@ export default function RegisterPage() {
 
       // 如果返回成功但没有重定向（理论上不应该发生）
       if (result && result.success) {
+        analytics.auth.registerSuccess({ user_role: formData.role });
         toast.success("注册成功，正在跳转...");
         setSuccess(true);
         
@@ -231,13 +240,14 @@ export default function RegisterPage() {
       // Server Action 重定向会抛出包含 "NEXT_REDIRECT" 的错误，这是正常的
       // 不要拦截这个错误，让 Next.js 正常处理跳转
       if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
-        // 显示成功提示，然后让 Next.js 处理跳转
+        analytics.auth.registerSuccess({ user_role: formData.role });
         toast.success("注册成功，正在跳转...");
         // 不设置 setIsSubmitting(false)，让按钮保持加载状态直到跳转完成
         return;
       }
       
       // 只展示真正的业务错误信息
+      analytics.auth.registerFail({ error_reason: err instanceof Error ? err.message : "注册失败，请重试" });
       if (err instanceof Error) {
         setError(err.message || "注册失败，请重试");
       } else {

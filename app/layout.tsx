@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { ToastProvider } from "@/components/toast-provider";
+import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
 export const metadata: Metadata = {
   title: "校园生存指北",
@@ -29,9 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh-CN" className="h-full">
-      <body className="flex flex-col h-screen overflow-hidden">
+      <body className="flex flex-col h-screen h-screen-dvh overflow-hidden">
         <Navbar />
         <ToastProvider />
+        <PageViewTracker />
         <main className="min-h-0 flex-1 overflow-y-auto bg-gray-50">
           {children}
         </main>

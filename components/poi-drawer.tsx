@@ -11,7 +11,8 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { X, Flag, Navigation, MessageCircle, Heart, Map as MapIcon, ImageIcon, ExternalLink, CalendarDays, Package, Plus, ArrowLeft } from "lucide-react";
+import { X, Flag, Navigation, MessageCircle, Heart, Map as MapIcon, MapPin, ImageIcon, ExternalLink, CalendarDays, Package, Plus, ArrowLeft } from "lucide-react";
+import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
@@ -298,8 +299,11 @@ interface PoiDrawerContentProps {
   setEndPoint: (p: { lng: number; lat: number; name: string }) => void;
   setStartPoint: (p: { lng: number; lat: number; name: string }) => void;
   startNavigation: () => void;
+  openNavigationPanel: () => void;
   setHighlightPoi: (id: string | null) => void;
   highlightTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  /** 移动端：点击「在地图中查看」后收起至半展开，便于查看地图 */
+  onViewInMapClick?: () => void;
   setShowReportModal: (v: boolean) => void;
   comments: CommentItem[];
   isLoadingComments: boolean;
@@ -356,8 +360,10 @@ function PoiDrawerContent({
   setEndPoint,
   setStartPoint,
   startNavigation,
+  openNavigationPanel,
   setHighlightPoi,
   highlightTimeoutRef,
+  onViewInMapClick,
   setShowReportModal,
   comments,
   isLoadingComments,
@@ -469,15 +475,20 @@ function PoiDrawerContent({
             selectSubPOI={selectSubPOI}
             setHighlightPoi={setHighlightPoi}
             highlightTimeoutRef={highlightTimeoutRef}
+            onViewInMapClick={onViewInMapClick}
           />
         )}
       </div>
 
-      {/* 底部固定操作栏 */}
-      <div className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#EDEFF1] bg-white p-4">
+      {/* 底部固定操作栏（移动端含安全区） */}
+      <div
+        className="sticky bottom-0 z-10 flex-shrink-0 border-t border-[#EDEFF1] bg-white p-4"
+        style={{ paddingBottom: "max(1rem, env(safe-area-inset-bottom, 0px))" }}
+      >
         <div className="flex flex-col gap-2">
           <button
             onClick={() => {
+              analytics.poi.navigateClick({ poi_id: displayPoi.id });
               setEndPoint({ lng: displayPoi.lng, lat: displayPoi.lat, name: displayPoi.name });
               if (userLocation) {
                 setStartPoint({ lng: userLocation[0], lat: userLocation[1], name: "我的位置" });
@@ -488,11 +499,37 @@ function PoiDrawerContent({
               onClose();
               toast.success("导航已开始");
             }}
-            className="flex w-full items-center justify-center gap-2 rounded-full bg-[#FF4500] px-4 py-3 text-base font-semibold text-white transition-opacity hover:opacity-90"
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-full bg-[#FF4500] px-4 py-3 text-base font-semibold text-white transition-opacity hover:opacity-90 active:scale-[0.98]"
           >
             <Navigation className="h-5 w-5" />
             到这去
           </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                analytics.nav.startSet({ source: "poi_drawer", poi_id: displayPoi.id });
+                setStartPoint({ lng: displayPoi.lng, lat: displayPoi.lat, name: displayPoi.name });
+                openNavigationPanel();
+                toast.success(`已设为起点：${displayPoi.name}`);
+              }}
+              className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#EDEFF1] bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
+            >
+              <MapPin className="h-4 w-4" />
+              设为起点
+            </button>
+            <button
+              onClick={() => {
+                analytics.nav.endSet({ source: "poi_drawer", poi_id: displayPoi.id });
+                setEndPoint({ lng: displayPoi.lng, lat: displayPoi.lat, name: displayPoi.name });
+                openNavigationPanel();
+                toast.success(`已设为终点：${displayPoi.name}`);
+              }}
+              className="flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-lg border border-[#EDEFF1] bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:bg-gray-100"
+            >
+              <MapPin className="h-4 w-4" />
+              设为终点
+            </button>
+          </div>
           <button
             onClick={() => setShowReportModal(true)}
             className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#EDEFF1] bg-transparent px-4 py-2.5 text-sm font-medium text-[#1A1A1B] transition-colors hover:bg-[#F6F7F8]"
@@ -625,7 +662,7 @@ function PoiDrawerSubPoiView({
       <div className="mb-6">
         <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报 (Live Status)</h3>
         <p className="mb-3 text-xs text-gray-500">
-          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，情报约 2 小时后自动失效"}
+          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，人流情报 20 分钟有效，事件/状态 8 小时有效"}
         </p>
         <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4">
           {isLoadingLiveStatuses ? (
@@ -741,6 +778,7 @@ interface PoiDrawerParentViewContentProps {
   selectSubPOI: (poi: POIWithStatus | null) => void;
   setHighlightPoi: (id: string | null) => void;
   highlightTimeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>;
+  onViewInMapClick?: () => void;
 }
 
 function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
@@ -788,6 +826,7 @@ function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
     selectSubPOI,
     setHighlightPoi,
     highlightTimeoutRef,
+    onViewInMapClick,
   } = props;
   const router = useRouter();
   const parent = poiWithChildren ?? displayPoi;
@@ -868,12 +907,13 @@ function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
                   <div className="flex shrink-0 items-center gap-2">
                     <button
                       onClick={() => {
+                        analytics.poi.navigateClick({ poi_id: child.id });
                         setEndPoint({ lng: child.lng, lat: child.lat, name: child.name });
-                        if (userLocation) {
-                          setStartPoint({ lng: userLocation[0], lat: userLocation[1], name: "我的位置" });
-                        } else {
-                          toast("未获取到当前位置，请在左上角导航面板中通过地图选点设置起点");
-                        }
+                          if (userLocation) {
+                            setStartPoint({ lng: userLocation[0], lat: userLocation[1], name: "我的位置" });
+                          } else {
+                            toast("未获取到当前位置，请在左上角导航面板中通过地图选点设置起点");
+                          }
                         startNavigation();
                         onClose();
                         toast.success("导航已开始");
@@ -885,10 +925,12 @@ function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
                     </button>
                     <button
                       onClick={() => {
+                        analytics.poi.showInMapClick({ poi_id: child.id, is_sub_poi: true });
                         setHighlightPoi(child.id);
                         selectSubPOI(childAsPoi);
                         if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
                         highlightTimeoutRef.current = setTimeout(() => setHighlightPoi(null), 5000);
+                        onViewInMapClick?.();
                       }}
                       className="flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-50"
                     >
@@ -905,7 +947,7 @@ function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
       <div className="mb-6">
         <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报 (Live Status)</h3>
         <p className="mb-3 text-xs text-gray-500">
-          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，情报约 2 小时后自动失效"}
+          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，人流情报 20 分钟有效，事件/状态 8 小时有效"}
         </p>
         <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4">
           {isLoadingLiveStatuses ? (
@@ -1114,7 +1156,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
   const router = useRouter();
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const { isAuthenticated, currentUser } = useAuthStore();
-  const { setStartPoint, setEndPoint, startNavigation } = useNavigationStore();
+  const { setStartPoint, setEndPoint, startNavigation, openNavigationPanel } = useNavigationStore();
   const { setHighlightSubPOI, selectedSubPOI, activePOI, selectSubPOI, setHighlightPoi, clearSelection } = useSchoolStore();
 
   // 当前展示的 POI：子 POI 选中时显示子 POI，否则显示父 POI（来自 props 或 activePOI）
@@ -1144,12 +1186,36 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
 
   /** 移动端 Bottom Sheet 当前 snap point（0.35 = Preview，1 = Expanded，相对于 h-[85dvh] 容器） */
   const [snap, setSnap] = useState<number | string | null>(0.35);
+  const drawerOpenTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (isOpen && !isDesktop) {
       setSnap(0.35);
     }
   }, [isOpen, isDesktop]);
+
+  // 打开抽屉埋点
+  useEffect(() => {
+    if (isOpen && displayPoi) {
+      drawerOpenTimeRef.current = Date.now();
+      analytics.poi.drawerOpen({
+        poi_id: displayPoi.id,
+        poi_name: displayPoi.name,
+        source: selectedSubPOI ? "sub_poi" : poi ? "marker" : "search",
+      });
+    } else if (!isOpen) {
+      drawerOpenTimeRef.current = null;
+    }
+  }, [isOpen, displayPoi?.id, displayPoi?.name, selectedSubPOI, poi]);
+
+  const handleClose = useCallback(() => {
+    if (displayPoi && drawerOpenTimeRef.current) {
+      const duration = Date.now() - drawerOpenTimeRef.current;
+      analytics.poi.drawerClose({ poi_id: displayPoi.id, duration_ms: duration });
+    }
+    drawerOpenTimeRef.current = null;
+    onClose();
+  }, [displayPoi, onClose]);
 
   useEffect(() => () => {
     if (highlightTimeoutRef.current) clearTimeout(highlightTimeoutRef.current);
@@ -1394,6 +1460,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
 
     setIsSubmittingComment(true);
     try {
+      analytics.comment.submit({ poi_id: targetPoi.id, has_parent_id: !!replyingTo?.id });
       const result = await createComment({
         poiId: targetPoi.id,
         content,
@@ -1401,6 +1468,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       });
       if (!result.success) throw new Error(result.error || "发送失败");
 
+      analytics.comment.submitSuccess({ poi_id: targetPoi.id });
       await fetchComments(sortBy);
 
       const wasReply = !!replyingTo;
@@ -1408,6 +1476,10 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       setReplyingTo(null);
       toast.success(wasReply ? "回复已发表" : "留言已发表");
     } catch (error) {
+      analytics.comment.submitFail({
+        poi_id: targetPoi.id,
+        error_reason: error instanceof Error ? error.message : "发送失败，请重试",
+      });
       toast.error(error instanceof Error ? error.message : "发送失败，请重试");
     } finally {
       setIsSubmittingComment(false);
@@ -1435,6 +1507,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     );
 
     try {
+      analytics.comment.likeClick({ comment_id: commentId, action: prevLiked ? "unlike" : "like" });
       const result = await toggleCommentLike(commentId);
       if (!result.success) {
         setComments((p) =>
@@ -1460,6 +1533,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
 
   // 点击「回复」：设置 replyingTo、聚焦输入框并滚动到可见
   const handleReplyClick = (comment: CommentItem) => {
+    analytics.comment.replyClick({ comment_id: comment.id });
     setReplyingTo({ id: comment.id, name: comment.user.nickname || comment.user.email?.split("@")[0] || "匿名用户" });
     requestAnimationFrame(() => {
       commentInputRef.current?.focus();
@@ -1470,11 +1544,10 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
   const handleDrawerOpenChange = useCallback(
     (open: boolean) => {
       if (!open) {
-        onClose();
-        clearSelection();
+        handleClose();
       }
     },
-    [onClose, clearSelection]
+    [handleClose]
   );
 
   if (!displayPoi) return null;
@@ -1489,6 +1562,11 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       return;
     }
     if (isInCooldown) return;
+
+    const targetPoi = selectedSubPOI ?? poi ?? activePOI;
+    if (targetPoi) {
+      analytics.poi.statusReportSubmit({ poi_id: targetPoi.id, status_type: statusType });
+    }
 
     const optimisticId = `${OPTIMISTIC_ID_PREFIX}${statusType}-${Date.now()}`;
     const optimisticStatus = {
@@ -1506,7 +1584,8 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       const result = await reportLiveStatus(displayPoi.id, statusType);
       if (result.success) {
         setLastReportedTime(Date.now());
-        toast.success("感谢您的情报！情报将在2小时后失效");
+        analytics.poi.statusReportSuccess({ poi_id: displayPoi.id });
+        toast.success("感谢您的情报！人流情报 20 分钟有效，事件/状态 8 小时有效");
         const refresh = await getActiveStatusesByPoi(displayPoi.id, schoolId);
         if (refresh.success && refresh.data) {
           setActiveLiveStatuses(refresh.data);
@@ -1568,7 +1647,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               className="fixed below-nav right-0 bottom-0 left-0 z-modal-overlay bg-black/50"
-              onClick={onClose}
+              onClick={handleClose}
             />
 
             {/* 桌面端右侧抽屉 */}
@@ -1582,7 +1661,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
             dragElastic={0.2}
             onDragEnd={(_, info) => {
               if (info.offset.y > 100) {
-                onClose();
+                handleClose();
               }
             }}
             className="fixed right-0 below-nav z-modal-content flex h-below-nav w-full max-w-md flex-col bg-white shadow-2xl"
@@ -1592,7 +1671,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
               isSubPoiView={isSubPoiView}
               poiWithChildren={poiWithChildren}
               CategoryIcon={CategoryIcon}
-              onClose={onClose}
+              onClose={handleClose}
               selectSubPOI={selectSubPOI}
               userLocation={userLocation}
               isInCooldown={isInCooldown}
@@ -1609,8 +1688,10 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
               setEndPoint={setEndPoint}
               setStartPoint={setStartPoint}
               startNavigation={startNavigation}
+              openNavigationPanel={openNavigationPanel}
               setHighlightPoi={setHighlightPoi}
               highlightTimeoutRef={highlightTimeoutRef}
+              onViewInMapClick={!isDesktop ? () => setSnap(0.35) : undefined}
               setShowReportModal={setShowReportModal}
               comments={comments}
               isLoadingComments={isLoadingComments}
@@ -1663,7 +1744,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
                 onClick={snap === 1 ? () => handleDrawerOpenChange(false) : undefined}
               />
               <Drawer.Content
-                className="fixed bottom-0 left-0 right-0 z-[110] flex flex-col bg-white h-[85dvh] rounded-t-[14px] focus:outline-none"
+                className="fixed bottom-0 left-0 right-0 z-[110] mx-auto flex w-full max-w-[var(--mobile-content-max)] flex-col bg-white h-[85dvh] rounded-t-[14px] focus:outline-none"
               >
                 {/* 1. Fixed Drag Handle Area (Grabbable) */}
                 <div className="flex-none pt-4 pb-2 w-full flex justify-center bg-white rounded-t-[14px] cursor-grab active:cursor-grabbing">
@@ -1677,7 +1758,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
                     isSubPoiView={isSubPoiView}
                     poiWithChildren={poiWithChildren}
                     CategoryIcon={CategoryIcon}
-                    onClose={onClose}
+                    onClose={handleClose}
                     selectSubPOI={selectSubPOI}
                     userLocation={userLocation}
                     isInCooldown={isInCooldown}
@@ -1693,8 +1774,10 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
                     setEndPoint={setEndPoint}
                     setStartPoint={setStartPoint}
                     startNavigation={startNavigation}
+                    openNavigationPanel={openNavigationPanel}
                     setHighlightPoi={setHighlightPoi}
                     highlightTimeoutRef={highlightTimeoutRef}
+                    onViewInMapClick={() => setSnap(0.35)}
                     setShowReportModal={setShowReportModal}
                     comments={comments}
                     isLoadingComments={isLoadingComments}

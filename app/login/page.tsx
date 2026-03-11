@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { loginUser } from "@/lib/auth-server-actions";
+import { analytics } from "@/lib/analytics";
 import { useAuthStore, type UserRole } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
@@ -78,6 +79,7 @@ function LoginPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    analytics.auth.loginClick({ page_path: "/login" });
 
     if (!formData.email.trim() || !formData.password) {
       setError("请填写邮箱和密码");
@@ -96,9 +98,15 @@ function LoginPageContent() {
       const result = await loginUser(formDataObj);
 
       if (!result || !result.success || !result.user) {
+        analytics.auth.loginFail({ error_reason: result?.message ?? "登录失败" });
         setError(result?.message || "登录失败");
         return;
       }
+
+      analytics.auth.loginSuccess({
+        user_role: result.user.role,
+        school_id: result.user.schoolId ?? undefined,
+      });
 
       const user = result.user;
       setUser({
@@ -129,6 +137,7 @@ function LoginPageContent() {
       router.push(target);
     } catch (err) {
       console.error("Login client error:", err);
+      analytics.auth.loginFail({ error_reason: "登录失败，请重试" });
       setError("登录失败，请重试");
     } finally {
       setIsSubmitting(false);

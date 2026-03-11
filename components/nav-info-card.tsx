@@ -58,26 +58,32 @@ export function NavInfoCard() {
         >
           <div
             className={`rounded-t-2xl border-t border-x border-gray-200 bg-white/80 backdrop-blur-lg md:rounded-lg md:border md:bg-white/95 md:shadow-xl ${
-              isMobile ? "px-4 py-3 shadow-none" : "p-4 shadow-lg"
+              isMobile ? "mx-auto max-w-[var(--mobile-content-max)] px-4 py-3 shadow-none" : "p-4 shadow-lg"
             }`}
           >
             <div className="flex items-center justify-between gap-3">
               {isMobile ? (
                 <>
-                  {/* 16:9：仅 Dist | Time | Exit-X */}
-                  <div className="flex-1 text-center text-sm font-medium text-gray-800">
-                    {formatDistanceShort(routeInfo.distance)} | {formatDurationShort(routeInfo.duration)}
+                  {/* 移动端：目的地 + 距离|时间，信息更完整 */}
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-semibold text-gray-900">
+                      前往 {endPoint.name || "目标点"}
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-center gap-2 text-xs text-gray-600">
+                      <span>{formatDistanceShort(routeInfo.distance)}</span>
+                      <span>·</span>
+                      <span>{formatDurationShort(routeInfo.duration)}</span>
+                      {isLongScreen && routeSteps && routeSteps.length > 0 && (
+                        <button
+                          onClick={() => setShowRouteDetail((v) => !v)}
+                          className="ml-1 flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-gray-500 active:bg-gray-100"
+                        >
+                          详情
+                          <ChevronDown className={`h-3 w-3 transition-transform ${showRouteDetail ? "rotate-180" : ""}`} />
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {/* 21:9+：路线详情折叠 */}
-                  {isLongScreen && routeSteps && routeSteps.length > 0 && (
-                    <button
-                      onClick={() => setShowRouteDetail((v) => !v)}
-                      className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-gray-500 hover:bg-gray-100"
-                    >
-                      详情
-                      <ChevronDown className={`h-3 w-3 transition-transform ${showRouteDetail ? "rotate-180" : ""}`} />
-                    </button>
-                  )}
                 </>
               ) : (
                 <div className="min-w-0 flex-1">
@@ -92,10 +98,11 @@ export function NavInfoCard() {
               )}
               <button
                 onClick={stopNavigation}
-                className="flex min-h-[40px] min-w-[40px] shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-full bg-red-500 text-white transition-colors hover:bg-red-600 active:scale-95 disabled:opacity-50"
                 title="结束导航"
+                aria-label="结束导航"
               >
-                <X className="h-4 w-4" />
+                <X className="h-5 w-5" />
               </button>
             </div>
             {/* 21:9+ 路线详情展开 */}

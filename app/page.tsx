@@ -14,6 +14,7 @@ import { LocateFixed, Route, Eye, X } from "lucide-react";
 import type { POIWithStatus } from "@/lib/poi-utils";
 import { getPOIsBySchool } from "@/lib/poi-actions";
 import { getSchoolById, getSchoolsList, detectSchoolByLocation } from "@/lib/school-actions";
+import { analytics } from "@/lib/analytics";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { NavInfoCard } from "@/components/nav-info-card";
 import { NavigationPanel } from "@/components/navigation-panel";
@@ -176,6 +177,7 @@ function HomeContent() {
   // 处理 POI 点击（根 POI，view 为打开前的地图视图，用于关闭时恢复）
   const handlePOIClick = useCallback(
     (poi: POIWithStatus, view?: { center: [number, number]; zoom: number } | null) => {
+      analytics.map.markerClick({ poi_id: poi.id, poi_name: poi.name, is_sub_poi: false });
       setSelectedPOI(poi);
       setShowPOIDrawer(true);
       if (!poi.parentId) {
@@ -264,12 +266,15 @@ function HomeContent() {
               const result = await detectSchoolByLocation(lat, lng);
 
               if (result.success && result.data) {
+                analytics.map.schoolDetectSuccess({ school_id: result.data.id });
                 setActiveSchool(result.data);
               } else {
+                analytics.map.schoolDetectFail();
                 toast.error("您当前不在支持的校区内");
               }
             } catch (error) {
               console.error("检测学校失败:", error);
+              analytics.map.schoolDetectFail();
               // 静默失败，不显示错误提示
             }
           }
@@ -323,11 +328,15 @@ function HomeContent() {
         />
       )}
 
-      {/* 右下角地图操作按钮：routeInfo 存在时移动端上移 ~120px 避免与 NavInfoCard 重叠 */}
+      {/* 右下角地图操作按钮：routeInfo 存在时移动端上移避免与 NavInfoCard 重叠，含安全区 */}
       <motion.div
-        className="fixed right-4 bottom-6 z-navbar-dropdown flex flex-col gap-3"
+        className="fixed z-navbar-dropdown flex flex-col gap-3"
+        style={{
+          right: "calc(1rem + env(safe-area-inset-right, 0px))",
+          bottom: isMobile ? "calc(1.5rem + env(safe-area-inset-bottom, 0px))" : "1.5rem",
+        }}
         animate={{
-          y: isMobile && routeInfo ? -120 : 0,
+          y: isMobile && routeInfo ? -100 : 0,
         }}
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
       >
@@ -335,8 +344,9 @@ function HomeContent() {
         <button
           onClick={handleRelocate}
           disabled={isLocating}
-          className="flex h-11 w-11 items-center justify-center rounded-full bg-white shadow-md transition-all hover:bg-gray-50 active:scale-95 disabled:opacity-50"
+          className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-md transition-all hover:bg-gray-50 active:scale-95 disabled:opacity-50"
           title="定位到我的位置"
+          aria-label="定位到我的位置"
         >
           {isLocating ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-700 border-t-transparent" />
@@ -351,6 +361,7 @@ function HomeContent() {
           onClick={openNavigationPanel}
           className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF4500] text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
           title="路线规划"
+          aria-label="路线规划"
         >
           <Route className="h-6 w-6" />
         </button>

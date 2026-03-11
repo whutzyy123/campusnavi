@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Filter, ChevronDown, ChevronUp } from "lucide-react";
+import { analytics } from "@/lib/analytics";
 import { useFilterStore } from "@/store/use-filter-store";
 import { useSchoolStore } from "@/store/use-school-store";
 
@@ -102,10 +103,24 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
 
   const handleSelectAll = () => {
     setAllCategories(allIds);
+    analytics.map.filterToggle({ category_ids: allIds.join(","), action: "select_all" });
   };
 
   const handleClearAll = () => {
     setAllCategories([]);
+    analytics.map.filterToggle({ category_ids: "", action: "clear_all" });
+  };
+
+  const handleToggleCategory = (catId: string) => {
+    const wasSelected = selectedCategoryIds.includes(catId);
+    toggleCategory(catId);
+    const nextIds = wasSelected
+      ? selectedCategoryIds.filter((id) => id !== catId)
+      : [...selectedCategoryIds, catId];
+    analytics.map.filterToggle({
+      category_ids: nextIds.join(","),
+      action: wasSelected ? "remove" : "add",
+    });
   };
 
   if (!effectiveSchoolId) return null;
@@ -172,7 +187,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
                           <input
                             type="checkbox"
                             checked={selectedCategoryIds.includes(cat.id)}
-                            onChange={() => toggleCategory(cat.id)}
+                            onChange={() => handleToggleCategory(cat.id)}
                             className="h-4 w-4 shrink-0 rounded border-gray-300 text-[#FF4500] focus:ring-[#FF4500]/20"
                           />
                           <span className="text-sm text-gray-800 whitespace-nowrap md:whitespace-normal">{cat.name}</span>
@@ -197,7 +212,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
                           <input
                             type="checkbox"
                             checked={selectedCategoryIds.includes(cat.id)}
-                            onChange={() => toggleCategory(cat.id)}
+                            onChange={() => handleToggleCategory(cat.id)}
                             className="h-4 w-4 shrink-0 rounded border-gray-300 text-[#FF4500] focus:ring-[#FF4500]/20"
                           />
                           <span className="text-sm text-gray-800 whitespace-nowrap md:whitespace-normal">{cat.name}</span>

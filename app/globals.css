@@ -4,7 +4,9 @@
 
 html,
 body {
-  height: 100vh !important;
+  /* 使用 100dvh 适配移动端动态视口（地址栏显隐），fallback 100vh */
+  height: 100vh;
+  height: 100dvh;
   overflow: hidden !important;
   margin: 0;
   padding: 0;
@@ -14,6 +16,9 @@ body {
   height: 100%;
   /* 导航栏高度（与 Navbar h-16 一致，用于 fixed 元素避免遮挡） */
   --nav-height: 4rem; /* 64px */
+
+  /* 移动端布局：基于宽高比，非固定像素。竖屏 100vw，21:9+ 横屏按 vmin 比例约束 */
+  --mobile-content-max: 100vw;
 
   /* Z-Index 层级（严格顺序：navbar < sidebar < modal-overlay < modal-content < tooltip） */
   --z-navbar: 40;
@@ -66,6 +71,11 @@ button:focus-visible {
   box-shadow: 0 0 0 2px white, 0 0 0 4px var(--primary-theme);
 }
 
+/* 选点模式：地图钉光标（热点在钉尖） */
+.cursor-map-pick {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='36' viewBox='0 0 24 30'%3E%3Cpath fill='%23FF4500' stroke='%23fff' stroke-width='2' d='M12 0C7.8 0 4 3.2 4 7.2c0 5.4 8 14.8 8 14.8s8-9.4 8-14.8C20 3.2 16.2 0 12 0z'/%3E%3C/svg%3E") 14 28, crosshair;
+}
+
 /* 可选：抽屉/侧边栏等滚动区域使用主题色滚动条 */
 .scrollbar-theme::-webkit-scrollbar {
   width: 6px;
@@ -111,6 +121,27 @@ button:focus-visible {
   .h-below-nav {
     height: calc(100vh - var(--nav-height));
   }
+  /* 2:1 宽屏：按视口比例约束，60vmin（横屏时 vmin=vh） */
+  @media (min-aspect-ratio: 2/1) {
+    :root {
+      --mobile-content-max: min(100vw, 60vmin);
+    }
+  }
+  /* 21:9 及更宽屏：50vmin，随分辨率缩放 */
+  @media (min-aspect-ratio: 21/9) {
+    :root {
+      --mobile-content-max: min(100vw, 50vmin);
+    }
+  }
+
+  /* 移动端超宽屏内容容器：居中、限制最大宽度 */
+  .mobile-content-constrain {
+    width: 100%;
+    max-width: var(--mobile-content-max);
+    margin-left: auto;
+    margin-right: auto;
+  }
+
   /* 防止滚动条出现时布局抖动 */
   .scrollbar-gutter-stable {
     scrollbar-gutter: stable;

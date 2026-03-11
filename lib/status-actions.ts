@@ -8,7 +8,22 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie } from "@/lib/auth-server-actions";
 
-const DEFAULT_EXPIRY_HOURS = 2;
+/** 人流状况（EMPTY/BUSY/CROWDED）有效期：20 分钟 */
+const TRAFFIC_EXPIRY_MINUTES = 20;
+/** 事件/状态（CONSTRUCTION/CLOSED）有效期：8 小时 */
+const EVENTS_EXPIRY_HOURS = 8;
+
+const TRAFFIC_STATUS_TYPES = ["EMPTY", "BUSY", "CROWDED"] as const;
+
+function getExpiresAt(statusType: string): Date {
+  const expiresAt = new Date();
+  if (TRAFFIC_STATUS_TYPES.includes(statusType as (typeof TRAFFIC_STATUS_TYPES)[number])) {
+    expiresAt.setMinutes(expiresAt.getMinutes() + TRAFFIC_EXPIRY_MINUTES);
+  } else {
+    expiresAt.setHours(expiresAt.getHours() + EVENTS_EXPIRY_HOURS);
+  }
+  return expiresAt;
+}
 
 export interface StatusActionResult<T = unknown> {
   success: boolean;
@@ -20,7 +35,7 @@ export interface StatusActionResult<T = unknown> {
  * 上报 POI 实时状态
  * - 需登录
  * - 验证 POI 存在且用户有权限（同校或超级管理员）
- * - 默认 2 小时后过期
+ * - 人流状况（EMPTY/BUSY/CROWDED）有效期 20 分钟；事件/状态（CONSTRUCTION/CLOSED）有效期 8 小时
  */
 export async function reportLiveStatus(
   poiId: string,
@@ -52,8 +67,7 @@ export async function reportLiveStatus(
       return { success: false, error: "无权对该 POI 上报状态" };
     }
 
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + DEFAULT_EXPIRY_HOURS);
+    const expiresAt = getExpiresAt(statusType.trim());
 
     const liveStatus = await prisma.liveStatus.create({
       data: {

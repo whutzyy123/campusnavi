@@ -8,6 +8,7 @@
 import { useState, useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import {
   LayoutDashboard,
@@ -251,6 +252,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
 
   const handleLogout = async () => {
     if (isLoggingOut) return;
+    analytics.auth.logoutClick();
     toast.loading("正在退出...", { id: "logout" });
     try {
       await useAuthStore.getState().logout();

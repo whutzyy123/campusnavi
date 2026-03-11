@@ -11,6 +11,7 @@ import { centroid, polygon } from "@turf/turf";
 import { ensureLngLat } from "@/lib/campus-label-utils";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/amap-loader";
+import { analytics } from "@/lib/analytics";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useFilterStore } from "@/store/use-filter-store";
@@ -77,6 +78,8 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     const routePolylineRef = useRef<any>(null);
     const startMarkerRef = useRef<any>(null);
     const endMarkerRef = useRef<any>(null);
+    const pickStartMarkerRef = useRef<any>(null);
+    const pickEndMarkerRef = useRef<any>(null);
     const searchIdRef = useRef(0); // 用于忽略过期的 search 回调（竞态防护）
     const geolocationRef = useRef<any>(null);
     const locateToastIdRef = useRef<string | undefined>(undefined);
@@ -102,6 +105,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
       isNavigating,
       startPoint,
       endPoint,
+      routeInfo,
       stopNavigation,
       updateRouteInfo,
       setRouteSteps,
@@ -320,11 +324,13 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
         const point = {
           lng: event.lnglat.getLng(),
           lat: event.lnglat.getLat(),
-          name: currentMode === "start" ? "地图选点(起点)" : "地图选点(终点)",
+          name: currentMode === "start" ? "自由选点(起点)" : "自由选点(终点)",
         };
         if (currentMode === "start") {
+          analytics.nav.startSet({ source: "map_click" });
           useNavigationStore.getState().setStartPoint(point);
         } else if (currentMode === "end") {
+          analytics.nav.endSet({ source: "map_click" });
           useNavigationStore.getState().setEndPoint(point);
         }
         useNavigationStore.getState().setSelectMode(null);
@@ -353,14 +359,14 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 amap 变化时初始化，加入 school 会导致地图重复创建与闪烁
   }, [amap]);
 
-  // 选点模式下给地图容器增加十字准星光标，增强交互反馈
+  // 选点模式下给地图容器增加地图钉光标，增强交互反馈
   useEffect(() => {
     if (!mapRef.current) return;
 
     if (selectMode) {
-      mapRef.current.classList.add("cursor-crosshair");
+      mapRef.current.classList.add("cursor-map-pick");
     } else {
-      mapRef.current.classList.remove("cursor-crosshair");
+      mapRef.current.classList.remove("cursor-map-pick");
     }
   }, [selectMode]);
 
@@ -490,6 +496,29 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
 
         polygon.setMap(mapInstanceRef.current);
         campusPolygonsRef.current.set(campus.id, polygon);
+
+        // 校区 Polygon 会拦截地图点击，需在选点模式下转发点击逻辑（自由选点）
+        polygon.on("click", (e: any) => {
+          const navState = useNavigationStore.getState();
+          const currentMode = navState.selectMode;
+          if (currentMode && e?.lnglat) {
+            const lng = typeof e.lnglat.getLng === "function" ? e.lnglat.getLng() : e.lnglat.lng;
+            const lat = typeof e.lnglat.getLat === "function" ? e.lnglat.getLat() : e.lnglat.lat;
+            const point = {
+              lng,
+              lat,
+              name: currentMode === "start" ? "自由选点(起点)" : "自由选点(终点)",
+            };
+            if (currentMode === "start") {
+              analytics.nav.startSet({ source: "map_click" });
+              navState.setStartPoint(point);
+            } else {
+              analytics.nav.endSet({ source: "map_click" });
+              navState.setEndPoint(point);
+            }
+            navState.setSelectMode(null);
+          }
+        });
 
         // 创建校区标签：优先使用 labelCenter（polylabel），否则用 center
         const labelPos = campus.labelCenter ?? campus.center;
@@ -876,17 +905,20 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
         position: [poi.lng, poi.lat],
         content: markerContent,
         offset: new amap.Pixel(-12, -12),
+        title: poi.name,
         extData: { poi },
       });
       marker.on("click", () => {
         const navState = useNavigationStore.getState();
         const mode = navState.selectMode;
         if (mode === "start") {
+          analytics.nav.startSet({ source: "map_marker", poi_id: poi.id });
           navState.setStartPoint({ lng: poi.lng, lat: poi.lat, name: poi.name });
           navState.setSelectMode(null);
           return;
         }
         if (mode === "end") {
+          analytics.nav.endSet({ source: "map_marker", poi_id: poi.id });
           navState.setEndPoint({ lng: poi.lng, lat: poi.lat, name: poi.name });
           navState.setSelectMode(null);
           return;
@@ -1064,7 +1096,74 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     return () => clearTimeout(timer);
   }, [amap, highlightedPoiId, pois, setHighlightPoi]);
 
-  // 清除导航覆盖物（路径线、起点/终点标记）
+  // 选点后立即在坐标显示起点/终点标记（无路线时；有路线后由导航 effect 绘制）
+  useEffect(() => {
+    if (!amap || !mapInstanceRef.current || routeInfo) return;
+
+    const map = mapInstanceRef.current;
+    const toRemove: any[] = [];
+
+    if (startPoint) {
+      if (pickStartMarkerRef.current) {
+        toRemove.push(pickStartMarkerRef.current);
+      }
+      const m = new amap.Marker({
+        position: [startPoint.lng, startPoint.lat],
+        content:
+          '<div style="width:24px;height:24px;border-radius:50%;background:#22c55e;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
+        offset: new amap.Pixel(-12, -12),
+        zIndex: 90,
+      });
+      m.setMap(map);
+      pickStartMarkerRef.current = m;
+    } else if (pickStartMarkerRef.current) {
+      toRemove.push(pickStartMarkerRef.current);
+      pickStartMarkerRef.current = null;
+    }
+
+    if (endPoint) {
+      if (pickEndMarkerRef.current) {
+        toRemove.push(pickEndMarkerRef.current);
+      }
+      const m = new amap.Marker({
+        position: [endPoint.lng, endPoint.lat],
+        content:
+          '<div style="width:24px;height:24px;border-radius:50%;background:#ef4444;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
+        offset: new amap.Pixel(-12, -12),
+        zIndex: 90,
+      });
+      m.setMap(map);
+      pickEndMarkerRef.current = m;
+    } else if (pickEndMarkerRef.current) {
+      toRemove.push(pickEndMarkerRef.current);
+      pickEndMarkerRef.current = null;
+    }
+
+    toRemove.forEach((obj) => {
+      try {
+        map.remove(obj);
+      } catch (e) {
+        console.warn("清除选点标记失败:", e);
+      }
+    });
+
+    return () => {
+      if (pickStartMarkerRef.current && map) {
+        try {
+          map.remove(pickStartMarkerRef.current);
+        } catch {}
+        pickStartMarkerRef.current = null;
+      }
+      if (pickEndMarkerRef.current && map) {
+        try {
+          map.remove(pickEndMarkerRef.current);
+        } catch {}
+        pickEndMarkerRef.current = null;
+      }
+    };
+  }, [amap, startPoint, endPoint, routeInfo]);
+
+  // 清除导航覆盖物（路径线、起点/终点标记、选点预览标记）
   const clearNavigationOverlay = useCallback(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
@@ -1080,6 +1179,14 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     if (endMarkerRef.current) {
       toRemove.push(endMarkerRef.current);
       endMarkerRef.current = null;
+    }
+    if (pickStartMarkerRef.current) {
+      toRemove.push(pickStartMarkerRef.current);
+      pickStartMarkerRef.current = null;
+    }
+    if (pickEndMarkerRef.current) {
+      toRemove.push(pickEndMarkerRef.current);
+      pickEndMarkerRef.current = null;
     }
     toRemove.forEach((obj) => {
       try {
@@ -1149,12 +1256,16 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
           (status: string, result: any) => {
             // 忽略过期的 search 回调，防止旧路线覆盖新路线
             if (currentSearchId !== searchIdRef.current) return;
-            if (status === "complete") {
+              if (status === "complete") {
               // 再次清除（防止竞态：旧回调晚于新 startNav 的 clear 执行）
               clearNavigationOverlay();
               // 路径规划成功
-              if (result.routes && result.routes.length > 0) {
-                const route = result.routes[0];
+              if (!result.routes || result.routes.length === 0) {
+                analytics.nav.routePlanFail({ error_reason: "no_routes" });
+                stopNavigation();
+                return;
+              }
+              const route = result.routes[0];
                 const distance = route.distance; // 距离（米）
                 const duration = Math.round(route.time / 60); // 时间（分钟）
 
@@ -1208,6 +1319,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
                   path,
                 });
                 setRouteSteps(stepsSummary);
+                analytics.nav.routePlanSuccess({ distance_m: distance, duration_s: duration * 60 });
 
                 // 无有效路径点则不绘制（避免空 Polyline）
                 if (path.length < 2) {
@@ -1261,10 +1373,12 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
                   console.warn("setFitView 失败，使用 panTo 回退:", e);
                   mapInstanceRef.current.panTo([endPoint.lng, endPoint.lat]);
                 }
-              }
             } else if (status === "error") {
               if (currentSearchId !== searchIdRef.current) return;
               console.error("路径规划失败:", result);
+              analytics.nav.routePlanFail({
+                error_reason: result?.info === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : (result?.message ?? "unknown"),
+              });
 
               if (result && result.info === "OUT_OF_SERVICE") {
                 toast.error("当前区域暂不支持步行导航服务。");

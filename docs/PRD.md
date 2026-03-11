@@ -1,4 +1,4 @@
-# 校园生存指北 - 产品需求文档（PRD）
+# 校园生存指北 - 产品需求文档
 
 ---
 
@@ -140,11 +140,11 @@
 
 ### 5.2 用户场景
 
-- **精准寻址**：新生去「图书馆北门」，地图导向具体入口
+- **精准寻址**：新生去建筑物某大门，地图导向具体入口
 - **生存避坑**：查看众包拥挤度，避开排队极长点位
 - **路线规划**：两节课间转场，校内步行导航
 - **失物招领**：POI 详情发布，Reveal Contact 隐私保护
-- **别称搜索**：「老图」→「南湖图书馆」等 alias 模糊匹配
+- **别称搜索**：alias 模糊匹配
 - **父子联动**：点击父 POI 展开子 POI，点击「南门」查看该入口拥挤度
 - **P2P 资源**：集市发布二手/借用，绑定 POI，7 天自动下架
 
@@ -482,15 +482,45 @@ flowchart LR
 
 ### 8.7 数据埋点
 
-| 事件 | 说明 |
+数据埋点规范以 **《数据埋点说明文档》**（`docs/数据埋点说明文档.md`）为准，本文档仅作概要引用。
+
+#### 8.7.1 设计原则
+
+| 原则 | 说明 |
 |------|------|
-| nav_start | 导航开始（起终点） |
-| nav_repath | 偏航重新规划次数 |
-| nav_finish | 导航完成（耗时） |
-| poi_click | POI 点击 |
-| status_report | 状态上报（类型） |
-| v1.2 | 活动查看、失物招领发布、分类筛选使用 |
-| v1.3.0 | 集市商品发布、集市商品查看、在地图中查看（集市） |
+| 隐私优先 | 不采集密码、完整联系方式；user_id 可脱敏或哈希 |
+| 合规 | 符合《个人信息保护法》；提供隐私政策与用户同意机制 |
+| 平台无关 | 事件定义与上报格式与 GA4、Mixpanel、自建等解耦 |
+| 一致性 | 统一命名 `{模块}_{动作}_{对象}`，统一属性前缀 |
+
+#### 8.7.2 事件分类与清单（概要）
+
+| 模块 | 代表事件 | 说明 |
+|------|----------|------|
+| **页面浏览** | `page_view` | 页面加载完成，必填 page_path、page_title、school_id |
+| **认证** | `auth_login_success`、`auth_register_submit` | 登录/注册成功与失败 |
+| **地图与学校** | `map_school_select`、`map_marker_click`、`map_filter_toggle` | 选校、点击标记、分类筛选 |
+| **POI** | `poi_drawer_open`、`poi_search_submit`、`poi_navigate_click` | 抽屉、搜索、导航 |
+| **导航** | `nav_start_set`、`nav_route_plan_success`、`nav_route_plan_fail` | 起终点、规划成功/失败 |
+| **留言与社交** | `comment_submit`、`comment_like_click`、`comment_report_click` | 发布、点赞、举报 |
+| **失物招领** | `lost_found_create_submit`、`lost_found_detail_open` | 发布、详情 |
+| **生存集市** | `market_item_post_submit`、`market_intention_submit`、`market_confirm_success` | 发布、意向、确认 |
+| **活动** | `activity_card_click`、`activity_link_click` | 卡片点击、链接点击 |
+| **个人中心** | `profile_tab_switch`、`profile_edit_submit` | Tab 切换、资料修改 |
+| **管理后台** | `admin_poi_create`、`admin_comment_audit`、`admin_market_audit` | POI、留言、集市审核 |
+| **超级管理员** | `super_admin_school_edit`、`super_admin_keyword_add` | 学校、敏感词等 |
+
+#### 8.7.3 通用上下文属性
+
+每次上报建议携带：`timestamp`、`session_id`、`user_id_hash`、`school_id`、`page_path`、`platform`、`app_version`。详见《数据埋点说明文档》第四章。
+
+#### 8.7.4 实现与集成
+
+- **封装层**：建议在 `lib/analytics.ts` 或 `lib/track.ts` 统一封装 `track(event)` 接口
+- **环境变量**：`NEXT_PUBLIC_ANALYTICS_ENABLED`、`NEXT_PUBLIC_GA_MEASUREMENT_ID`、`NEXT_PUBLIC_MIXPANEL_TOKEN`
+- **集成时机**：开发期实现核心事件；上线前配置生产平台；迭代期按需补充管理端/超管端事件
+
+完整事件清单、属性说明、动作词表、隐私与合规要求见 **《数据埋点说明文档》**。
 
 ---
 

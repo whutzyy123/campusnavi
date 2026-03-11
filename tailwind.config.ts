@@ -8,6 +8,17 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      /* 移动端布局：以 1920x1080 为基准，21:9 及更高分辨率适配 */
+      screens: {
+        "ultra-wide": { raw: "(min-aspect-ratio: 21/9)" },
+        "wide-mobile": { raw: "(min-aspect-ratio: 2/1)" },
+      },
+      maxWidth: {
+        "mobile-content": "var(--mobile-content-max)",
+      },
+      height: {
+        "screen-dvh": "100dvh",
+      },
       keyframes: {
         "comment-highlight": {
           "0%": { boxShadow: "0 0 0 3px rgba(253, 224, 71, 0.8)" },
