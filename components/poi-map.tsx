@@ -75,6 +75,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     const markerClusterRef = useRef<any>(null);
     const highlightMarkerRef = useRef<any>(null);
     const walkingRef = useRef<any>(null);
+    const ridingRef = useRef<any>(null);
     const routePolylineRef = useRef<any>(null);
     const startMarkerRef = useRef<any>(null);
     const endMarkerRef = useRef<any>(null);
@@ -106,6 +107,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
       startPoint,
       endPoint,
       routeInfo,
+      navMode,
       stopNavigation,
       updateRouteInfo,
       setRouteSteps,
@@ -1198,6 +1200,9 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     if (walkingRef.current) {
       walkingRef.current = null;
     }
+    if (ridingRef.current) {
+      ridingRef.current = null;
+    }
   }, []);
 
   // 导航功能：开始导航（基于 startPoint 和 endPoint）
@@ -1216,33 +1221,40 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
         const endValid = CoordinateConverter.isValidGCJ02(endPoint.lng, endPoint.lat);
 
         if (!startValid || !endValid) {
-          console.warn("导航起点或终点不在高德地图服务范围内，无法规划步行路线。", {
+          console.warn("导航起点或终点不在高德地图服务范围内，无法规划路线。", {
             startPoint,
             endPoint,
           });
-          toast.error("当前起点或终点不在支持范围内，暂不提供步行导航。");
+          toast.error("当前起点或终点不在支持范围内，暂不提供导航服务。");
           stopNavigation();
           return;
         }
 
-        // 检查插件是否已加载（插件已在初始化时预加载）
-        if (!amap.Walking) {
-          console.error("AMap.Walking 插件未加载");
+        const isRide = navMode === "ride";
+        const PluginClass = isRide ? amap.Riding : amap.Walking;
+        const pluginName = isRide ? "AMap.Riding" : "AMap.Walking";
+
+        if (!PluginClass) {
+          console.error(`${pluginName} 插件未加载`);
           toast.error("导航服务加载失败，请稍后重试。");
           stopNavigation();
           return;
         }
 
         // 不传入 map，插件仅返回数据不绘制，避免无法清除的覆盖物残留
-        const walking = new amap.Walking({
-          hideMarkers: true,
-        });
-        walkingRef.current = walking;
+        const planner = new PluginClass({ hideMarkers: true });
+        if (isRide) {
+          ridingRef.current = planner;
+          walkingRef.current = null;
+        } else {
+          walkingRef.current = planner;
+          ridingRef.current = null;
+        }
 
         // 每次 search 前清除插件内部残留覆盖物，防止泄漏
-        if (typeof walking.clear === "function") {
+        if (typeof planner.clear === "function") {
           try {
-            walking.clear();
+            planner.clear();
           } catch (_) {}
         }
 
@@ -1250,7 +1262,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
         const currentSearchId = ++searchIdRef.current;
 
         // 搜索路径（仅获取坐标数据，由我们手动绘制 Polyline）
-        walking.search(
+        planner.search(
           [startPoint.lng, startPoint.lat], // 起点
           [endPoint.lng, endPoint.lat], // 终点
           (status: string, result: any) => {
@@ -1269,6 +1281,9 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
                 const distance = route.distance; // 距离（米）
                 const duration = Math.round(route.time / 60); // 时间（分钟）
 
+                // Riding 使用 rides，Walking 使用 steps
+                const stepsArray = route.rides ?? route.steps ?? [];
+
                 // 提取路径点（兼容 AMap 1.4/2.0 多种格式：path 数组、polyline 字符串、LngLat 对象）
                 const path: [number, number][] = [];
                 const stepsSummary: { instruction: string; distance: number }[] = [];
@@ -1286,7 +1301,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
                   return null;
                 };
 
-                route.steps.forEach((step: any) => {
+                stepsArray.forEach((step: any) => {
                   if (step.path && Array.isArray(step.path)) {
                     step.path.forEach((point: any) => {
                       const p = parsePoint(point);
@@ -1319,17 +1334,18 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
                   path,
                 });
                 setRouteSteps(stepsSummary);
-                analytics.nav.routePlanSuccess({ distance_m: distance, duration_s: duration * 60 });
+                analytics.nav.routePlanSuccess({ distance_m: distance, duration_s: duration * 60, nav_mode: navMode });
 
                 // 无有效路径点则不绘制（避免空 Polyline）
                 if (path.length < 2) {
                   return;
                 }
 
-                // 手动绘制路径折线（完全可控，便于清理）
+                // 手动绘制路径折线（完全可控，便于清理；骑行用蓝色区分）
+                const strokeColor = isRide ? "#0079D3" : "#FF4500";
                 const polyline = new amap.Polyline({
                   path: path,
-                  strokeColor: "#FF4500",
+                  strokeColor,
                   strokeOpacity: 1,
                   strokeWeight: 6,
                   strokeStyle: "solid",
@@ -1378,10 +1394,11 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
               console.error("路径规划失败:", result);
               analytics.nav.routePlanFail({
                 error_reason: result?.info === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : (result?.message ?? "unknown"),
+                nav_mode: navMode,
               });
 
               if (result && result.info === "OUT_OF_SERVICE") {
-                toast.error("当前区域暂不支持步行导航服务。");
+                toast.error(`当前区域暂不支持${isRide ? "骑行" : "步行"}导航服务。`);
               } else {
                 toast.error("路径规划失败，请稍后重试。");
               }
@@ -1403,7 +1420,7 @@ export const POIMap = forwardRef<POIMapRef, POIMapProps>(
     return () => {
       clearNavigationOverlay();
     };
-  }, [amap, isNavigating, startPoint, endPoint, updateRouteInfo, setRouteSteps, stopNavigation, clearNavigationOverlay]);
+  }, [amap, isNavigating, navMode, startPoint, endPoint, updateRouteInfo, setRouteSteps, stopNavigation, clearNavigationOverlay]);
 
   // 停止导航时清除所有覆盖物
   useEffect(() => {

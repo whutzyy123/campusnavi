@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { LucideIcon } from "lucide-react";
 
-export type StatCardVariant = "blue" | "green" | "amber" | "slate" | "emerald";
+export type StatCardVariant = "blue" | "green" | "amber" | "slate" | "emerald" | "orange";
 
 const variantStyles: Record<
   StatCardVariant,
@@ -14,6 +14,7 @@ const variantStyles: Record<
   amber: { iconBg: "bg-amber-50", iconColor: "text-amber-600" },
   slate: { iconBg: "bg-slate-100", iconColor: "text-slate-600" },
   emerald: { iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
+  orange: { iconBg: "bg-orange-50", iconColor: "text-orange-600" },
 };
 
 interface StatCardProps {
@@ -26,6 +27,8 @@ interface StatCardProps {
   href?: string;
   /** 紧急任务：显示脉冲效果和「点击立即处理」提示 */
   urgent?: boolean;
+  /** 副标签：如 "今日 +3"、"本周 12" */
+  subLabel?: React.ReactNode;
 }
 
 /**
@@ -40,6 +43,7 @@ export function StatCard({
   isLoading = false,
   href,
   urgent = false,
+  subLabel,
 }: StatCardProps) {
   const { iconBg, iconColor } = variantStyles[variant];
 
@@ -54,8 +58,13 @@ export function StatCard({
         {isLoading ? (
           <div className="h-8 w-16 animate-pulse rounded bg-gray-200" />
         ) : (
-          <div className="text-2xl font-bold text-gray-900 tabular-nums">
-            {value}
+          <div className="flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-gray-900 tabular-nums">
+              {value}
+            </span>
+            {subLabel && (
+              <span className="text-xs text-gray-500">{subLabel}</span>
+            )}
           </div>
         )}
         <div className="mt-0.5 flex flex-col gap-0.5">

@@ -178,9 +178,12 @@ export const analytics = {
   nav: {
     startSet: (props: { source: string; poi_id?: string }) => track({ name: "nav_start_set", properties: props }),
     endSet: (props: { source: string; poi_id?: string }) => track({ name: "nav_end_set", properties: props }),
-    routePlanSuccess: (props: { distance_m: number; duration_s: number }) =>
+    modeSwitch: (props: { from: "walk" | "ride"; to: "walk" | "ride" }) =>
+      track({ name: "nav_mode_switch", properties: props }),
+    routePlanSuccess: (props: { distance_m: number; duration_s: number; nav_mode?: "walk" | "ride" }) =>
       track({ name: "nav_route_plan_success", properties: props }),
-    routePlanFail: (props?: { error_reason?: string }) => track({ name: "nav_route_plan_fail", properties: props ?? {} }),
+    routePlanFail: (props?: { error_reason?: string; nav_mode?: "walk" | "ride" }) =>
+      track({ name: "nav_route_plan_fail", properties: props ?? {} }),
     panelClose: (props?: { duration_ms?: number }) => track({ name: "nav_panel_close", properties: props ?? {} }),
   },
 

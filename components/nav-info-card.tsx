@@ -13,7 +13,7 @@ import { useNavigationStore } from "@/store/use-navigation-store";
 import { motion, AnimatePresence } from "framer-motion";
 
 export function NavInfoCard() {
-  const { isNavigating, routeInfo, routeSteps, endPoint, stopNavigation } = useNavigationStore();
+  const { isNavigating, routeInfo, routeSteps, endPoint, navMode, stopNavigation } = useNavigationStore();
   const isMobile = !useMediaQuery("(min-width: 768px)");
   const isLongScreen = useMediaQuery("(min-aspect-ratio: 2/1)"); // 21:9+
   const [showRouteDetail, setShowRouteDetail] = useState(false);
@@ -88,7 +88,7 @@ export function NavInfoCard() {
               ) : (
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base font-semibold text-gray-900">
-                    步行前往 {endPoint.name || "目标点"}
+                    {navMode === "ride" ? "骑行" : "步行"}前往 {endPoint.name || "目标点"}
                   </h3>
                   <div className="mt-2 flex items-center gap-4 text-sm text-gray-600">
                     <span>距离约 {formatDistanceLong(routeInfo.distance)}</span>
@@ -105,6 +105,15 @@ export function NavInfoCard() {
                 <X className="h-5 w-5" />
               </button>
             </div>
+
+            {/* 移动端：底部强调条，呼应高德地图的距离/时间提示 */}
+            {isMobile && (
+              <div className="mt-2 rounded-xl bg-[#FFF2E8] px-3 py-1.5 text-xs font-medium text-[#D4380D] flex items-center justify-between">
+                <span>距离约 {formatDistanceLong(routeInfo.distance)}</span>
+                <span>预计 {formatDurationLong(routeInfo.duration)}</span>
+              </div>
+            )}
+
             {/* 21:9+ 路线详情展开 */}
             {isMobile && isLongScreen && showRouteDetail && routeSteps && routeSteps.length > 0 && (
               <div className="mt-2 max-h-[min(25dvh,180px)] overflow-y-auto border-t border-gray-100 pt-2 text-[11px] text-gray-600 no-scrollbar">

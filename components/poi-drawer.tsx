@@ -11,7 +11,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-import { X, Flag, Navigation, MessageCircle, Heart, Map as MapIcon, MapPin, ImageIcon, ExternalLink, CalendarDays, Package, Plus, ArrowLeft } from "lucide-react";
+import { X, Flag, Navigation, MessageCircle, Heart, Map as MapIcon, MapPin, ImageIcon, ExternalLink, CalendarDays, Package, Plus, ArrowLeft, Loader2 } from "lucide-react";
 import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNavigationStore } from "@/store/use-navigation-store";
@@ -19,6 +19,7 @@ import { useSchoolStore } from "@/store/use-school-store";
 import type { POIWithStatus } from "@/lib/poi-utils";
 import { getCategoryIcon } from "@/lib/poi-utils";
 import { reportLiveStatus, getActiveStatusesByPoi } from "@/lib/status-actions";
+import { toggleFavorite, checkIsFavorite } from "@/lib/favorite-actions";
 import { getActiveActivitiesByPoi } from "@/lib/activity-actions";
 import { getActiveLostFoundByPoi, checkLostFoundEvent } from "@/lib/lost-found-actions";
 import { LostFoundForm } from "@/components/lost-found-form";
@@ -325,6 +326,9 @@ interface PoiDrawerContentProps {
   currentUser: { id: string; role?: string } | null;
   fetchComments: (sort?: "latest" | "popular") => void;
   schoolId: string;
+  isFavorited: boolean;
+  isTogglingFavorite: boolean;
+  onToggleFavorite: () => void;
   getActiveLostFoundByPoi: (poiId: string, schoolId: string) => Promise<{ success: boolean; data?: unknown[] }>;
   setActiveLostFound: React.Dispatch<React.SetStateAction<Array<{
     id: string;
@@ -385,6 +389,9 @@ function PoiDrawerContent({
   currentUser,
   fetchComments,
   schoolId,
+  isFavorited,
+  isTogglingFavorite,
+  onToggleFavorite,
   getActiveLostFoundByPoi,
   setActiveLostFound,
   showLostFoundExpiredPlaceholder,
@@ -409,12 +416,32 @@ function PoiDrawerContent({
             <CategoryIcon className="h-6 w-6 text-[#FF4500]" />
             <h2 className="text-xl font-bold text-[#1A1A1B]">{displayPoi.name}</h2>
           </div>
-          <button
-            onClick={onClose}
-            className="text-[#7C7C7C] hover:text-[#1A1A1B]"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {isAuthenticated && (
+              <button
+                onClick={onToggleFavorite}
+                disabled={isTogglingFavorite}
+                className={`flex items-center justify-center rounded-lg border p-2 transition-colors ${
+                  isFavorited
+                    ? "border-red-200 bg-red-50 text-red-600 hover:bg-red-100"
+                    : "border-[#EDEFF1] bg-white text-[#7C7C7C] hover:border-[#FF4500] hover:bg-[#FFE5DD] hover:text-[#FF4500]"
+                } disabled:cursor-not-allowed disabled:opacity-60`}
+                aria-label={isFavorited ? "取消收藏" : "收藏"}
+              >
+                {isTogglingFavorite ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Heart className={`h-4 w-4 ${isFavorited ? "fill-current" : ""}`} />
+                )}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="text-[#7C7C7C] hover:text-[#1A1A1B]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -660,7 +687,7 @@ function PoiDrawerSubPoiView({
         {displayPoi.description && <p className="text-sm text-gray-700">{displayPoi.description}</p>}
       </div>
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报 (Live Status)</h3>
+        <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报</h3>
         <p className="mb-3 text-xs text-gray-500">
           {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，人流情报 20 分钟有效，事件/状态 8 小时有效"}
         </p>
@@ -945,9 +972,9 @@ function PoiDrawerParentViewContent(props: PoiDrawerParentViewContentProps) {
         </div>
       )}
       <div className="mb-6">
-        <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报 (Live Status)</h3>
+        <h3 className="mb-3 text-sm font-semibold text-[#1A1A1B]">实时情报</h3>
         <p className="mb-3 text-xs text-gray-500">
-          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击下方标签上报当前情况，人流情报 20 分钟有效，事件/状态 8 小时有效"}
+          {isInCooldown ? "感谢上报，请稍后再提交新情报..." : "点击标签上报当前情况，人流情报 20 分钟有效，事件/状态 8 小时有效"}
         </p>
         <div className="mb-4 rounded-xl border border-gray-200 bg-gray-50/80 p-4">
           {isLoadingLiveStatuses ? (
@@ -1284,6 +1311,10 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
   const [reportingStatusType, setReportingStatusType] = useState<string | null>(null);
   const [lastReportedTime, setLastReportedTime] = useState<number | null>(null);
 
+  // 收藏相关
+  const [isFavorited, setIsFavorited] = useState(false);
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+
   // 60 秒冷却结束后清除 lastReportedTime，触发重渲染
   useEffect(() => {
     if (lastReportedTime === null) return;
@@ -1409,6 +1440,22 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     checkExpired();
   // eslint-disable-next-line react-hooks/exhaustive-deps -- poi?.id/activePOI?.id 足够，避免引用变化触发重复请求
   }, [highlightLostFoundId, poi?.id, activePOI?.id, selectedSubPOI, schoolId, isOpen, activeLostFound]);
+
+  // 加载收藏状态（抽屉打开或 displayPoi 变化时）
+  useEffect(() => {
+    const targetPoi = displayPoi ?? poi;
+    if (!targetPoi || !isOpen || !isAuthenticated) {
+      setIsFavorited(false);
+      return;
+    }
+    const check = async () => {
+      const result = await checkIsFavorite(targetPoi.id);
+      if (result.success && result.data != null) {
+        setIsFavorited(result.data);
+      }
+    };
+    check();
+  }, [displayPoi?.id, poi?.id, isOpen, isAuthenticated]);
 
   // 加载实时情报列表（抽屉打开或 displayPoi 变化时）
   useEffect(() => {
@@ -1549,6 +1596,25 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     },
     [handleClose]
   );
+
+  // 切换收藏（必须在 early return 之前，遵守 Hooks 规则）
+  const handleToggleFavorite = useCallback(async () => {
+    if (!displayPoi || !isAuthenticated || isTogglingFavorite) return;
+    setIsTogglingFavorite(true);
+    try {
+      const result = await toggleFavorite(displayPoi.id);
+      if (result.success && result.data != null) {
+        setIsFavorited(result.data.isFavorited);
+        toast.success(result.data.isFavorited ? "已收藏" : "已取消收藏");
+      } else {
+        toast.error(result.error ?? "操作失败");
+      }
+    } catch {
+      toast.error("操作失败，请重试");
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  }, [displayPoi?.id, isAuthenticated, isTogglingFavorite]);
 
   if (!displayPoi) return null;
 
@@ -1713,6 +1779,9 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
               currentUser={currentUser}
               fetchComments={fetchComments}
               schoolId={schoolId}
+              isFavorited={isFavorited}
+              isTogglingFavorite={isTogglingFavorite}
+              onToggleFavorite={handleToggleFavorite}
               getActiveLostFoundByPoi={getActiveLostFoundByPoi}
               setActiveLostFound={setActiveLostFound}
               showLostFoundExpiredPlaceholder={showLostFoundExpiredPlaceholder}
@@ -1799,6 +1868,9 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
                     currentUser={currentUser}
                     fetchComments={fetchComments}
                     schoolId={schoolId}
+                    isFavorited={isFavorited}
+                    isTogglingFavorite={isTogglingFavorite}
+                    onToggleFavorite={handleToggleFavorite}
                     getActiveLostFoundByPoi={getActiveLostFoundByPoi}
                     setActiveLostFound={setActiveLostFound}
                     showLostFoundExpiredPlaceholder={showLostFoundExpiredPlaceholder}

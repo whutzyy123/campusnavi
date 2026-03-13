@@ -5,46 +5,29 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
-import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useNotificationStore } from "@/store/use-notification-store";
-import { MapPin, LogOut, ChevronDown, LayoutDashboard, User, ShoppingBag, Calendar, Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { MapPin, ChevronDown, MessageSquare } from "lucide-react";
 import { POISearchBar } from "@/components/poi-search-bar";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { useFilterStore } from "@/store/use-filter-store";
-import { useMarketStore } from "@/store/use-market-store";
 import { getCampuses } from "@/lib/school-actions";
+import { analytics } from "@/lib/analytics";
 
 export function Navbar() {
   const pathname = usePathname();
-  const router = useRouter();
-  const openMarket = useMarketStore((s) => s.openMarket);
-  const { currentUser, isAuthenticated, isLoggingOut } = useAuthStore();
+  const { currentUser, isAuthenticated } = useAuthStore();
   const { activeSchool, setActiveSchool, schools, triggerFocusMap, triggerFocusToCampus } = useSchoolStore();
-  const { unreadCount, marketUnread, messagesUnread, fetchUnreadCounts } = useNotificationStore();
+  const { unreadCount, messagesUnread, fetchUnreadCounts } = useNotificationStore();
   const { pois, onSelectPOI } = useMapSearchStore();
   const [showSchoolSelector, setShowSchoolSelector] = useState(false);
   const [showCampusSelector, setShowCampusSelector] = useState(false);
   const [campuses, setCampuses] = useState<Array<{ id: string; name: string; boundary: unknown; center: unknown }>>([]);
-  const [showUserMenu, setShowUserMenu] = useState(false);
-  const userMenuRef = useRef<HTMLDivElement>(null);
   const campusSelectorRef = useRef<HTMLDivElement>(null);
-
-  // 点击外部关闭用户菜单
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // 点击外部关闭校区选择器
   useEffect(() => {
@@ -101,26 +84,6 @@ export function Navbar() {
     }
   }, [pathname, isInitialized, initializeAuth]);
 
-  const handleLogout = async () => {
-    if (isLoggingOut) return;
-    analytics.auth.logoutClick();
-    toast.loading("正在退出...", { id: "logout" });
-    try {
-      await useAuthStore.getState().logout();
-    } catch (error) {
-      if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
-        toast.error("退出登录失败，请重试", { id: "logout" });
-        console.error("退出登录失败:", error);
-      }
-    }
-  };
-
-  // 判断用户是否有管理权限：校级管理员(ADMIN)、校内工作人员(STAFF)、超级管理员(SUPER_ADMIN)
-  const hasAdminAccess = 
-    currentUser?.role === "ADMIN" || 
-    currentUser?.role === "STAFF" || 
-    currentUser?.role === "SUPER_ADMIN";
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
   const hasBoundSchool = !!currentUser?.schoolId;
 
   const userInitial = currentUser?.nickname?.slice(0, 1)?.toUpperCase() || currentUser?.email?.slice(0, 1)?.toUpperCase() || "?";
@@ -308,8 +271,20 @@ export function Navbar() {
           ) : null}
         </div>
 
-        {/* 右侧：用户头像 + 下拉菜单 */}
+        {/* 右侧：未登录时显示学校入驻 + 登录；已登录时显示用户菜单 */}
         <div className="flex shrink-0 items-center gap-2 md:gap-4">
+          {!isAuthenticated && (
+            <Link
+              href="/school-onboarding"
+              className={`rounded-full px-3 py-1.5 md:px-4 md:py-2 text-xs md:text-sm font-medium transition-all ${
+                pathname === "/school-onboarding"
+                  ? "bg-[#FF4500]/10 text-[#FF4500]"
+                  : "text-slate-600 hover:text-[#FF4500] hover:bg-[#FF4500]/5"
+              }`}
+            >
+              学校入驻
+            </Link>
+          )}
           {!isAuthenticated ? (
             <Link
               href="/login"
@@ -322,11 +297,11 @@ export function Navbar() {
               登录/注册
             </Link>
           ) : (
-            <div className="relative shrink-0" ref={userMenuRef}>
-              <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
-                className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300 shrink-0"
-                title={currentUser?.nickname || "用户菜单"}
+            <>
+              <Link
+                href="/center"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300"
+                title={currentUser?.nickname || "个人中心"}
               >
                 {userAvatar ? (
                   <Image
@@ -340,95 +315,29 @@ export function Navbar() {
                 ) : (
                   userInitial
                 )}
-              </button>
-              {/* 通知徽章：置于按钮外避免 overflow-hidden 裁剪，z-10 高于头像，border 与背景分离 */}
-              {unreadCount > 0 && (
-                <span
-                  className="absolute -right-0.5 -top-0.5 z-10 h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
-                  aria-label={`${unreadCount} 条未读通知`}
-                />
-              )}
-
-              {showUserMenu && (
-                <div className="absolute right-0 top-full mt-2 w-48 origin-top-right rounded-md bg-white py-2 shadow-lg ring-1 ring-black ring-opacity-5 z-navbar-dropdown">
-                  <div className="border-b border-gray-100 px-4 py-2">
-                    <p className="truncate text-sm font-medium text-[#1A1A1B]">
-                      {currentUser?.nickname || "用户"}
-                    </p>
-                    <p className="truncate text-xs text-gray-500">{currentUser?.email}</p>
-                  </div>
-                  <Link
-                    href={
-                      marketUnread > 0
-                        ? "/profile?tab=marketTransactions"
-                        : messagesUnread > 0
-                          ? "/profile?tab=messages"
-                          : "/profile"
-                    }
-                    onClick={() => setShowUserMenu(false)}
-                    className="relative flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1B] transition-colors hover:bg-gray-100"
-                  >
-                    <User className="h-4 w-4" />
-                    中控台
-                    {unreadCount > 0 && (
-                      <span
-                        className="absolute right-3 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full border-2 border-white bg-[#FF4500]"
-                        aria-label={`${unreadCount} 条未读通知`}
-                      />
-                    )}
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      if (pathname === "/") {
-                        openMarket();
-                        router.replace("/?market=true", { scroll: false });
-                      } else {
-                        router.push("/?market=true");
-                      }
-                    }}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-[#1A1A1B] transition-colors hover:bg-gray-100"
-                  >
-                    <ShoppingBag className="h-4 w-4" />
-                    生存集市
-                  </button>
-                  <Link
-                    href="/activities"
-                    onClick={() => setShowUserMenu(false)}
-                    className="flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1B] transition-colors hover:bg-gray-100"
-                  >
-                    <Calendar className="h-4 w-4" />
-                    校园活动
-                  </Link>
-                  {hasAdminAccess && (
-                    <Link
-                      href={isSuperAdmin ? "/super-admin" : "/admin"}
-                      onClick={() => setShowUserMenu(false)}
-                      className="flex items-center gap-2 px-4 py-2 text-sm text-[#1A1A1B] transition-colors hover:bg-gray-100"
-                    >
-                      <LayoutDashboard className="h-4 w-4" />
-                      管理后台
-                    </Link>
-                  )}
-                  <button
-                    onClick={() => {
-                      setShowUserMenu(false);
-                      handleLogout();
-                    }}
-                    disabled={isLoggingOut}
-                    className="flex w-full items-center gap-2 px-4 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {isLoggingOut ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <LogOut className="h-4 w-4" />
-                    )}
-                    退出
-                  </button>
-                </div>
-              )}
-            </div>
+                {/* 通知徽章（不含消息，消息单独显示） */}
+                {unreadCount > messagesUnread && unreadCount > 0 && (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 z-10 h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
+                    aria-label={`${unreadCount} 条未读通知`}
+                  />
+                )}
+              </Link>
+              <Link
+                href="/messages"
+                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-[#FF4500]"
+                title="消息"
+                aria-label="消息"
+              >
+                <MessageSquare className="h-5 w-5" />
+                {messagesUnread > 0 && (
+                  <span
+                    className="absolute -right-0.5 -top-0.5 z-10 h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
+                    aria-label={`${messagesUnread} 条未读消息`}
+                  />
+                )}
+              </Link>
+            </>
           )}
         </div>
       </div>

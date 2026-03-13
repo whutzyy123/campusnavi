@@ -29,6 +29,8 @@ import {
   MessageSquare,
   LogOut,
   Loader2,
+  MessageCircle,
+  BarChart3,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -144,6 +146,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       roles: ["SUPER_ADMIN"],
     },
     {
+      name: "数据分析",
+      href: "/super-admin/analytics",
+      icon: BarChart3,
+      roles: ["SUPER_ADMIN"],
+    },
+    {
       name: "学校管理",
       href: "/super-admin/schools",
       icon: Building2,
@@ -177,6 +185,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       name: "屏蔽词管理",
       href: "/super-admin/keywords",
       icon: AlertTriangle,
+      roles: ["SUPER_ADMIN"],
+    },
+    {
+      name: "反馈管理",
+      href: "/super-admin/feedback",
+      icon: MessageCircle,
       roles: ["SUPER_ADMIN"],
     },
   ];
@@ -224,7 +238,14 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       }
       } else if (paths[0] === "super-admin") {
         breadcrumbs.push({ name: "超级管理员", href: "/super-admin" });
-        if (paths[1] === "schools") {
+        if (paths[1] === "analytics") {
+          breadcrumbs.push({ name: "数据分析", href: "/super-admin/analytics" });
+          if (paths[2] === "users") breadcrumbs.push({ name: "用户增长", href: "/super-admin/analytics/users" });
+          else if (paths[2] === "retention") breadcrumbs.push({ name: "用户留存", href: "/super-admin/analytics/retention" });
+          else if (paths[2] === "bazaar") breadcrumbs.push({ name: "生存集市", href: "/super-admin/analytics/bazaar" });
+          else if (paths[2] === "content") breadcrumbs.push({ name: "地图与内容", href: "/super-admin/analytics/content" });
+          else if (paths[2] === "health") breadcrumbs.push({ name: "消息与健康", href: "/super-admin/analytics/health" });
+        } else if (paths[1] === "schools") {
           breadcrumbs.push({ name: "学校管理", href: "/super-admin/schools" });
         } else if (paths[1] === "invitation-codes") {
           breadcrumbs.push({ name: "邀请码管理", href: "/super-admin/invitation-codes" });
@@ -242,6 +263,8 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           }
         } else if (paths[1] === "keywords") {
           breadcrumbs.push({ name: "屏蔽词管理", href: "/super-admin/keywords" });
+        } else if (paths[1] === "feedback") {
+          breadcrumbs.push({ name: "反馈管理", href: "/super-admin/feedback" });
         }
       }
 

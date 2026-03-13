@@ -4,7 +4,10 @@ import type { POIWithStatus } from "@/lib/poi-utils";
 interface MapSearchState {
   pois: POIWithStatus[];
   onSelectPOI: ((poi: POIWithStatus) => void) | null;
+  /** 用户当前位置 [lng, lat]，用于搜索结果按距离排序 */
+  userLocation: [number, number] | null;
   setMapSearch: (pois: POIWithStatus[], onSelectPOI: ((poi: POIWithStatus) => void) | null) => void;
+  setUserLocation: (location: [number, number] | null) => void;
 }
 
 /**
@@ -14,8 +17,13 @@ interface MapSearchState {
 export const useMapSearchStore = create<MapSearchState>((set) => ({
   pois: [],
   onSelectPOI: null,
+  userLocation: null,
 
   setMapSearch: (pois, onSelectPOI) => {
     set({ pois, onSelectPOI });
+  },
+
+  setUserLocation: (location) => {
+    set({ userLocation: location });
   },
 }));

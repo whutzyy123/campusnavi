@@ -183,6 +183,55 @@ export async function uploadMarketImage(formData: FormData): Promise<UploadResul
 }
 
 /**
+ * 上传信息反馈/Bug 提交图片
+ * 任何已登录用户可上传，校验：image/jpeg、image/png、image/webp，最大 2MB
+ */
+export async function uploadFeedbackImage(formData: FormData): Promise<UploadResult> {
+  try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId) {
+      return { success: false, error: "请先登录" };
+    }
+
+    const file = formData.get("file") as File | null;
+    if (!file || !(file instanceof File)) {
+      return { success: false, error: "未找到上传文件" };
+    }
+
+    if (!ALLOWED_TYPES.includes(file.type as (typeof ALLOWED_TYPES)[number])) {
+      return {
+        success: false,
+        error: "仅支持 JPG、PNG、WebP 格式",
+      };
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return {
+        success: false,
+        error: `文件大小超过 2MB 限制（当前 ${(file.size / 1024).toFixed(1)}KB）`,
+      };
+    }
+
+    const ext = EXT_MAP[file.type] || "jpg";
+    const pathname = `feedback/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
+
+    const { put } = await import("@vercel/blob");
+    const blob = await put(pathname, file, {
+      access: "public",
+      addRandomSuffix: false,
+    });
+
+    return { success: true, url: blob.url };
+  } catch (error) {
+    console.error("反馈图片上传失败:", error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "上传失败，请重试",
+    };
+  }
+}
+
+/**
  * 从对象存储删除图片
  * 在 POI 更新（换图）或删除时调用，避免孤儿文件占用存储
  */

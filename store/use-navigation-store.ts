@@ -22,6 +22,9 @@ export interface NavPoint {
   name?: string;
 }
 
+/** 导航模式：步行 / 骑行（自行车/电动车） */
+export type NavMode = "walk" | "ride";
+
 export interface NavigationState {
   // 导航点与结果
   startPoint: NavPoint | null;
@@ -30,12 +33,16 @@ export interface NavigationState {
   routeInfo: RouteInfo | null;
   routeSteps: RouteStep[];
 
+  /** 导航模式：步行 / 骑行 */
+  navMode: NavMode;
+
   // 交互状态：当前是否在选择起点/终点（用于地图点选）
   selectMode: "start" | "end" | null;
 
   // Actions
   setStartPoint: (point: NavPoint | null) => void;
   setEndPoint: (point: NavPoint | null) => void;
+  setNavMode: (mode: NavMode) => void;
   setSelectMode: (mode: "start" | "end" | null) => void;
   openNavigationPanel: () => void;
   startNavigation: () => void;
@@ -55,11 +62,14 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   isNavigating: false,
   routeInfo: null,
   routeSteps: [],
+  navMode: "walk",
   selectMode: null,
 
   setStartPoint: (point) => set({ startPoint: point }),
 
   setEndPoint: (point) => set({ endPoint: point }),
+
+  setNavMode: (mode) => set({ navMode: mode }),
 
   setSelectMode: (mode) => set({ selectMode: mode }),
 

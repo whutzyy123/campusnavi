@@ -11,7 +11,8 @@ const PAGE_TITLES: Record<string, string> = {
   "/": "首页",
   "/login": "登录",
   "/register": "注册",
-  "/profile": "个人中心",
+  "/center": "个人中心",
+  "/profile": "中控台",
   "/admin": "管理后台",
   "/admin/school/pois": "POI 管理",
   "/admin/school/campuses": "校区管理",
@@ -27,7 +28,12 @@ const PAGE_TITLES: Record<string, string> = {
   "/super-admin/categories": "分类管理",
   "/super-admin/market-config": "集市配置",
   "/activities": "校园活动",
+  "/favorites": "我的收藏",
+  "/lost-found": "失物招领",
+  "/feedback": "信息反馈",
   "/market": "生存集市",
+  "/center/market": "生存集市",
+  "/messages": "消息",
 };
 
 function getPageTitle(pathname: string): string {

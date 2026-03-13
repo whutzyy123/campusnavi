@@ -1,6 +1,7 @@
 /**
  * 营销落地页
  * GIS-Tech meets Student Life：现代、高能、科技感
+ * 布局优化：视觉重心平衡、响应式协调
  */
 
 "use client";
@@ -35,49 +36,49 @@ const containerVariants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.12,
-      delayChildren: 0.1,
+      staggerChildren: 0.1,
+      delayChildren: 0.08,
     },
   },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 24 },
+  hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.5 },
+    transition: { duration: 0.4, ease: "easeOut" as const },
   },
 };
 
 export function LandingPage() {
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden pt-[max(5rem,10vh)] pb-12">
+    <div className="relative flex min-h-screen flex-col overflow-hidden pt-[max(5rem,8vh)] pb-0">
       {/* Mesh gradient + dot pattern background */}
       <div className="pointer-events-none absolute inset-0 -z-10 landing-mesh-bg" />
       <div className="pointer-events-none absolute inset-0 -z-10 landing-dot-pattern opacity-60" />
 
-      {/* Hero Section - content shifted to upper third */}
-      <section className="w-full flex-1 flex items-start pt-0">
-        <div className="container mx-auto px-4 sm:px-6">
+      {/* Hero Section - 居中布局，左右视觉权重平衡 */}
+      <section className="flex flex-1 flex-col items-center justify-center py-8 sm:py-12">
+        <div className="container mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
           <motion.div
-            className="grid grid-cols-1 items-start gap-10 lg:grid-cols-2 lg:gap-12"
+            className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_1fr] lg:items-center lg:gap-16 xl:gap-20"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
           >
-            {/* Left Column - pulled up for upper-third focal point */}
-            <div className="space-y-6 md:-mt-4 lg:-mt-8">
+            {/* Block 1: Hero + CTA（桌面端左上） */}
+            <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
               <motion.div variants={itemVariants} className="space-y-4">
-                <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl md:text-6xl">
+                <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-[2.75rem] xl:text-6xl">
                   校园生存指北
                 </h1>
-                <p className="max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg md:text-xl">
+                <p className="mx-auto max-w-md text-base leading-relaxed text-slate-600 sm:text-lg lg:mx-0 lg:max-w-lg">
                   不仅是地图，更是你的校园生活圈。
                 </p>
               </motion.div>
 
-              <motion.div variants={itemVariants}>
+              <motion.div variants={itemVariants} className="mt-6">
                 <Link
                   href="/login"
                   className="hero-btn-glow inline-flex items-center justify-center rounded-full bg-gradient-to-r from-orange-500 to-red-600 px-8 py-4 text-lg font-semibold text-white shadow-lg transition-all hover:from-orange-600 hover:to-red-700 hover:shadow-xl active:scale-[0.98]"
@@ -85,39 +86,17 @@ export function LandingPage() {
                   立即登录 / 注册
                 </Link>
               </motion.div>
-
-              {/* Feature Cards - Glassmorphism, tight cluster with Hero */}
-              <motion.div
-                className="grid gap-4 pt-2 sm:grid-cols-3"
-                variants={containerVariants}
-              >
-                {features.map(({ icon: Icon, title, description, glowColor }) => (
-                  <motion.div
-                    key={title}
-                    variants={itemVariants}
-                    className="group rounded-xl border border-white/20 bg-white/60 p-4 backdrop-blur-md transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
-                  >
-                    <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${glowColor} text-[#FF4500] ring-1 ring-[#FF4500]/10`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-                    <h3 className="mt-3 font-semibold text-slate-900">{title}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{description}</p>
-                  </motion.div>
-                ))}
-              </motion.div>
             </div>
 
-            {/* Right Column - Phone Mockup, shifted up to align with Hero */}
+            {/* Block 2: Phone Mockup（桌面端右侧，垂直居中） */}
             <motion.div
               variants={itemVariants}
-              className="flex h-full min-h-[280px] items-center justify-center -translate-y-[3vh] md:-translate-y-[5vh] [perspective:1000px]"
+              className="flex min-h-[260px] items-center justify-center lg:min-h-[320px] lg:row-span-2 [perspective:1000px]"
             >
               <motion.div
-                className="relative w-full max-w-[260px] sm:max-w-[280px]"
+                className="relative w-full max-w-[240px] sm:max-w-[260px] lg:max-w-[280px]"
                 style={{ aspectRatio: "9/19" }}
-                animate={{ y: [0, -10, 0] }}
+                animate={{ y: [0, -8, 0] }}
                 transition={{
                   duration: 4,
                   repeat: Infinity,
@@ -189,12 +168,34 @@ export function LandingPage() {
                 </div>
               </motion.div>
             </motion.div>
+
+            {/* Block 3: Feature Cards（桌面端左下，与 Hero 形成左栏） */}
+            <motion.div
+              className="mt-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-3 lg:mt-10"
+              variants={containerVariants}
+            >
+              {features.map(({ icon: Icon, title, description, glowColor }) => (
+                <motion.div
+                  key={title}
+                  variants={itemVariants}
+                  className="group rounded-xl border border-white/20 bg-white/60 p-4 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
+                >
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br ${glowColor} text-[#FF4500] ring-1 ring-[#FF4500]/10`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mt-3 font-semibold text-slate-900">{title}</h3>
+                  <p className="mt-1 text-sm leading-snug text-slate-600">{description}</p>
+                </motion.div>
+              ))}
+            </motion.div>
           </motion.div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-slate-200/60 py-6">
+      {/* Footer - 底部锚定，视觉收束 */}
+      <footer className="mt-auto border-t border-slate-200/60 bg-white/30 backdrop-blur-sm py-6">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-slate-500">
           © {new Date().getFullYear()} 校园生存指北 · 精细化校区地理信息系统
         </div>

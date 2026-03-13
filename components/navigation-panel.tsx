@@ -7,9 +7,11 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { analytics } from "@/lib/analytics";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
+import { useMapSearchStore } from "@/store/use-map-search-store";
+import { distanceMeters } from "@/lib/geo-utils";
 import { loadAMap } from "@/lib/amap-loader";
 import { getPOIsBySchool } from "@/lib/poi-actions";
-import { MapPin, ArrowUpDown, X, Search, ChevronDown, LocateFixed } from "lucide-react";
+import { MapPin, ArrowUpDown, X, Search, ChevronDown, LocateFixed, Footprints, Bike } from "lucide-react";
 import toast from "react-hot-toast";
 
 interface NavPOI {
@@ -28,6 +30,8 @@ export function NavigationPanel() {
     isNavigating,
     routeInfo,
     routeSteps,
+    navMode,
+    setNavMode,
     selectMode,
     setSelectMode,
     setStartPoint,
@@ -37,6 +41,7 @@ export function NavigationPanel() {
     startNavigation,
   } = useNavigationStore();
   const { activeSchool } = useSchoolStore();
+  const userLocation = useMapSearchStore((s) => s.userLocation);
 
   const [allPois, setAllPois] = useState<NavPOI[] | null>(null);
   const [isLoadingPois, setIsLoadingPois] = useState(false);
@@ -48,6 +53,8 @@ export function NavigationPanel() {
   const [showSteps, setShowSteps] = useState(false);
   const isMobile = !useMediaQuery("(min-width: 768px)");
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  // 移动端：起终点栏折叠 / 展开（避免遮挡过多地图）
+  const [isExpanded, setIsExpanded] = useState(false);
 
   // 懒加载当前学校的 POI 列表，用于搜索
   const ensurePoisLoaded = async () => {
@@ -76,13 +83,20 @@ export function NavigationPanel() {
   const filteredPois = useMemo(() => {
     if (!allPois || !debouncedSearchQuery.trim()) return allPois || [];
     const q = debouncedSearchQuery.trim().toLowerCase();
-    return allPois.filter(
+    const matched = allPois.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q) ||
         (p.alias?.toLowerCase().includes(q) ?? false)
     );
-  }, [allPois, debouncedSearchQuery]);
+    // 有用户位置时按距离排序，优先展示最近的点位
+    if (!userLocation || matched.length === 0) return matched;
+    return [...matched].sort((a, b) => {
+      const distA = distanceMeters(userLocation, [a.lng, a.lat]);
+      const distB = distanceMeters(userLocation, [b.lng, b.lat]);
+      return distA - distB;
+    });
+  }, [allPois, debouncedSearchQuery, userLocation]);
 
   // 当学校变化时重置 POI 缓存
   useEffect(() => {
@@ -213,6 +227,30 @@ export function NavigationPanel() {
             取消
           </button>
         </motion.div>
+      ) : isMobile && !isExpanded ? (
+        /* 移动端：收起为左上角小按钮，点击展开半屏面板 */
+        <motion.div
+          key="collapsed-button"
+          initial={{ opacity: 0, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -4 }}
+          transition={{ duration: 0.18 }}
+          className="pointer-events-auto fixed z-50"
+          style={{
+            top: "4rem",
+            left: "calc(0.5rem + env(safe-area-inset-left, 0px))",
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => setIsExpanded(true)}
+            className="flex items-center gap-1.5 rounded-full bg-white/85 px-3 py-1.5 text-xs font-medium text-gray-800 shadow-md backdrop-blur-md border border-white/60"
+          >
+            <MapPin className="h-3.5 w-3.5 text-[#FF4500]" />
+            <span>校内导航</span>
+            <ChevronDown className="h-3 w-3 text-gray-400" />
+          </button>
+        </motion.div>
       ) : (
         <motion.div
           key="full-panel"
@@ -232,7 +270,9 @@ export function NavigationPanel() {
       <div
         className={`rounded-lg border md:rounded-xl ${
           isMobile
-            ? "mx-auto max-h-[30dvh] flex flex-col overflow-hidden rounded-2xl border-white/20 bg-white/70 shadow-none backdrop-blur-xl"
+            ? `mx-auto flex flex-col overflow-hidden rounded-2xl border-white/20 bg-white/70 shadow-none backdrop-blur-xl ${
+                isExpanded ? "max-h-[52dvh]" : "max-h-[30dvh]"
+              }`
             : "border-gray-200 bg-white/90 shadow-lg backdrop-blur-md"
         }`}
         style={
@@ -246,7 +286,64 @@ export function NavigationPanel() {
         }
       >
         <div className={`flex shrink-0 items-center justify-between md:border-b md:border-gray-100 ${isMobile ? "px-3 py-2" : "px-4 py-2"}`}>
-          <span className={`font-semibold text-gray-800 ${isMobile ? "text-xs" : "text-sm"}`}>校内步行导航</span>
+          <div className="flex items-center gap-2">
+            <span className={`font-semibold text-gray-800 ${isMobile ? "text-xs" : "text-sm"}`}>
+              校内导航
+            </span>
+            {/* 步行/骑行模式切换 */}
+            <div className="flex rounded-lg bg-gray-100 p-0.5">
+              <button
+                type="button"
+                onClick={() => {
+                  if (navMode !== "walk") {
+                    analytics.nav.modeSwitch({ from: navMode, to: "walk" });
+                    setNavMode("walk");
+                  }
+                }}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors md:px-2.5 md:text-[11px] ${
+                  navMode === "walk"
+                    ? "bg-white text-[#FF4500] shadow-sm"
+                    : "text-gray-600 hover:text-gray-800"
+                }`}
+                title="步行"
+                aria-pressed={navMode === "walk"}
+              >
+                <Footprints className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                <span className="hidden sm:inline">步行</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (navMode !== "ride") {
+                    analytics.nav.modeSwitch({ from: navMode, to: "ride" });
+                    setNavMode("ride");
+                  }
+                }}
+                className={`flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-medium transition-colors md:px-2.5 md:text-[11px] ${
+                  navMode === "ride"
+                    ? "bg-white text-[#0079D3] shadow-sm"
+                    : "text-gray-600 hover:text-gray-800"
+                }`}
+                title="骑行"
+                aria-pressed={navMode === "ride"}
+              >
+                <Bike className="h-3 w-3 md:h-3.5 md:w-3.5" />
+                <span className="hidden sm:inline">骑行</span>
+              </button>
+            </div>
+          </div>
+          {isMobile && (
+            <button
+              type="button"
+              onClick={() => setIsExpanded((v) => !v)}
+              className="mr-1 flex h-7 w-7 items-center justify-center rounded-full bg-white/60 text-gray-500 shadow-sm transition-colors hover:bg-white hover:text-gray-700 md:hidden"
+              aria-label={isExpanded ? "收起导航面板" : "展开导航面板"}
+            >
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+              />
+            </button>
+          )}
           <button
             onClick={() => {
               analytics.nav.panelClose();
@@ -389,16 +486,27 @@ export function NavigationPanel() {
                         {debouncedSearchQuery.trim() ? "无匹配结果" : "输入搜索或选择地图选点"}
                       </div>
                     ) : (
-                      filteredPois.map((poi) => (
-                        <button
-                          key={poi.id}
-                          onClick={() => handleSelectPOI(poi)}
-                          className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-gray-100"
-                        >
-                          <span className="font-medium text-gray-800">{poi.name}</span>
-                          <span className="text-[10px] text-gray-500">{poi.category}</span>
-                        </button>
-                      ))
+                      filteredPois.map((poi) => {
+                        const distStr = userLocation
+                          ? (() => {
+                              const d = distanceMeters(userLocation, [poi.lng, poi.lat]);
+                              return d < 1000 ? `约 ${Math.round(d)}m` : `约 ${(d / 1000).toFixed(1)}km`;
+                            })()
+                          : null;
+                        return (
+                          <button
+                            key={poi.id}
+                            onClick={() => handleSelectPOI(poi)}
+                            className="flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left hover:bg-gray-100"
+                          >
+                            <span className="font-medium text-gray-800">{poi.name}</span>
+                            <span className="text-[10px] text-gray-500">
+                              {poi.category}
+                              {distStr && <span className="ml-1 text-gray-400">· {distStr}</span>}
+                            </span>
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                 </div>
@@ -604,6 +712,12 @@ export function NavigationPanel() {
               filteredPois.map((poi) => {
                 const q = debouncedSearchQuery.trim().toLowerCase();
                 const aliasMatched = poi.alias && q && poi.alias.toLowerCase().includes(q);
+                const distStr = userLocation
+                  ? (() => {
+                      const d = distanceMeters(userLocation, [poi.lng, poi.lat]);
+                      return d < 1000 ? `约 ${Math.round(d)}m` : `约 ${(d / 1000).toFixed(1)}km`;
+                    })()
+                  : null;
                 return (
                   <button
                     key={poi.id}
@@ -618,6 +732,7 @@ export function NavigationPanel() {
                     </span>
                     <span className="text-[10px] text-gray-500">
                       {poi.category}
+                      {distStr && <span className="ml-1 text-gray-400">· {distStr}</span>}
                     </span>
                   </button>
                 );

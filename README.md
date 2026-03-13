@@ -17,7 +17,7 @@
 - **精准导航**：校内步行路径规划、起终点选点、路径绘制
 - **生存集市**：二手交易、以物换物、物品借用，支持意向→选定→锁定→双确认交易闭环
 - **社交与内容**：POI 留言板、失物招领、活动管理、消息通知
-- **管理后台**：校级管理（POI/分类/校区/团队/审核）+ 超级管理员（用户/学校/敏感词/集市配置）
+- **管理后台**：校级管理（POI/分类/校区/团队/审核）+ 超级管理员（用户/学校/敏感词/集市配置、数据分析、周报/月报/年报导出）
 
 ---
 
@@ -32,6 +32,7 @@
 | 地图 | 高德地图 JS API 2.0、@turf/turf |
 | 状态 | Zustand |
 | 存储 | Vercel Blob Storage |
+| 图表 | Recharts（超级管理员数据分析） |
 
 ---
 
@@ -126,7 +127,7 @@ campusproject/
 │   │   ├── register/       # 注册
 │   │   ├── profile/        # 个人中心
 │   │   ├── admin/          # 校级管理后台
-│   │   └── super-admin/    # 超级管理员后台
+│   │   └── super-admin/    # 超级管理员后台（含 analytics 数据分析）
 │   └── api/                # Route Handlers
 ├── components/             # React 组件
 ├── lib/                    # 工具与 Server Actions
@@ -176,6 +177,8 @@ campusproject/
 |------|------|
 | [docs/PRD.md](docs/PRD.md) | 产品需求文档 |
 | [docs/API接口文档.md](docs/API接口文档.md) | API 与 Server Actions 接口说明 |
+| [docs/超级管理员数据看板规划.md](docs/超级管理员数据看板规划.md) | 超级管理员数据分析、报表导出、核心率指标 |
+| [docs/技术栈说明文档.md](docs/技术栈说明文档.md) | 技术栈与架构约定 |
 
 ---
 

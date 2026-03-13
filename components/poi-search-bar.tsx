@@ -5,11 +5,13 @@
 
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Search, X, MapPin, Clock, Flame } from "lucide-react";
 import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
+import { useMapSearchStore } from "@/store/use-map-search-store";
+import { distanceMeters } from "@/lib/geo-utils";
 import { useSearchHistory } from "@/hooks/use-search-history";
 import { useDebounce } from "@/hooks/use-debounce";
 import { getActiveActivitiesCount } from "@/lib/activity-actions";
@@ -44,6 +46,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
 
   const { activeSchool, inspectedSchool } = useSchoolStore();
   const { currentUser } = useAuthStore();
+  const userLocation = useMapSearchStore((s) => s.userLocation);
   const schoolId = (inspectedSchool ?? activeSchool)?.id ?? currentUser?.schoolId ?? null;
   const { history, addToHistory, clearHistory } = useSearchHistory(schoolId ?? "global");
 
@@ -122,6 +125,19 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     const full = pois.find((p) => p.id === item.id);
     return full ?? null;
   };
+
+  // 按距离用户位置排序（有定位时优先展示最近的点位）
+  const sortedSearchResults = useMemo(() => {
+    if (!userLocation || searchResults.length === 0) return searchResults;
+    return [...searchResults].sort((a, b) => {
+      const poiA = pois.find((p) => p.id === a.id);
+      const poiB = pois.find((p) => p.id === b.id);
+      if (!poiA || !poiB) return 0;
+      const distA = distanceMeters(userLocation, [poiA.lng, poiA.lat]);
+      const distB = distanceMeters(userLocation, [poiB.lng, poiB.lat]);
+      return distA - distB;
+    });
+  }, [searchResults, userLocation, pois]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -260,7 +276,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
                 {showOngoingOnly ? "暂无进行中的活动" : "未找到匹配的 POI"}
               </li>
             ) : (
-              searchResults.map((item, index) => {
+              sortedSearchResults.map((item, index) => {
                 const isActivityMatch = !!item.matchedActivity;
                 return (
                   <li key={item.id}>
@@ -280,10 +296,30 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
                       {item.matchedActivity ? (
                         <span className="mt-0.5 text-xs text-orange-600 font-medium">
                           🔥 正在进行: {item.matchedActivity.title}
+                          {userLocation && (() => {
+                            const p = pois.find((x) => x.id === item.id);
+                            if (!p) return null;
+                            const d = distanceMeters(userLocation, [p.lng, p.lat]);
+                            return (
+                              <span className="ml-1 font-normal text-orange-500/80">
+                                · 约 {d < 1000 ? `${Math.round(d)}m` : `${(d / 1000).toFixed(1)}km`}
+                              </span>
+                            );
+                          })()}
                         </span>
                       ) : (
                         <span className="mt-0.5 text-xs text-gray-500">
                           {pois.find((p) => p.id === item.id)?.category ?? item.alias ?? "—"}
+                          {userLocation && (() => {
+                            const p = pois.find((x) => x.id === item.id);
+                            if (!p) return null;
+                            const d = distanceMeters(userLocation, [p.lng, p.lat]);
+                            return (
+                              <span className="ml-1 text-gray-400">
+                                · 约 {d < 1000 ? `${Math.round(d)}m` : `${(d / 1000).toFixed(1)}km`}
+                              </span>
+                            );
+                          })()}
                         </span>
                       )}
                     </button>

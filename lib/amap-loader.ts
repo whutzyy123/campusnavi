@@ -71,7 +71,8 @@ export function loadAMap(): Promise<void> {
           'AMap.Scale',        // 比例尺控件
           'AMap.ToolBar',      // 工具条控件
           'AMap.Geolocation',  // 定位插件
-          'AMap.Walking',       // 步行导航（关键：导航需要）
+          'AMap.Walking',       // 步行导航
+          'AMap.Riding',        // 骑行/电动车路径规划
           'AMap.Polyline',      // 折线（关键：画线需要）
           'AMap.Marker',        // 点标记
           'AMap.Polygon',       // 多边形（用于画边界）

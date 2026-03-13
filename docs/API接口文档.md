@@ -8,8 +8,8 @@
 |------|------|
 | 产品名称 | 校园生存指北 |
 | 文档类型 | API 接口文档 |
-| 当前版本 | v1.0 |
-| 最后更新 | 2026-03-10 |
+| 当前版本 | v1.1 |
+| 最后更新 | 2026-03-11 |
 | 文档状态 | 正式版 |
 
 ---
@@ -408,6 +408,16 @@
 | notification-actions | `getUserNotifications`, `getUserMarketNotifications`, `markAsRead`, `markAllAsRead` | 消息通知 |
 | lost-found-actions | `createLostFoundEvent`, `getUserLostFoundEvents`, `checkLostFoundEvent`, `markAsFound` | 失物招领 |
 | admin-actions | `getSuperAdminStats`, `getSchoolAdminStats` | 管理统计 |
+| admin-analytics-actions | `getNewUsersTrend`, `getCumulativeUsersTrend`, `getNewUsersBySchool`, `getDauWauMauTrend`, `getRetentionTrend`, `getDormantTrend`, `getMarketListingsTrend`, `getMarketByType`, `getMarketBySchool`, `getCommentsTrend`, `getPoiTrend`, `getContentBySchool`, `getNotificationsTrend` | 超级管理员数据分析（时序与分布） |
+| admin-report-actions | `exportReportCsv` | 超级管理员周报/月报/年报 CSV 导出 |
+
+---
+
+### 3.10 超级管理员统计与报表（admin-actions / admin-analytics-actions / admin-report-actions）
+
+**`getSuperAdminStats`** 返回 `SuperAdminStats`，含用户增长、留存、集市、内容、消息、**核心率指标**（用户活跃率、集市成交/过期率、留言互动率、失物招领完成率、反馈/举报处理率）、内容健康等。
+
+**`exportReportCsv(period: "week" | "month" | "year")`** 导出 CSV，含用户增长、留存、集市、内容、核心率指标、消息。返回 `{ success, csv, filename }`。
 
 ---
 
@@ -446,4 +456,5 @@
 
 | 版本 | 修订日期 | 修订内容 |
 |------|----------|----------|
+| v1.1 | 2026-03-11 | 新增 admin-analytics-actions、admin-report-actions；扩展 getSuperAdminStats 核心率指标 |
 | v1.0 | 2026-03-10 | 初版，基于项目当前实现整理 |

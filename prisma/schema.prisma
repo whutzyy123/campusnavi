@@ -92,6 +92,8 @@ model User {
   marketLogs             MarketLog[]
   notifications          Notification[]   @relation("NotificationRecipient")
   notificationsActed     Notification[]   @relation("NotificationActor")
+  poiFavorites           POIFavorite[]
+  feedbacks              Feedback[]
 
   @@index([schoolId])
   @@index([phone])
@@ -212,6 +214,7 @@ model POI {
   activities      Activity[]
   lostFoundEvents LostFoundEvent[]
   marketItems     MarketItem[]
+  favorites       POIFavorite[]
 
   @@index([schoolId])
   @@index([parentId])
@@ -219,6 +222,23 @@ model POI {
   @@index([lat, lng])
   @@index([isOfficial])
   @@map("pois")
+}
+
+// POI 收藏表：用户收藏常用 POI
+model POIFavorite {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  poiId     String   @map("poi_id")
+  schoolId  String   @map("school_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  poi  POI  @relation(fields: [poiId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, poiId])
+  @@index([userId])
+  @@index([schoolId])
+  @@map("poi_favorites")
 }
 
 // 校内路径网格表：补全高德地图不识别的小路
@@ -356,6 +376,38 @@ model Notification {
   @@index([userId, isRead])
   @@index([userId, createdAt])
   @@map("notifications")
+}
+
+// 信息反馈/Bug 提交：用户对平台的使用体验反馈和问题提交
+enum FeedbackType {
+  FEEDBACK // 使用体验反馈
+  BUG // Bug 提交
+}
+
+enum FeedbackStatus {
+  PENDING // 待处理
+  RESOLVED // 已解决
+  REJECTED // 已驳回
+}
+
+model Feedback {
+  id        String         @id @default(cuid())
+  userId    String         @map("user_id")
+  type      FeedbackType // FEEDBACK | BUG
+  title     String         @db.VarChar(200) // 标题
+  content   String         @db.Text // 详情内容
+  images    Json           @default("[]") // 图片 URL 数组，最多 3 张
+  status    FeedbackStatus @default(PENDING)
+  createdAt DateTime       @default(now()) @map("created_at")
+  updatedAt DateTime       @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("feedbacks")
 }
 
 // 平台屏蔽词表：用于内容审核

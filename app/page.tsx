@@ -57,11 +57,13 @@ function HomeContent() {
     clearSelection,
     selectParentPOI,
     focusCampusTrigger,
+    setHighlightPoi,
   } = useSchoolStore();
   const { openNavigationPanel, routeInfo } = useNavigationStore();
   const { currentUser } = useAuthStore();
   const isMobile = !useMediaQuery("(min-width: 768px)");
   const setMapSearch = useMapSearchStore((s) => s.setMapSearch);
+  const setUserLocationStore = useMapSearchStore((s) => s.setUserLocation);
   const isAdminOrStaff = currentUser?.role === "ADMIN" || currentUser?.role === "STAFF";
   
   // 地图定位引用
@@ -151,7 +153,7 @@ function HomeContent() {
     }
   }, [focusCampusTrigger]);
 
-  // 从 URL 参数打开 POI 详情（如从中控台「查看回复」或「失物招领详情」跳转）
+  // 从 URL 参数打开 POI 详情（如从中控台「查看回复」、失物招领、我的收藏跳转）
   const urlCommentId =
     searchParams.get("highlightCommentId") || searchParams.get("commentId");
   const urlLostFoundId = searchParams.get("lostFoundId");
@@ -163,8 +165,10 @@ function HomeContent() {
     if (poi) {
       setSelectedPOI(poi);
       setShowPOIDrawer(true);
+      // 地图缩放至 POI 并高亮（复用 poi-map 的 highlightedPoiId 逻辑：panTo + setZoom + 脉动）
+      setHighlightPoi(poiId);
     }
-  }, [searchParams, pois]);
+  }, [searchParams, pois, setHighlightPoi]);
 
   // 重新定位
   const handleRelocate = () => {
@@ -193,9 +197,20 @@ function HomeContent() {
       setMapSearch(pois, handlePOIClick);
     } else {
       setMapSearch([], null);
+      setUserLocationStore(null);
     }
-    return () => setMapSearch([], null);
-  }, [currentUser, currentSchool, pois, handlePOIClick, setMapSearch]);
+    return () => {
+      setMapSearch([], null);
+      setUserLocationStore(null);
+    };
+  }, [currentUser, currentSchool, pois, handlePOIClick, setMapSearch, setUserLocationStore]);
+
+  // 同步用户位置到搜索 store（用于搜索结果按距离排序）
+  useEffect(() => {
+    if (currentUser && currentSchool) {
+      setUserLocationStore(userLocation ?? null);
+    }
+  }, [currentUser, currentSchool, userLocation, setUserLocationStore]);
 
   // 刷新 POI 列表（状态更新后）
   const handlePOIStatusUpdate = async () => {
@@ -252,6 +267,7 @@ function HomeContent() {
         }}
         onLocationUpdate={async (location) => {
           setUserLocation(location);
+          setUserLocationStore(location);
           // 定位成功后短暂显示橙色
           setLocationSuccess(true);
           setTimeout(() => {
