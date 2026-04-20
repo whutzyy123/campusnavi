@@ -1,20 +1,11 @@
 import { create } from "zustand";
-import { logoutUser, getMe } from "@/lib/auth-server-actions";
+import { logoutUser, getMe, type MeUser } from "@/lib/auth-server-actions";
 import { useNotificationStore } from "@/store/use-notification-store";
 
 export type UserRole = "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
 
-export interface User {
-  id: string;
-  email?: string | null;
-  nickname: string | null;
-  bio?: string | null;
-  avatar?: string | null;
-  lastProfileUpdateAt?: string | null;
-  role: UserRole | string; // 兼容 getMe 返回的 string
-  schoolId: string | null;
-  schoolName?: string | null;
-}
+/** 与 getMe / /api/auth/me 对齐的客户端用户快照 */
+export type User = MeUser;
 
 interface AuthState {
   currentUser: User | null;
@@ -25,9 +16,10 @@ interface AuthState {
   clearUser: () => void;
   /** 立即清空认证状态（用户 + 通知），用于登出时先停止受保护 UI 渲染 */
   clearAuth: () => void;
-  /** 登出：clearAuth → Server Action → 失败时 window.location 兜底 */
+  /** 登出：clearAuth → Server Action；失败时 POST /api/auth/logout 清 Cookie 后跳转登录 */
   logout: () => Promise<void>;
-  initializeAuth: () => Promise<void>; // 初始化认证状态
+  /** 从服务端同步用户；force为 true 时忽略「已初始化」短路（登录成功、资料更新后使用） */
+  initializeAuth: (opts?: { force?: boolean }) => Promise<void>;
   setInitialized: (initialized: boolean) => void; // 设置初始化状态
 }
 
@@ -56,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   clearAuth: () => {
-    set({ currentUser: null, isAuthenticated: false });
+    set({ currentUser: null, isAuthenticated: false, isInitialized: false });
     useNotificationStore.getState().setUnreadCount(0);
   },
 
@@ -67,6 +59,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await logoutUser();
     } catch (e) {
       if (e instanceof Error && e.message?.includes?.("NEXT_REDIRECT")) throw e;
+      try {
+        await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      } catch {
+        /*忽略网络错误，仍跳转登录页 */
+      }
       window.location.href = "/login";
       return;
     }
@@ -77,9 +74,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isInitialized: initialized });
   },
 
-  initializeAuth: async () => {
-    // 如果已经初始化过，不再重复初始化
-    if (get().isInitialized) {
+  initializeAuth: async (opts?: { force?: boolean }) => {
+    if (!opts?.force && get().isInitialized) {
       return;
     }
 

@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { deleteSchoolCascade } from "@/lib/school/delete-school-db";
+import { requireSchoolAdminJson, requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/schools/:id
@@ -10,6 +14,14 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
+    if (auth.role !== "SUPER_ADMIN" && auth.schoolId !== params.id) {
+      return NextResponse.json({ success: false, message: "无权限" }, { status: 403 });
+    }
+
     const school = await prisma.school.findUnique({
       where: { id: params.id },
       select: {
@@ -55,6 +67,9 @@ export async function PUT(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     const body = await request.json();
     const { name } = body;
 
@@ -104,14 +119,16 @@ export async function PUT(
 
 /**
  * DELETE /api/schools/:id
- * 删除学校（级联删除所有关联数据）
- * 危险操作：必须在事务中执行，严格按照顺序删除
+ * 删除学校（依赖 schema 中级联删除）
  */
 export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     // 检查学校是否存在
     const school = await prisma.school.findUnique({
       where: { id: params.id },
@@ -129,48 +146,7 @@ export async function DELETE(
       );
     }
 
-    // 在事务中执行级联删除
-    await prisma.$transaction(async (tx) => {
-      // 1. 删除该校 POI 关联的 LiveStatus
-      await tx.liveStatus.deleteMany({
-        where: {
-          schoolId: params.id,
-        },
-      });
-
-      // 2. 删除该校所有的 POI
-      await tx.pOI.deleteMany({
-        where: {
-          schoolId: params.id,
-        },
-      });
-
-      // 3. 删除该校所有的 RouteEdge
-      await tx.routeEdge.deleteMany({
-        where: {
-          schoolId: params.id,
-        },
-      });
-
-      // 4. 删除该校所有的 InvitationCode
-      await tx.invitationCode.deleteMany({
-        where: {
-          schoolId: params.id,
-        },
-      });
-
-      // 5. 删除该校所有的 User
-      await tx.user.deleteMany({
-        where: {
-          schoolId: params.id,
-        },
-      });
-
-      // 6. 最后删除 School 本身
-      await tx.school.delete({
-        where: { id: params.id },
-      });
-    });
+    await deleteSchoolCascade(params.id);
 
     return NextResponse.json({
       success: true,

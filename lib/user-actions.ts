@@ -11,6 +11,7 @@ import { hashPassword } from "@/lib/auth-utils";
 import { prisma } from "@/lib/prisma";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
 import { getUserReputation as getUserReputationFromMarket } from "@/lib/market-actions";
+import { appRoleToDbRole, dbRoleToAppRole, type AppRole } from "@/lib/role";
 
 /** 角色数字到可读标签映射 */
 const ROLE_LABELS: Record<number, string> = {
@@ -22,7 +23,7 @@ const ROLE_LABELS: Record<number, string> = {
 };
 
 /**
- * 校验当前用户是否为超级管理员（role === 4）
+ * 校验当前用户是否为超级管理员
  */
 async function requireSuperAdmin(): Promise<{ ok: true; userId: string } | { ok: false; error: string }> {
   const auth = await getAuthCookie();
@@ -39,7 +40,7 @@ async function requireSuperAdmin(): Promise<{ ok: true; userId: string } | { ok:
     return { ok: false, error: "用户不存在" };
   }
 
-  if (user.role !== 4) {
+  if (user.role !== appRoleToDbRole("SUPER_ADMIN")) {
     return { ok: false, error: "权限不足，仅超级管理员可执行此操作" };
   }
 
@@ -68,8 +69,8 @@ async function requireAdminOrSuperAdmin(): Promise<{ ok: true; auth: AdminAuth }
     return { ok: false, error: "用户不存在" };
   }
 
-  const isSuperAdmin = user.role === 4;
-  const isAdmin = user.role === 2;
+  const isSuperAdmin = user.role === appRoleToDbRole("SUPER_ADMIN");
+  const isAdmin = user.role === appRoleToDbRole("ADMIN");
 
   if (!isSuperAdmin && !isAdmin) {
     return { ok: false, error: "权限不足，仅管理员可执行此操作" };
@@ -98,13 +99,7 @@ function canAccessTargetUser(auth: AdminAuth, targetSchoolId: string | null): bo
   return false;
 }
 
-/** 角色字符串到数字映射 */
-const ROLE_MAP: Record<string, number> = {
-  STUDENT: 1,
-  ADMIN: 2,
-  STAFF: 3,
-  SUPER_ADMIN: 4,
-};
+const SCHOOL_USER_FILTER_ROLES: readonly AppRole[] = ["STUDENT", "ADMIN", "STAFF"];
 
 export interface GetSchoolUsersParams {
   page?: number;
@@ -156,9 +151,14 @@ export async function getSchoolUsers(
     const limit = Math.min(100, Math.max(1, params.limit ?? 10));
     const { skip, take } = getPaginationParams(page, limit);
 
+    const roleFilter =
+      params.role && (SCHOOL_USER_FILTER_ROLES as readonly string[]).includes(params.role)
+        ? appRoleToDbRole(params.role as AppRole)
+        : { not: appRoleToDbRole("SUPER_ADMIN") };
+
     const where: Record<string, unknown> = {
       schoolId: schoolIdFilter!,
-      role: params.role && ROLE_MAP[params.role] ? ROLE_MAP[params.role] : { not: 4 },
+      role: roleFilter,
     };
 
     if (params.search?.trim()) {
@@ -185,18 +185,11 @@ export async function getSchoolUsers(
       }),
     ]);
 
-    const roleMapReverse: Record<number, string> = {
-      1: "STUDENT",
-      2: "ADMIN",
-      3: "STAFF",
-      4: "SUPER_ADMIN",
-    };
-
     const data: SchoolUserListItem[] = users.map((u) => ({
       id: u.id,
       nickname: u.nickname,
       email: u.email,
-      role: roleMapReverse[u.role] ?? "UNKNOWN",
+      role: dbRoleToAppRole(u.role) ?? "UNKNOWN",
       roleNumber: u.role,
       schoolId: u.schoolId,
       schoolName: u.school?.name ?? "—",
@@ -428,8 +421,9 @@ export async function getAdminUsers(params: {
     }
 
     const whereConditions: Array<Record<string, unknown>> = [];
-    if (params.role && ROLE_MAP[params.role]) {
-      whereConditions.push({ role: ROLE_MAP[params.role] });
+    const adminListRoles: readonly AppRole[] = ["STUDENT", "ADMIN", "STAFF", "SUPER_ADMIN"];
+    if (params.role && (adminListRoles as readonly string[]).includes(params.role)) {
+      whereConditions.push({ role: appRoleToDbRole(params.role as AppRole) });
     }
     if (params.schoolId !== undefined) {
       if (params.schoolId === "null") {
@@ -470,18 +464,11 @@ export async function getAdminUsers(params: {
       }),
     ]);
 
-    const roleMapReverse: Record<number, string> = {
-      1: "STUDENT",
-      2: "ADMIN",
-      3: "STAFF",
-      4: "SUPER_ADMIN",
-    };
-
     const data: AdminUserListItem[] = users.map((u) => ({
       id: u.id,
       nickname: u.nickname,
       email: u.email,
-      role: roleMapReverse[u.role] ?? "UNKNOWN",
+      role: dbRoleToAppRole(u.role) ?? "UNKNOWN",
       roleNumber: u.role,
       schoolId: u.schoolId,
       schoolName: u.school?.name ?? "系统",
@@ -533,7 +520,7 @@ export async function deleteUser(userId: string): Promise<{
       return { success: false, error: "用户不存在" };
     }
 
-    if (targetUser.role === 4) {
+    if (targetUser.role === appRoleToDbRole("SUPER_ADMIN")) {
       return { success: false, error: "不能删除其他超级管理员" };
     }
 
@@ -588,7 +575,7 @@ export async function deactivateUser(
       return { success: false, message: "用户不存在" };
     }
 
-    if (targetUser.role === 4) {
+    if (targetUser.role === appRoleToDbRole("SUPER_ADMIN")) {
       return { success: false, message: "不能停用其他超级管理员" };
     }
 

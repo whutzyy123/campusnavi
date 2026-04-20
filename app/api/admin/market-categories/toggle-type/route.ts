@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 
 /**
  * POST /api/admin/market-categories/toggle-type
@@ -10,13 +10,8 @@ import { getAuthCookie } from "@/lib/auth-server-actions";
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可操作" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const body = await request.json();
     const { typeId, categoryId } = body as { typeId?: number; categoryId?: string };

@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie, getCurrentUser } from "@/lib/auth-server-actions";
+import { deniedBySchoolTenant } from "@/lib/school-scope";
 import { validateContent } from "@/lib/content-validator";
 import {
   MarketItemStatus,
@@ -16,6 +17,17 @@ import {
   NotificationEntityType,
 } from "@prisma/client";
 import { createNotification } from "@/lib/notification-actions";
+import type { MarketActionResult } from "@/lib/market/types";
+export type {
+  MarketActionResult,
+  MarketCategoriesByType,
+  MarketCategoriesResult,
+} from "@/lib/market/types";
+export {
+  getMarketCategoriesByType,
+  getMarketCategories,
+  getTransactionTypes,
+} from "@/lib/market/catalog-read";
 
 /** 集市商品审计日志动作类型（与 Prisma MarketLogActionType 枚举一致） */
 const MarketLogActionType = {
@@ -51,11 +63,20 @@ async function createMarketLog(
   });
 }
 
-/** 获取系统用户 ID（用于自动操作的审计日志，如超级管理员） */
+/** 获取系统用户 ID（用于自动操作的审计日志）；优先 SYSTEM_AUDIT_USER_ID，否则取 id 最小的超管 */
 async function getSystemUserId(): Promise<string | null> {
+  const configured = process.env.SYSTEM_AUDIT_USER_ID?.trim();
+  if (configured) {
+    const u = await prisma.user.findUnique({
+      where: { id: configured },
+      select: { id: true, role: true },
+    });
+    if (u?.role === 4) return u.id;
+  }
   const user = await prisma.user.findFirst({
     where: { role: 4 },
     select: { id: true },
+    orderBy: { id: "asc" },
   });
   return user?.id ?? null;
 }
@@ -70,241 +91,138 @@ const AUTO_COMPLETE_HOURS = 24;
  * 可在数据拉取时调用，或由 cron 定期触发
  */
 export async function processMarketDeadlocks(): Promise<void> {
-  try {
-    const systemUserId = await getSystemUserId();
-    const now = new Date();
-    const unlockThreshold = new Date(now.getTime() - AUTO_UNLOCK_HOURS * 60 * 60 * 1000);
-    const completeThreshold = new Date(now.getTime() - AUTO_COMPLETE_HOURS * 60 * 60 * 1000);
+  const systemUserId = await getSystemUserId();
+  const now = new Date();
+  const unlockThreshold = new Date(now.getTime() - AUTO_UNLOCK_HOURS * 60 * 60 * 1000);
+  const completeThreshold = new Date(now.getTime() - AUTO_COMPLETE_HOURS * 60 * 60 * 1000);
 
-    // 1. 自动解锁：lockedAt 超过 48h，且双方都未确认
-    const toUnlock = await prisma.marketItem.findMany({
-      where: {
-        status: MarketItemStatus.LOCKED,
-        lockedAt: { lt: unlockThreshold },
-        buyerConfirmed: false,
-        sellerConfirmed: false,
-      },
-      select: {
-        id: true,
-        userId: true,
-        selectedBuyerId: true,
-        title: true,
-      },
-    });
+  // 1. 自动解锁：lockedAt 超过 48h，且双方都未确认
+  const toUnlock = await prisma.marketItem.findMany({
+    where: {
+      status: MarketItemStatus.LOCKED,
+      lockedAt: { lt: unlockThreshold },
+      buyerConfirmed: false,
+      sellerConfirmed: false,
+    },
+    select: {
+      id: true,
+      userId: true,
+      selectedBuyerId: true,
+      title: true,
+    },
+  });
 
-    for (const item of toUnlock) {
-      await prisma.$transaction(async (tx) => {
-        await tx.marketItem.update({
-          where: { id: item.id },
-          data: {
-            status: MarketItemStatus.ACTIVE,
-            selectedBuyerId: null,
-            buyerConfirmed: false,
-            sellerConfirmed: false,
-            lockedAt: null,
-            firstConfirmedAt: null,
-          },
-        });
-        if (systemUserId) {
-          await createMarketLog(
-            item.id,
-            systemUserId,
-            MarketLogActionType.AUTO_UNLOCKED,
-            "48 小时内双方均未确认，自动解锁",
-            tx
-          );
-        }
+  for (const item of toUnlock) {
+    await prisma.$transaction(async (tx) => {
+      await tx.marketItem.update({
+        where: { id: item.id },
+        data: {
+          status: MarketItemStatus.ACTIVE,
+          selectedBuyerId: null,
+          buyerConfirmed: false,
+          sellerConfirmed: false,
+          lockedAt: null,
+          firstConfirmedAt: null,
+        },
       });
-
-      const titlePreview =
-        (item.title || "").length > 30 ? `${(item.title || "").slice(0, 30)}…` : item.title || "";
-      const msg = `物品「${titlePreview}」因 48 小时内双方均未确认交易，已自动解锁并重新上架。`;
-      if (item.userId) {
-        await createNotification(
-          item.userId,
-          null,
-          NotificationType.SYSTEM,
+      if (systemUserId) {
+        await createMarketLog(
           item.id,
-          NotificationEntityType.MARKET_ITEM,
-          msg
+          systemUserId,
+          MarketLogActionType.AUTO_UNLOCKED,
+          "48 小时内双方均未确认，自动解锁",
+          tx
         );
       }
-      if (item.selectedBuyerId && item.selectedBuyerId !== item.userId) {
-        await createNotification(
-          item.selectedBuyerId,
-          null,
-          NotificationType.SYSTEM,
-          item.id,
-          NotificationEntityType.MARKET_ITEM,
-          msg
-        );
-      }
-    }
-
-    // 2. 单方自动完成：firstConfirmedAt 超过 24h，且仅一方已确认
-    const toComplete = await prisma.marketItem.findMany({
-      where: {
-        status: MarketItemStatus.LOCKED,
-        firstConfirmedAt: { lt: completeThreshold, not: null },
-        OR: [
-          { buyerConfirmed: true, sellerConfirmed: false },
-          { buyerConfirmed: false, sellerConfirmed: true },
-        ],
-      },
-      select: {
-        id: true,
-        userId: true,
-        selectedBuyerId: true,
-        buyerConfirmed: true,
-        sellerConfirmed: true,
-        title: true,
-      },
     });
 
-    for (const item of toComplete) {
-      const otherUserId = item.buyerConfirmed ? item.userId : item.selectedBuyerId;
-
-      await prisma.$transaction(async (tx) => {
-        await tx.marketItem.update({
-          where: { id: item.id },
-          data: { status: MarketItemStatus.COMPLETED },
-        });
-        if (systemUserId) {
-          await createMarketLog(
-            item.id,
-            systemUserId,
-            MarketLogActionType.AUTO_COMPLETED,
-            "Auto-completed by single confirmation",
-            tx
-          );
-        }
-      });
-
-      const titlePreview =
-        (item.title || "").length > 30 ? `${(item.title || "").slice(0, 30)}…` : item.title || "";
-      const msg = `物品「${titlePreview}」因对方 24 小时内未确认，已自动完成交易。`;
-      if (otherUserId) {
-        await createNotification(
-          otherUserId,
-          null,
-          NotificationType.SYSTEM,
-          item.id,
-          NotificationEntityType.MARKET_ITEM,
-          msg
-        );
-      }
-    }
-  } catch (err) {
-    console.error("[processMarketDeadlocks]", err);
-  }
-}
-
-/** 按交易类型 ID 分组的物品分类（用户端） */
-export type MarketCategoriesByType = Record<
-  number,
-  Array<{ id: string; name: string; order: number }>
->;
-
-/**
- * 获取按交易类型分组的物品分类（用户端发布商品时使用）
- * 返回 Map: transactionTypeId -> categories[]
- */
-export async function getMarketCategoriesByType(): Promise<
-  MarketActionResult<MarketCategoriesByType>
-> {
-  try {
-    const links = await prisma.marketTypeCategory.findMany({
-      where: {
-        category: { isActive: true },
-        transactionType: { isActive: true },
-      },
-      include: {
-        category: { select: { id: true, name: true, order: true } },
-      },
-    });
-
-    const grouped: MarketCategoriesByType = {};
-
-    for (const link of links) {
-      const tid = link.transactionTypeId;
-      if (!grouped[tid]) grouped[tid] = [];
-      grouped[tid].push({
-        id: link.category.id,
-        name: link.category.name,
-        order: link.category.order,
-      });
-    }
-
-    for (const tid of Object.keys(grouped)) {
-      grouped[Number(tid)].sort(
-        (a, b) => a.order - b.order || a.name.localeCompare(b.name)
+    const titlePreview =
+      (item.title || "").length > 30 ? `${(item.title || "").slice(0, 30)}…` : item.title || "";
+    const msg = `物品「${titlePreview}」因 48 小时内双方均未确认交易，已自动解锁并重新上架。`;
+    if (item.userId) {
+      await createNotification(
+        item.userId,
+        null,
+        NotificationType.SYSTEM,
+        item.id,
+        NotificationEntityType.MARKET_ITEM,
+        msg
       );
     }
-
-    return { success: true, data: grouped };
-  } catch (err) {
-    console.error("[getMarketCategoriesByType]", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "获取分类失败",
-    };
-  }
-}
-
-/** 集市分类与交易类型（用于发布表单等） */
-export interface MarketCategoriesResult {
-  data: MarketCategoriesByType;
-  transactionTypes: Array<{ id: number; name: string; code: string; order: number }>;
-}
-
-/**
- * 获取集市分类与交易类型（一次性返回，替代 /api/market/categories）
- */
-export async function getMarketCategories(): Promise<
-  MarketActionResult<MarketCategoriesResult>
-> {
-  try {
-    const [catResult, typeResult] = await Promise.all([
-      getMarketCategoriesByType(),
-      getTransactionTypes(),
-    ]);
-    if (!catResult.success || !typeResult.success) {
-      return {
-        success: false,
-        error: catResult.error ?? typeResult.error ?? "获取失败",
-      };
+    if (item.selectedBuyerId && item.selectedBuyerId !== item.userId) {
+      await createNotification(
+        item.selectedBuyerId,
+        null,
+        NotificationType.SYSTEM,
+        item.id,
+        NotificationEntityType.MARKET_ITEM,
+        msg
+      );
     }
-    return {
-      success: true,
-      data: {
-        data: catResult.data ?? ({} as MarketCategoriesByType),
-        transactionTypes: typeResult.data ?? [],
-      },
-    };
-  } catch (err) {
-    console.error("[getMarketCategories]", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "获取分类失败",
-    };
   }
-}
 
-/** 获取所有启用的交易类型 */
-export async function getTransactionTypes() {
-  try {
-    const types = await prisma.marketTransactionType.findMany({
-      where: { isActive: true },
-      orderBy: { order: "asc" },
-      select: { id: true, name: true, code: true, order: true },
+  // 2. 单方自动完成：firstConfirmedAt 超过 24h，且仅一方已确认
+  const toComplete = await prisma.marketItem.findMany({
+    where: {
+      status: MarketItemStatus.LOCKED,
+      firstConfirmedAt: { lt: completeThreshold, not: null },
+      OR: [
+        { buyerConfirmed: true, sellerConfirmed: false },
+        { buyerConfirmed: false, sellerConfirmed: true },
+      ],
+    },
+    select: {
+      id: true,
+      userId: true,
+      selectedBuyerId: true,
+      buyerConfirmed: true,
+      sellerConfirmed: true,
+      title: true,
+    },
+  });
+
+  for (const item of toComplete) {
+    const sellerId = item.userId;
+    const buyerId = item.selectedBuyerId;
+    const confirmedPartyId = item.buyerConfirmed ? buyerId : sellerId;
+    const unconfirmedPartyId = item.buyerConfirmed ? sellerId : buyerId;
+
+    await prisma.$transaction(async (tx) => {
+      await tx.marketItem.update({
+        where: { id: item.id },
+        data: { status: MarketItemStatus.COMPLETED },
+      });
+      if (systemUserId) {
+        await createMarketLog(
+          item.id,
+          systemUserId,
+          MarketLogActionType.AUTO_COMPLETED,
+          "Auto-completed by single confirmation",
+          tx
+        );
+      }
     });
-    return { success: true, data: types };
-  } catch (err) {
-    console.error("[getTransactionTypes]", err);
-    return {
-      success: false,
-      error: err instanceof Error ? err.message : "获取交易类型失败",
-    };
+
+    const titlePreview2 =
+      (item.title || "").length > 30 ? `${(item.title || "").slice(0, 30)}…` : item.title || "";
+    const msgConfirmed = `物品「${titlePreview2}」因对方未在 24 小时内确认，系统已自动完成交易。`;
+    const msgUnconfirmed = `物品「${titlePreview2}」您未在 24 小时内确认，系统已自动完成交易。`;
+
+    const notifyIds = new Set<string>();
+    if (confirmedPartyId) notifyIds.add(confirmedPartyId);
+    if (unconfirmedPartyId) notifyIds.add(unconfirmedPartyId);
+
+    for (const uid of notifyIds) {
+      const msg = uid === unconfirmedPartyId ? msgUnconfirmed : msgConfirmed;
+      await createNotification(
+        uid,
+        null,
+        NotificationType.SYSTEM,
+        item.id,
+        NotificationEntityType.MARKET_ITEM,
+        msg
+      );
+    }
   }
 }
 
@@ -624,12 +542,6 @@ const UpdateMarketItemPayloadSchema = z.object({
 
 export type UpdateMarketItemPayload = z.infer<typeof UpdateMarketItemPayloadSchema>;
 
-export interface MarketActionResult<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
 export interface CreateMarketItemDTO {
   poiId: string;
   categoryId?: string | null;
@@ -932,7 +844,7 @@ export async function createMarketItem(
       return { success: false, error: "POI 不存在" };
     }
 
-    if (auth.schoolId !== null && auth.schoolId !== poi.schoolId) {
+    if (deniedBySchoolTenant(auth, poi.schoolId)) {
       return { success: false, error: "无权在该 POI 发布商品" };
     }
 
@@ -1113,7 +1025,7 @@ export async function updateMarketItem(
       if (!poi) {
         return { success: false, error: "POI 不存在" };
       }
-      if (currentUser.schoolId !== null && currentUser.schoolId !== poi.schoolId) {
+      if (deniedBySchoolTenant(currentUser, poi.schoolId)) {
         return { success: false, error: "无权在该 POI 发布商品" };
       }
       resolvedPoiId = poi.id;
@@ -1540,7 +1452,7 @@ export async function submitIntention(
       return { success: false, error: "不能对自己发布的商品提交意向" };
     }
 
-    if (auth.schoolId !== null && auth.schoolId !== item.schoolId) {
+    if (deniedBySchoolTenant(auth, item.schoolId)) {
       return { success: false, error: "无权操作该校商品" };
     }
 
@@ -2285,7 +2197,7 @@ export async function reportMarketItem(itemId: string): Promise<MarketActionResu
       return { success: false, error: "商品不存在" };
     }
 
-    if (auth.schoolId !== null && auth.schoolId !== item.schoolId) {
+    if (deniedBySchoolTenant(auth, item.schoolId)) {
       return { success: false, error: "无权举报该商品" };
     }
 
@@ -2341,10 +2253,13 @@ export async function deleteMarketItem(itemId: string): Promise<MarketActionResu
     }
 
     const isOwner = item.userId === auth.userId;
-    const isAdmin = auth.role === "ADMIN" || auth.role === "STAFF";
-    const sameSchool = auth.schoolId !== null && auth.schoolId === item.schoolId;
+    const isSchoolModerator =
+      auth.role === "ADMIN" || auth.role === "STAFF"
+        ? auth.schoolId !== null && auth.schoolId === item.schoolId
+        : false;
+    const isSuperAdmin = auth.role === "SUPER_ADMIN";
 
-    if (!isOwner && !(isAdmin && sameSchool)) {
+    if (!isOwner && !isSuperAdmin && !isSchoolModerator) {
       return { success: false, error: "无权删除该商品" };
     }
 

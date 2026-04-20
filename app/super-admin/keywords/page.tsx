@@ -6,8 +6,8 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
-import { Card } from "@/components/card";
-import { SearchInput } from "@/components/shared/search-input";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
+import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
 import { EmptyState } from "@/components/empty-state";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Plus, Trash2, X, Upload, FileText, Loader2, Tags } from "lucide-react";
@@ -226,17 +226,23 @@ function KeywordsManagementPageContent() {
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-6">
-          <Card className="p-6">
-            <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">平台屏蔽词管理</h1>
-              <p className="mt-2 text-sm text-gray-600">
-                管理平台级屏蔽词，所有用户提交的内容都会自动检查是否包含这些词汇
-              </p>
-            </div>
-
+        <>
+          <AdminPageContainer
+            title="平台屏蔽词管理"
+            description="管理平台级屏蔽词，所有用户提交的内容都会自动检查是否包含这些词汇"
+            scrollKey={`${searchParams.get("page") ?? "1"}-${debouncedSearchInput}`}
+            footer={
+              !loading && pagination && pagination.total > 0 ? (
+                <PaginationControls
+                  total={pagination.total}
+                  pageCount={pagination.pageCount}
+                  currentPage={pagination.currentPage}
+                />
+              ) : null
+            }
+          >
             {/* 添加屏蔽词表单 */}
-            <div className="mb-6 flex gap-3">
+            <div className="mb-6 flex flex-wrap gap-3">
               <input
                 type="text"
                 value={newKeyword}
@@ -279,13 +285,15 @@ function KeywordsManagementPageContent() {
               </button>
             </div>
 
-            {/* 搜索 */}
             <div className="mb-4">
-              <SearchInput
-                value={searchInput}
-                onChange={setSearchInput}
-                placeholder="搜索屏蔽词..."
-                className="w-full max-w-md"
+              <AdminFilterBar
+                search={{
+                  value: searchInput,
+                  onChange: setSearchInput,
+                  placeholder: "搜索屏蔽词...",
+                }}
+                filters={[]}
+                className="max-w-xl"
               />
             </div>
 
@@ -354,20 +362,9 @@ function KeywordsManagementPageContent() {
                     </TableBody>
                   </Table>
                 </div>
-                {/* 分页控件 */}
-                {!loading && pagination && pagination.total > 0 && (
-                  <div className="mt-6 flex justify-center pb-8">
-                    <PaginationControls
-                      total={pagination.total}
-                      pageCount={pagination.pageCount}
-                      currentPage={pagination.currentPage}
-                    />
-                  </div>
-                )}
               </div>
             )}
-          </Card>
-        </div>
+          </AdminPageContainer>
 
         {/* 批量导入弹窗 */}
         {showBulkModal && (
@@ -454,6 +451,7 @@ function KeywordsManagementPageContent() {
             </div>
           </div>
         )}
+        </>
       </AdminLayout>
     </AuthGuard>
   );

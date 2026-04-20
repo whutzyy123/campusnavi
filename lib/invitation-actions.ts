@@ -8,6 +8,7 @@
 import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { generateInvitationCode } from "@/lib/auth-utils";
+import { appRoleToDbRole } from "@/lib/role";
 import type { InvitationCodeType, InvitationCodeStatus } from "@prisma/client";
 
 export type InvitationCodeTypeStr = "ADMIN" | "STAFF";
@@ -52,8 +53,8 @@ export async function listInvitationCodes(filters?: {
       return { success: false, message: "用户不存在" };
     }
 
-    const isSuperAdmin = currentUser.role === 4;
-    const isSchoolAdmin = currentUser.role === 2;
+    const isSuperAdmin = currentUser.role === appRoleToDbRole("SUPER_ADMIN");
+    const isSchoolAdmin = currentUser.role === appRoleToDbRole("ADMIN");
 
     if (!isSuperAdmin && !isSchoolAdmin) {
       return { success: false, message: "权限不足" };
@@ -150,9 +151,8 @@ export async function createInvitationCode(
       return { success: false, message: "用户不存在" };
     }
 
-    // 角色：1=学生, 2=校级管理员, 3=工作人员, 4=超级管理员
-    const isSuperAdmin = currentUser.role === 4;
-    const isSchoolAdmin = currentUser.role === 2;
+    const isSuperAdmin = currentUser.role === appRoleToDbRole("SUPER_ADMIN");
+    const isSchoolAdmin = currentUser.role === appRoleToDbRole("ADMIN");
 
     if (!isSuperAdmin && !isSchoolAdmin) {
       return { success: false, message: "权限不足，只有管理员才能生成邀请码" };
@@ -446,8 +446,8 @@ export async function toggleCodeStatus(
       return { success: false, message: "用户不存在" };
     }
 
-    const isSuperAdmin = currentUser.role === 4;
-    const isSchoolAdmin = currentUser.role === 2;
+    const isSuperAdmin = currentUser.role === appRoleToDbRole("SUPER_ADMIN");
+    const isSchoolAdmin = currentUser.role === appRoleToDbRole("ADMIN");
 
     if (!isSuperAdmin && !isSchoolAdmin) {
       return { success: false, message: "权限不足" };
@@ -524,10 +524,10 @@ export async function extendInvitationCode(
       return { success: false, message: "用户不存在" };
     }
 
-    const isSuperAdmin = currentUser.role === 4;
+    const isSuperAdmin = currentUser.role === appRoleToDbRole("SUPER_ADMIN");
     const isIssuer = code.createdByUserId === auth.userId;
     const isSchoolAdminOfSameSchool =
-      currentUser.role === 2 && currentUser.schoolId === code.schoolId;
+      currentUser.role === appRoleToDbRole("ADMIN") && currentUser.schoolId === code.schoolId;
 
     if (!isSuperAdmin && !isIssuer && !isSchoolAdminOfSameSchool) {
       return { success: false, message: "无权延长此邀请码的有效期" };
@@ -597,8 +597,8 @@ export async function deleteCode(
       return { success: false, message: "用户不存在" };
     }
 
-    const isSuperAdmin = currentUser.role === 4;
-    const isSchoolAdmin = currentUser.role === 2;
+    const isSuperAdmin = currentUser.role === appRoleToDbRole("SUPER_ADMIN");
+    const isSchoolAdmin = currentUser.role === appRoleToDbRole("ADMIN");
 
     if (!isSuperAdmin && !isSchoolAdmin) {
       return { success: false, message: "权限不足" };

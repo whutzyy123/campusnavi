@@ -7,7 +7,7 @@
 
 import { getAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, verifyPassword } from "@/lib/auth-utils";
+import { hashPassword, verifyPassword, needsPasswordRehash } from "@/lib/auth-utils";
 import { validateContent } from "@/lib/content-validator";
 
 const PROFILE_UPDATE_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
@@ -204,6 +204,15 @@ export async function updateEmail(formData: FormData) {
       };
     }
 
+    if (needsPasswordRehash(currentUser.password)) {
+      const nextHash = await hashPassword(password);
+      await prisma.user.update({
+        where: { id: auth.userId },
+        data: { password: nextHash },
+        select: { id: true },
+      });
+    }
+
     // 检查新邮箱是否已被占用
     const existingUser = await prisma.user.findUnique({
       where: { email: trimmedEmail },
@@ -330,6 +339,15 @@ export async function updatePassword(formData: FormData) {
         success: false,
         message: "当前密码错误",
       };
+    }
+
+    if (needsPasswordRehash(currentUser.password)) {
+      const nextHash = await hashPassword(oldPassword);
+      await prisma.user.update({
+        where: { id: auth.userId },
+        data: { password: nextHash },
+        select: { id: true },
+      });
     }
 
     // 哈希新密码

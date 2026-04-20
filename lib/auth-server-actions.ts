@@ -5,13 +5,20 @@
  * 所有认证操作都在服务端执行，使用 HTTP Only Cookie 存储认证状态
  */
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, hashPassword } from "@/lib/auth-utils";
+import { verifyPassword, hashPassword, needsPasswordRehash } from "@/lib/auth-utils";
 import { validateInvitationCode } from "@/lib/invitation-actions";
+import { getClientIpFromHeaders } from "@/lib/client-ip";
+import { consumeRateLimit } from "@/lib/rate-limit";
+import { dbRoleToAppRole, registerableRoleToDbRole, type RegisterableAppRole } from "@/lib/role";
 
-const AUTH_COOKIE_NAME = "campus-survival-auth-token";
+function isNextRedirectError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes("NEXT_REDIRECT");
+}
+
+const AUTH_COOKIE_NAME = "campus-survival-session";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7; // 7 天（秒）
 
 export interface AuthCookieData {
@@ -23,21 +30,33 @@ export interface AuthCookieData {
 /**
  * 设置认证 Cookie（HTTP Only）
  */
-async function setAuthCookie(data: AuthCookieData): Promise<void> {
+async function setAuthCookie(sessionToken: string): Promise<void> {
   const cookieStore = await cookies();
-  const cookieValue = JSON.stringify({
-    userId: data.userId,
-    role: data.role,
-    schoolId: data.schoolId,
-  });
-
-  cookieStore.set(AUTH_COOKIE_NAME, cookieValue, {
+  cookieStore.set(AUTH_COOKIE_NAME, sessionToken, {
     httpOnly: true, // 防止 XSS 攻击
     secure: process.env.NODE_ENV === "production", // 生产环境使用 HTTPS
     sameSite: "lax", // 防止 CSRF 攻击
     maxAge: COOKIE_MAX_AGE,
     path: "/",
   });
+}
+
+async function createSession(userId: string): Promise<string> {
+  const sessionToken = crypto.randomUUID() + crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + COOKIE_MAX_AGE * 1000);
+  await prisma.authSession.create({
+    data: {
+      sessionToken,
+      userId,
+      expiresAt,
+    },
+    select: { id: true },
+  });
+  return sessionToken;
+}
+
+function getClientIp(): string {
+  return getClientIpFromHeaders(headers());
 }
 
 /**
@@ -53,11 +72,45 @@ export async function getAuthCookie(): Promise<AuthCookieData | null> {
   }
 
   try {
-    const data = JSON.parse(authCookie.value) as AuthCookieData;
-    // 仅 ADMIN/STAFF 通过邀请码注册，需校验关联邀请码是否被停用
-    if (data.role === "ADMIN" || data.role === "STAFF") {
+    const now = new Date();
+    const session = await prisma.authSession.findFirst({
+      where: {
+        sessionToken: authCookie.value,
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      select: {
+        id: true,
+        user: {
+          select: {
+            id: true,
+            role: true,
+            schoolId: true,
+            status: true,
+          },
+        },
+      },
+    });
+
+    if (!session?.user) {
+      await removeAuthCookie();
+      return null;
+    }
+
+    if (session.user.status === "INACTIVE") {
+      await removeAuthCookie();
+      return null;
+    }
+
+    const role = dbRoleToAppRole(session.user.role);
+    if (!role) {
+      await removeAuthCookie();
+      return null;
+    }
+
+    if (role === "ADMIN" || role === "STAFF") {
       const invite = await prisma.invitationCode.findFirst({
-        where: { usedByUserId: data.userId },
+        where: { usedByUserId: session.user.id },
         select: { status: true },
       });
       if (invite?.status === "DEACTIVATED") {
@@ -65,9 +118,15 @@ export async function getAuthCookie(): Promise<AuthCookieData | null> {
         return null;
       }
     }
-    return data;
+
+    return {
+      userId: session.user.id,
+      role,
+      schoolId: session.user.schoolId,
+    };
   } catch (error) {
     console.error("解析认证 Cookie 失败:", error);
+    await removeAuthCookie();
     return null;
   }
 }
@@ -77,7 +136,14 @@ export async function getAuthCookie(): Promise<AuthCookieData | null> {
  */
 export async function removeAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
+  const authCookie = cookieStore.get(AUTH_COOKIE_NAME);
   cookieStore.delete(AUTH_COOKIE_NAME);
+  if (authCookie?.value) {
+    await prisma.authSession.updateMany({
+      where: { sessionToken: authCookie.value, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
 }
 
 /**
@@ -95,6 +161,17 @@ export async function loginUser(formData: FormData) {
   }
 
   try {
+    const ip = getClientIp();
+    const emailKey = email.trim().toLowerCase();
+    const okByIp = await consumeRateLimit(`auth:login:ip:${ip}`, 20, 5 * 60 * 1000);
+    const okByEmail = await consumeRateLimit(`auth:login:email:${emailKey}`, 10, 5 * 60 * 1000);
+    if (!okByIp || !okByEmail) {
+      return {
+        success: false,
+        message: "请求过于频繁，请稍后再试",
+      };
+    }
+
     // 查找用户
     const user = await prisma.user.findUnique({
       where: { email: email.trim().toLowerCase() },
@@ -146,15 +223,22 @@ export async function loginUser(formData: FormData) {
       };
     }
 
-    // 角色映射：1 -> STUDENT, 2 -> ADMIN, 3 -> STAFF, 4 -> SUPER_ADMIN
-    const roleMap: Record<number, string> = {
-      1: "STUDENT",
-      2: "ADMIN",
-      3: "STAFF",
-      4: "SUPER_ADMIN",
-    };
+    if (needsPasswordRehash(user.password)) {
+      const nextHash = await hashPassword(password);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { password: nextHash },
+        select: { id: true },
+      });
+    }
 
-    const userRole = roleMap[user.role] || "STUDENT";
+    const userRole = dbRoleToAppRole(user.role);
+    if (!userRole) {
+      return {
+        success: false,
+        message: "账户数据异常，请联系管理员",
+      };
+    }
 
     // ADMIN/STAFF 通过邀请码注册，校验关联邀请码是否被停用
     if (userRole === "ADMIN" || userRole === "STAFF") {
@@ -170,12 +254,8 @@ export async function loginUser(formData: FormData) {
       }
     }
 
-    // 设置认证 Cookie
-    await setAuthCookie({
-      userId: user.id,
-      role: userRole,
-      schoolId: user.schoolId || null,
-    });
+    const sessionToken = await createSession(user.id);
+    await setAuthCookie(sessionToken);
 
     // 返回用户信息，由前端决定跳转逻辑
     return {
@@ -190,10 +270,7 @@ export async function loginUser(formData: FormData) {
       },
     };
   } catch (error) {
-    // 对 NEXT_REDIRECT 不做处理，直接抛出，让 Next.js 完成重定向
-    if (error instanceof Error && error.message === "NEXT_REDIRECT") {
-      throw error;
-    }
+    if (isNextRedirectError(error)) throw error;
 
     console.error("Login Error:", error);
 
@@ -241,6 +318,17 @@ export async function registerUser(formData: FormData) {
   }
 
   try {
+    const ip = getClientIp();
+    const emailKey = email.trim().toLowerCase();
+    const okByIp = await consumeRateLimit(`auth:register:ip:${ip}`, 10, 10 * 60 * 1000);
+    const okByEmail = await consumeRateLimit(`auth:register:email:${emailKey}`, 5, 10 * 60 * 1000);
+    if (!okByIp || !okByEmail) {
+      return {
+        success: false,
+        message: "请求过于频繁，请稍后再试",
+      };
+    }
+
     // 这里应该调用注册 API 的逻辑
     // 为了简化，我们直接调用现有的注册路由逻辑
     // 实际应该将注册逻辑提取为共享函数
@@ -297,12 +385,7 @@ export async function registerUser(formData: FormData) {
       };
     }
 
-    // 角色映射
-    const roleMap: Record<string, number> = {
-      STUDENT: 1,
-      ADMIN: 2,
-      STAFF: 3,
-    };
+    const registerRole = role as RegisterableAppRole;
 
     // 创建用户（使用事务，邀请码消耗在事务内完成）
     const user = await prisma.$transaction(async (tx) => {
@@ -324,7 +407,7 @@ export async function registerUser(formData: FormData) {
           email: email.trim().toLowerCase(),
           nickname: nickname.trim(),
           password: hashedPassword,
-          role: roleMap[role],
+          role: registerableRoleToDbRole(registerRole),
           schoolId: targetSchoolId,
         },
       });
@@ -347,17 +430,11 @@ export async function registerUser(formData: FormData) {
       return newUser;
     });
 
-    // 设置认证 Cookie
-    await setAuthCookie({
-      userId: user.id,
-      role: role,
-      schoolId: user.schoolId || null,
-    });
+    const sessionToken = await createSession(user.id);
+    await setAuthCookie(sessionToken);
 
-    // 根据角色重定向
-    if (role === "SUPER_ADMIN") {
-      redirect("/super-admin");
-    } else if (role === "ADMIN" || role === "STAFF") {
+    // 根据角色重定向（注册仅允许 STUDENT / ADMIN / STAFF）
+    if (role === "ADMIN" || role === "STAFF") {
       redirect("/admin");
     } else {
       redirect("/");
@@ -366,9 +443,7 @@ export async function registerUser(formData: FormData) {
     // 关键修复：不要拦截 Next.js 的跳转信号
     // redirect() 会抛出一个包含 "NEXT_REDIRECT" 的特殊错误
     // 我们需要重新抛出这个错误，让 Next.js 正常处理跳转
-    if (error instanceof Error && error.message.includes("NEXT_REDIRECT")) {
-      throw error;
-    }
+    if (isNextRedirectError(error)) throw error;
 
     // 处理其他业务错误
     console.error("注册失败:", error);
@@ -384,8 +459,7 @@ export async function registerUser(formData: FormData) {
  * 清除 Cookie 后重定向到登录页。redirect() 会抛出 NEXT_REDIRECT，不可被 try/catch 吞掉。
  */
 export async function logoutUser() {
-  const cookieStore = await cookies();
-  cookieStore.delete(AUTH_COOKIE_NAME);
+  await removeAuthCookie();
   redirect("/login");
 }
 
@@ -467,13 +541,11 @@ export async function getMe(): Promise<GetMeResult> {
       return { success: false, error: "该账户已被停用" };
     }
 
-    const roleMap: Record<number, string> = {
-      1: "STUDENT",
-      2: "ADMIN",
-      3: "STAFF",
-      4: "SUPER_ADMIN",
-    };
-    const userRole = roleMap[user.role] ?? "STUDENT";
+    const userRole = dbRoleToAppRole(user.role);
+    if (!userRole) {
+      await removeAuthCookie();
+      return { success: false, error: "账户数据异常，请联系管理员" };
+    }
 
     return {
       success: true,
@@ -497,4 +569,3 @@ export async function getMe(): Promise<GetMeResult> {
     };
   }
 }
-

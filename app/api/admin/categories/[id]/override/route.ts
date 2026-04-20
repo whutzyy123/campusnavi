@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth-server-actions";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 import { upsertCategoryOverride, removeCategoryOverride } from "@/lib/category-utils";
 
 // PATCH /api/admin/categories/[id]/override
@@ -10,7 +10,9 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await requireAdmin();
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     if (!auth.schoolId) {
       return NextResponse.json(
@@ -100,7 +102,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await requireAdmin();
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     if (!auth.schoolId) {
       return NextResponse.json(

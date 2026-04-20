@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSessionJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +12,10 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth?.userId) {
-      return NextResponse.json({ success: false, message: "请先登录" }, { status: 401 });
-    }
+    const authResult = await requireSessionJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     if (auth.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { success: false, message: "超级管理员不参与内容审核，请使用校级管理员或工作人员账号" },
@@ -36,13 +37,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "只能查看本校数据" }, { status: 403 });
     }
 
-    // 构建查询条件
-    const where: any = {
+    const where: Prisma.POIWhereInput = {
       reportCount: {
-        gte: minReportCount, // 至少被举报 minReportCount 次
+        gte: minReportCount,
       },
+      schoolId: schoolId.trim(),
     };
-    where.schoolId = schoolId.trim();
 
     // 查询被举报的 POI
     const pois = await prisma.pOI.findMany({

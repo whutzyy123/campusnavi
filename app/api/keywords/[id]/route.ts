@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * DELETE /api/keywords/:id
@@ -10,6 +13,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     const { id } = params;
 
     // 验证屏蔽词是否存在

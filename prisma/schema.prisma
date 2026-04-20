@@ -76,6 +76,7 @@ model User {
 
   // 关联关系（可选）
   school                 School?          @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  authSessions           AuthSession[]
   liveStatuses           LiveStatus[]
   createdInvitationCodes InvitationCode[] @relation("CreatedBy")
   usedInvitationCode     InvitationCode?  @relation("UsedBy")
@@ -99,6 +100,32 @@ model User {
   @@index([phone])
   @@index([email])
   @@map("users")
+}
+
+model AuthSession {
+  id           String    @id @default(cuid())
+  sessionToken String    @unique @map("session_token") @db.VarChar(128)
+  userId       String    @map("user_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime  @map("expires_at")
+  revokedAt    DateTime? @map("revoked_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("auth_sessions")
+}
+
+model RateLimit {
+  id          String   @id @default(cuid())
+  key         String   @unique @db.VarChar(191)
+  count       Int      @default(0)
+  windowStart DateTime @map("window_start")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([windowStart])
+  @@map("rate_limits")
 }
 
 // 邀请码类型：ADMIN(校级管理员) | STAFF(校内工作人员)

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * 解析文本中的词汇：支持逗号、换行、空格分隔
@@ -24,23 +26,12 @@ function parseWordsFromText(text: string): string[] {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth?.userId) {
-      return NextResponse.json(
-        { success: false, message: "请先登录" },
-        { status: 401 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     const body = await request.json();
-    const { words: rawWords, addedById } = body;
-
-    if (!addedById || addedById !== auth.userId) {
-      return NextResponse.json(
-        { success: false, message: "添加人ID与当前登录用户不一致" },
-        { status: 403 }
-      );
-    }
+    const { words: rawWords } = body;
 
     // 解析词汇：支持数组或拼接字符串
     let words: string[];
@@ -64,26 +55,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证添加人是否存在且是超级管理员
-    const adder = await prisma.user.findUnique({
-      where: { id: addedById },
-      select: { id: true, role: true },
-    });
-
-    if (!adder) {
-      return NextResponse.json(
-        { success: false, message: "添加人不存在" },
-        { status: 404 }
-      );
-    }
-
-    if (adder.role !== 4) {
-      return NextResponse.json(
-        { success: false, message: "只有超级管理员才能批量导入屏蔽词" },
-        { status: 403 }
-      );
-    }
-
     // 去重（同一批次内的重复）
     const uniqueWords = [...new Set(words)];
 
@@ -101,7 +72,7 @@ export async function POST(request: NextRequest) {
       const result = await prisma.sensitiveWord.createMany({
         data: toInsert.map((keyword) => ({
           keyword,
-          addedById,
+          addedById: auth.userId,
         })),
         skipDuplicates: true,
       });

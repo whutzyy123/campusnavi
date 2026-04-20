@@ -8,9 +8,9 @@
 |------|------|
 | 产品名称 | 校园生存指北 |
 | 文档类型 | 产品需求文档 |
-| 当前版本 | v1.3.5 |
-| 最后更新 | 2026-03-11 |
-| 文档状态 | 正式版 |
+| 当前版本 | v1.4.0 |
+| 最后更新 | 2026-04-18 |
+| 文档状态 | 正式版（已与当前仓库代码对齐） |
 
 ---
 
@@ -18,6 +18,7 @@
 
 | 版本 | 修订日期 | 修订内容 | 修订人 | 审核人 | 状态 |
 |------|----------|----------|--------|--------|------|
+| v1.4.0 | 2026-04-18 | 依据仓库实际代码核对需求总表：新增 POI 收藏、用户反馈/Bug、注册协议与免责、登录注册频控；修正认证 Cookie 命名、超管「屏蔽词」路径、接口双轨（Server Actions + Route Handlers）；补充数据实体与 NFR 表述 | Cursor | - | 定稿 |
 | v1.3.5 | 2026-03-11 | 超级管理员数据分析看板；用户留存统计；周报/月报/年报导出；核心率指标 | Whutzyy | Whutzyy | 定稿 |
 | v1.3.4 | 2026-03-08 | 实现状态核对；校对文档内容 | Whutzyy | Whutzyy | 定稿 |
 | v1.3.3 | 2026-03-02 | 中控台UI优化；实现交易审计日志与声誉系统；角色化仪表盘优化；新增便民公共设施字段 | Whutzyy | Whutzyy | 定稿 |
@@ -102,8 +103,8 @@
 | R19 | 地图 | 多校区边界渲染 | 已完成 | P0 | CampusArea、标签显隐 |
 | R20 | 管理 | 校区边界编辑器 | 已完成 | P0 | MouseTool 绘制、PolygonEditor 编辑 |
 | R21 | 管理 | POI/分类/团队/审核管理 | 已完成 | P0 | 校级管理后台 |
-| R22 | 管理 | 超管：用户/敏感词/学校管理 | 已完成 | P0 | 跨校、用户搜索；含数据分析、报表导出、率指标 |
-| R23 | 认证 | HTTP Only Cookie + Server Actions | 已完成 | P0 | 登录/注册/登出 |
+| R22 | 管理 | 超管：用户/屏蔽词/学校管理 | 已完成 | P0 | 跨校、用户搜索；**屏蔽词**超管路径 `/super-admin/keywords`（数据表 `SensitiveWord`）；含数据分析、报表 CSV导出、核心率指标 |
+| R23 | 认证 | HTTP Only Cookie + Server Actions | 已完成 | P0 | Cookie 名 `campus-survival-session`，服务端会话表 `AuthSession`；登录/注册/登出 |
 | R24 | 认证 | RBAC 五级权限 | 已完成 | P0 | Guest/Student/Admin/Staff/SuperAdmin |
 | R25 | 认证 | 邀请码系统 | 已完成 | P0 | ADMIN/STAFF 权限分发 |
 | R26 | 搜索 | 别称搜索支持 | 已完成 | P0 | POI alias 模糊匹配 |
@@ -118,6 +119,10 @@
 | R34 | 生存集市 | 7 天自动过期 | 已完成 | P1 | 发布后 7 天自动下架，服务端保留 |
 | R35 | 生存集市 | 交易闭环（意向→选定→锁定→双确认） | 已完成 | P1 | 买家提交意向（含联系方式）；卖家选定买家并锁定；线下交易后双确认完成；支持重新上架 |
 | R36 | POI | 自适应抽屉（桌面侧边栏 / 移动端手势 Bottom Sheet） | 已完成 | P1 | 桌面：右侧固定抽屉；移动端：vaul 手势 Bottom Sheet，吸附点 0.35/0.85 |
+| R37 | 地图/个人 | POI 收藏与「我的收藏」 | 已完成 | P1 | 模型 `POIFavorite`；`lib/favorite-actions.ts`；页面 `/favorites`（分页列表，跳转地图） |
+| R38 | 平台运营 | 用户反馈与 Bug 提交、超管处理台 | 已完成 | P1 | 模型 `Feedback`；用户 `/feedback`；超管 `/super-admin/feedback`；状态 PENDING/RESOLVED/REJECTED；可选图片（与失物招领同类上传链路） |
+| R39 | 认证/合规 | 注册页用户协议与免责声明 | 已完成 | P1 | `lib/agreement-actions.ts` 读取 `docs/用户协议.md`、`docs/免责声明.md`；注册须勾选同意。**部署需保证上述 Markdown 文件存在**，否则查看协议时提示文档未找到 |
+| R40 | 认证安全 | 登录/注册频控 | 已完成 | P1 | `RateLimit` 表 + `consumeRateLimit`：登录按 IP/邮箱限制；注册按 IP/邮箱限制（详见 `lib/auth-server-actions.ts`） |
 
 ### 4.2 优先级说明
 
@@ -137,7 +142,7 @@
 | 认证学生 | Student | 目标地点查找与导航、实时情报、参与众包 | 查看排队状态、上报拥挤度 |
 | 校级管理员 | Admin | 维护本校地理数据 | 创建 POI、管理分类、审核举报 |
 | 校内工作人员 | Staff | 协助审核与运营 | 留言审核、举报处理 |
-| 超级管理员 | SuperAdmin | 系统级配置 | 敏感词、用户、学校、便民公共设施分类、数据分析与报表导出 |
+| 超级管理员 | SuperAdmin | 系统级配置 | **屏蔽词**、用户、学校、便民公共设施分类、**反馈/Bug 处理**、数据分析与报表导出 |
 
 ### 5.2 用户场景
 
@@ -317,8 +322,8 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | 系统看板、用户/敏感词/学校/便民公共设施分类/集市分类；**数据分析**（用户增长、留存、集市、内容、消息与健康详细图表）；**周报/月报/年报** CSV 导出；**核心率指标**（用户活跃率、集市成交/过期率、留言互动率、失物招领完成率、反馈/举报处理率） |
-| **角色** | SuperAdmin 仅基础设施；不参与审核；审核侧边栏对超管隐藏 |
+| **功能描述** | 系统看板、用户/**屏蔽词**（`/super-admin/keywords`，表 `SensitiveWord`）/学校/便民公共设施分类/集市分类；**反馈处理**（`/super-admin/feedback`）；**数据分析**（用户增长、留存、集市、内容、消息与健康等子页）；**周报/月报/年报** CSV 导出（`lib/admin-report-actions.ts`）；**核心率指标**（与看板规划文档一致） |
+| **角色** | SuperAdmin 仅基础设施；不参与校级内容审核；审核侧边栏对超管隐藏 |
 
 ---
 
@@ -329,8 +334,8 @@
 | 维度 | 说明 |
 |------|------|
 | **状态** | 已完成 |
-| **功能描述** | HTTP Only Cookie；Server Actions 登录/注册/登出；RBAC 五级；邀请码分发；DEACTIVATED 停用后无法登录 |
-| **约束** | AuthGuard；NEXT_REDIRECT 需重新抛出 |
+| **功能描述** | HTTP Only Cookie（**`campus-survival-session`**，值为 `AuthSession.sessionToken`）；Server Actions 登录/注册/登出；RBAC 五级；邀请码分发；DEACTIVATED 停用后无法登录（`getAuthCookie` 校验）；**R40** 登录/注册频控（`RateLimit`） |
+| **约束** | AuthGuard；NEXT_REDIRECT 需重新抛出；中间件保护 `/admin/*`、`/super-admin/*` 时调用 `GET /api/auth/me` 校验角色 |
 
 ---
 
@@ -397,6 +402,36 @@
 
 ---
 
+### 6.10 模块 J：POI 收藏（R37）
+
+| 维度 | 说明 |
+|------|------|
+| **状态** | 已完成 |
+| **功能描述** | 登录用户可将 POI 加入收藏；`/favorites` 分页查看本校收藏，支持跳转回地图定位 |
+| **实现** | `POIFavorite`（`userId`+`poiId` 唯一）；`lib/favorite-actions.ts`（如 `toggleFavorite`、`getMyFavorites`） |
+
+---
+
+### 6.11 模块 K：用户反馈与 Bug（R38）
+
+| 维度 | 说明 |
+|------|------|
+| **状态** | 已完成 |
+| **功能描述** | 登录用户提交「使用体验反馈」或「Bug」；标题/正文敏感词校验；可选图片（最多 3 张）；超管列表审阅并更新状态 |
+| **实现** | `Feedback` 模型；`lib/feedback-actions.ts`；用户 `/feedback`；超管 `/super-admin/feedback` |
+
+---
+
+### 6.12 模块 L：注册协议与免责（R39）
+
+| 维度 | 说明 |
+|------|------|
+| **状态** | 已完成（依赖部署文件） |
+| **功能描述** | 注册页提供用户协议、免责声明查看（Markdown 渲染）与必须勾选；注册请求携带 `agreed` |
+| **实现** | `lib/agreement-actions.ts` 自 **`docs/用户协议.md`**、**`docs/免责声明.md`** 读取正文；若文件缺失则前端提示错误，**需在发布环境补齐文档** |
+
+---
+
 ## 七、核心业务流程图
 
 ### 7.1 导航流程
@@ -440,7 +475,7 @@ flowchart LR
 | 权限 | L0(Guest) 只读；L1(Student) 可发布众包、导航、留言、失物招领、集市；L2–L4 为 Admin/Staff/SuperAdmin 管理权限 |
 | 隐私 | 不存储用户精确位置点序列，仅脱敏聚合指标；Contact Reveal：联系方式默认隐藏，点击确认后展示；集市意向解锁后自动重置（INTENTION_RESET_BY_UNLOCK） |
 | 内容安全 | POI、留言、活动、失物招领、集市标题/描述均需敏感词校验；联系方式豁免 6 位数字屏蔽；活动：ADMIN/SUPER_ADMIN 豁免 title/description 过滤，link 永不经过 validateContent |
-| 认证架构 | 业务 CRUD 优先使用 Server Actions（`lib/*-actions.ts`），移除物理 API 路由；认证依赖 HTTP Only Cookie |
+| 认证架构 | **双轨**：业务变更以 Server Actions（`lib/*-actions.ts`）为主；同时保留 **Route Handlers**（`app/api/**`）用于 `GET /api/auth/me`、学校检测、分类/POI 搜索、管理端列表、审计、cron（如 `market-deadlock`）等；认证会话为 HTTP Only Cookie **`campus-survival-session`** |
 
 ### 8.3 兼容性
 
@@ -457,8 +492,8 @@ flowchart LR
 
 | 项目 | 要求 |
 |------|------|
-| **数据获取** | 优先使用类型化 Server Actions，统一返回 `{ success, data?, error? }` 结构；避免在组件内直接 `fetch` 业务 API |
-| **API 路由** | 仅保留认证、第三方回调等必须使用 Route Handler 的场景；业务 CRUD 迁移至 `lib/*-actions.ts` |
+| **数据获取** | 优先使用类型化 Server Actions；客户端必要时可 `fetch`本项目 `app/api/*`（与现有管理端、搜索、审计等路由并存） |
+| **API 路由** | 保留与扩展 `app/api/*`（认证、学校、分类、审计、集市、cron 等）；**新建能力**优先评估 Server Action，若需纯 HTTP/SWR/外部调用再落 Route Handler |
 
 ### 8.6 视觉与交互规范
 
@@ -509,7 +544,8 @@ flowchart LR
 | **活动** | `activity_card_click`、`activity_link_click` | 卡片点击、链接点击 |
 | **个人中心** | `profile_tab_switch`、`profile_edit_submit` | Tab 切换、资料修改 |
 | **管理后台** | `admin_poi_create`、`admin_comment_audit`、`admin_market_audit` | POI、留言、集市审核 |
-| **超级管理员** | `super_admin_school_edit`、`super_admin_keyword_add` | 学校、敏感词等 |
+| **超级管理员** | `super_admin_school_edit`、`super_admin_keyword_add` | 学校、**屏蔽词**等 |
+| **反馈** | （可按《数据埋点说明文档》补全） | 反馈提交、超管状态变更 |
 
 #### 8.7.3 通用上下文属性
 
@@ -517,7 +553,7 @@ flowchart LR
 
 #### 8.7.4 实现与集成
 
-- **封装层**：建议在 `lib/analytics.ts` 或 `lib/track.ts` 统一封装 `track(event)` 接口
+- **封装层**：已实现 `lib/analytics.ts` 统一封装（可继续按《数据埋点说明文档》扩展事件）
 - **环境变量**：`NEXT_PUBLIC_ANALYTICS_ENABLED`、`NEXT_PUBLIC_GA_MEASUREMENT_ID`、`NEXT_PUBLIC_MIXPANEL_TOKEN`
 - **集成时机**：开发期实现核心事件；上线前配置生产平台；迭代期按需补充管理端/超管端事件
 
@@ -529,9 +565,8 @@ flowchart LR
 
 ### 9.1 多租户约束
 
-- 所有业务表必须包含 `schoolId` 字段。
-- 非超管查询必须 `where: { schoolId: currentSchoolId }`。
-- 创建操作必须从 `currentUser.schoolId` 注入，禁止前端传入任意 schoolId。
+- **默认规则**：校区业务表须含 `schoolId`，非超管查询必须 `where: { schoolId: currentSchoolId }`，创建操作从会话注入 `schoolId`。
+- **例外（与当前 Schema 一致）**：如 `Feedback` 仅绑定 `userId`（无 `schoolId`），由超管全局处理；认证会话、频控、全局集市分类等表不按校隔离。
 
 ### 9.2 数据访问约束
 
@@ -550,7 +585,14 @@ flowchart LR
 
 - **生命周期**：expiresAt 7d；reportCount≥3 入审核，≥5 自动 isHidden
 
-### 9.4 索引建议
+### 9.4 收藏与用户反馈实体
+
+| 实体 | 说明 |
+|------|------|
+| **POIFavorite** | `userId`、`poiId`、`schoolId`；`@@unique([userId, poiId])` |
+| **Feedback** | `userId`、`type`（FEEDBACK/BUG）、`title`、`content`、`images`（JSON 数组）、`status`（PENDING/RESOLVED/REJECTED）；**无 `schoolId` 字段**，超管全局列表处理 |
+
+### 9.5 索引建议
 
 | 表/字段 | 索引 |
 |---------|------|
@@ -562,6 +604,9 @@ flowchart LR
 | LostFoundEvent（v1.2） | schoolId、poiId、expiresAt、createdAt |
 | MarketCategory（v1.3.0） | order、isActive |
 | MarketItem（v1.3.0） | schoolId、poiId、userId、typeId、categoryId、expiresAt、reportCount、isHidden |
+| POIFavorite | userId、poiId、schoolId |
+| Feedback | userId、status、type、createdAt |
+| AuthSession / RateLimit | sessionToken、expiresAt；key、windowStart |
 
 ---
 
@@ -570,8 +615,9 @@ flowchart LR
 ### 10.1 管理员配置需求
 
 - 围栏编辑器、POI 审核池、功能开关
-- 超管：便民公共设施分类、集市分类、交易类型与分类动态配置
+- 超管：便民公共设施分类、集市分类、交易类型与分类动态配置；**屏蔽词**（`/super-admin/keywords`）；**用户反馈/Bug**（`/super-admin/feedback`）
 - 校管：活动、POI 图片、失物招领、集市审核（`/admin/audit` 集市 Tab）
+- **上线检查**：是否提供 `docs/用户协议.md`、`docs/免责声明.md`（注册页协议弹窗依赖）
 
 ### 10.2 灰度策略
 

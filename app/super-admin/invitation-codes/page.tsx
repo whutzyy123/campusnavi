@@ -6,12 +6,12 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
-import { Card } from "@/components/card";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
+import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
 import { EmptyState } from "@/components/empty-state";
 import {
   Copy,
   Plus,
-  Filter,
   Play,
   CalendarPlus,
   Ban,
@@ -303,14 +303,34 @@ function InvitationCodesManagementPageContent() {
     );
   }
 
+  const schoolFilterOptions = [
+    { value: "", label: "全部" },
+    ...schools.map((s) => ({ value: s.id, label: s.name })),
+  ];
+  const typeFilterOptions = [
+    { value: "", label: "全部" },
+    { value: "ADMIN", label: "校级管理员" },
+    { value: "STAFF", label: "工作人员" },
+  ];
+  const statusFilterOptions = [
+    { value: "", label: "全部" },
+    { value: "ACTIVE", label: "未使用" },
+    { value: "EXPIRED", label: "已过期" },
+    { value: "DISABLED", label: "已撤销" },
+    { value: "USED", label: "已使用" },
+    { value: "DEACTIVATED", label: "已停用(关联用户)" },
+  ];
+
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-6">
-          <Card
+        <>
+          <AdminPageContainer
             title="邀请码管理"
-            action={
+            description="查看、筛选并管理全平台邀请码"
+            headerActions={
               <button
+                type="button"
                 onClick={() => setShowGenerateModal(true)}
                 className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF4500]/90"
               >
@@ -318,57 +338,34 @@ function InvitationCodesManagementPageContent() {
                 生成邀请码
               </button>
             }
+            headerExtra={
+              <AdminFilterBar
+                filters={[
+                  {
+                    label: "学校",
+                    value: filterSchool,
+                    onChange: setFilterSchool,
+                    options: schoolFilterOptions,
+                    className: "min-w-[160px]",
+                  },
+                  {
+                    label: "类型",
+                    value: filterType,
+                    onChange: setFilterType,
+                    options: typeFilterOptions,
+                  },
+                  {
+                    label: "状态",
+                    value: filterStatus,
+                    onChange: setFilterStatus,
+                    options: statusFilterOptions,
+                    className: "min-w-[200px]",
+                  },
+                ]}
+              />
+            }
+            scrollKey={`${filterSchool}-${filterType}-${filterStatus}`}
           >
-            {/* 筛选器 */}
-            <div className="mb-4 flex flex-wrap items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="flex items-center gap-2">
-                <Filter className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-700">筛选：</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">学校：</label>
-                <select
-                  value={filterSchool}
-                  onChange={(e) => setFilterSchool(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
-                >
-                  <option value="">全部</option>
-                  {schools.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">类型：</label>
-                <select
-                  value={filterType}
-                  onChange={(e) => setFilterType(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
-                >
-                  <option value="">全部</option>
-                  <option value="ADMIN">校级管理员</option>
-                  <option value="STAFF">工作人员</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-600">状态：</label>
-                <select
-                  value={filterStatus}
-                  onChange={(e) => setFilterStatus(e.target.value)}
-                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
-                >
-                  <option value="">全部</option>
-                  <option value="ACTIVE">未使用</option>
-                  <option value="EXPIRED">已过期</option>
-                  <option value="DISABLED">已撤销</option>
-                  <option value="USED">已使用</option>
-                  <option value="DEACTIVATED">已停用(关联用户)</option>
-                </select>
-              </div>
-            </div>
-
             {filteredCodes.length === 0 ? (
               <EmptyState
                 icon={Copy}
@@ -518,7 +515,7 @@ function InvitationCodesManagementPageContent() {
                 </Table>
               </div>
             )}
-          </Card>
+          </AdminPageContainer>
 
           <GenerateCodeModal
             isOpen={showGenerateModal}
@@ -540,7 +537,7 @@ function InvitationCodesManagementPageContent() {
               disabled={!!actionLoading}
             />
           )}
-        </div>
+        </>
       </AdminLayout>
     </AuthGuard>
   );

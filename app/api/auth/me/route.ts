@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 
 export const dynamic = "force-dynamic";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { getAuthCookie, removeAuthCookie } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
-
-const AUTH_COOKIE_NAME = "campus-survival-auth-token";
 
 /**
  * GET /api/auth/me
@@ -52,25 +49,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 账户已停用：清除 Cookie 并返回 401
     if (user.status === "INACTIVE") {
-      const cookieStore = await cookies();
-      cookieStore.delete(AUTH_COOKIE_NAME);
+      await removeAuthCookie();
       return NextResponse.json(
         { success: false, message: "该账户已被停用" },
         { status: 401 }
       );
     }
-
-    // 角色映射
-    const roleMap: Record<number, string> = {
-      1: "STUDENT",
-      2: "ADMIN",
-      3: "STAFF",
-      4: "SUPER_ADMIN",
-    };
-
-    const userRole = roleMap[user.role] || "STUDENT";
 
     return NextResponse.json({
       success: true,
@@ -81,7 +66,7 @@ export async function GET(request: NextRequest) {
         bio: user.bio,
         avatar: user.avatar || null,
         lastProfileUpdateAt: user.lastProfileUpdateAt?.toISOString() || null,
-        role: userRole,
+        role: authData.role,
         schoolId: user.schoolId || null,
         schoolName: user.school?.name || null,
       },
@@ -99,4 +84,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

@@ -1,5 +1,8 @@
-import { NextResponse } from "next/server";
 import { getSchoolsWithStats } from "@/lib/school-actions";
+import { jsonErr, jsonOk } from "@/lib/api/http";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/schools
@@ -8,29 +11,24 @@ import { getSchoolsWithStats } from "@/lib/school-actions";
  */
 export async function GET() {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     const result = await getSchoolsWithStats();
 
     if (!result.success) {
-      return NextResponse.json(
-        { success: false, message: result.error },
-        { status: 500 }
-      );
+      return jsonErr(result.error ?? "服务器错误", 500);
     }
 
-    return NextResponse.json({
-      success: true,
-      schools: result.data,
-    });
+    const schools = result.data;
+    /** 推荐读取 `data.schools`；`schools` 为兼容旧客户端的顶层别名 */
+    return jsonOk({ data: { schools }, schools });
   } catch (error) {
     console.error("获取学校列表失败:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: "服务器内部错误",
-        error: error instanceof Error ? error.message : "未知错误",
-      },
-      { status: 500 }
+    return jsonErr(
+      "服务器内部错误",
+      500,
+      error instanceof Error ? error.message : "未知错误"
     );
   }
 }
-

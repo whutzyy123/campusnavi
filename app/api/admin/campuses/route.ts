@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth-server-actions";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 import { prisma } from "@/lib/prisma";
 import { centroid } from "@turf/turf";
 import type { Feature, Polygon } from "geojson";
@@ -14,7 +14,9 @@ import { computeLabelCenter } from "@/lib/campus-label-utils";
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
     const searchParams = request.nextUrl.searchParams;
     const schoolIdParam = searchParams.get("schoolId");
 
@@ -106,7 +108,9 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     if (auth.role === "STAFF") {
       return NextResponse.json(

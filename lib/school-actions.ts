@@ -8,10 +8,14 @@
 
 import { booleanPointInPolygon, centroid } from "@turf/turf";
 import type { Point, Polygon, Feature } from "geojson";
+import { headers } from "next/headers";
 import { getAuthCookie } from "@/lib/auth-server-actions";
+import { getClientIpFromHeaders } from "@/lib/client-ip";
+import { consumeRateLimit } from "@/lib/rate-limit";
 import { requireAdmin } from "@/lib/auth-server-actions";
 import { prisma } from "@/lib/prisma";
 import { computeLabelCenter } from "@/lib/campus-label-utils";
+import { deleteSchoolCascade } from "@/lib/school/delete-school-db";
 
 /** 学校列表项（公开，用于学校切换器等） */
 export interface SchoolListItem {
@@ -58,6 +62,12 @@ export type DetectSchoolResultType =
  */
 export async function getSchoolsList(): Promise<SchoolListResult> {
   try {
+    const ip = getClientIpFromHeaders(headers());
+    const ok = await consumeRateLimit(`schools:list:ip:${ip}`, 120, 60 * 1000);
+    if (!ok) {
+      return { success: false, error: "请求过于频繁，请稍后再试" };
+    }
+
     const schools = await prisma.school.findMany({
       where: {
         isActive: true,
@@ -756,9 +766,7 @@ export async function deleteSchool(schoolId: string): Promise<SchoolActionResult
       return { success: false, error: "学校不存在" };
     }
 
-    await prisma.school.delete({
-      where: { id: schoolId },
-    });
+    await deleteSchoolCascade(schoolId);
 
     return {
       success: true,
@@ -775,3 +783,5 @@ export async function deleteSchool(schoolId: string): Promise<SchoolActionResult
     };
   }
 }
+
+export { deleteSchoolCascade } from "@/lib/school/delete-school-db";

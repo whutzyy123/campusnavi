@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 
 // DELETE /api/admin/global-categories/[id]
 // 删除全局分类（仅超级管理员，需检查所有学校的 POI 占用）
@@ -9,14 +9,8 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    const auth = await getAuthCookie();
-
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可删除全局分类" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const { id } = params;
 

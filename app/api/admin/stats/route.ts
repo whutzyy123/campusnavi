@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/admin/stats
@@ -7,6 +10,9 @@ import { prisma } from "@/lib/prisma";
  */
 export async function GET() {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     // 总注册用户数
     const totalUsers = await prisma.user.count();
 

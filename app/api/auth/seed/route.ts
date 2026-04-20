@@ -1,6 +1,8 @@
+import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth-utils";
+import { requireSeedBearerIfConfigured } from "@/lib/seed-route-auth";
 
 /**
  * POST /api/auth/seed
@@ -8,7 +10,7 @@ import { hashPassword } from "@/lib/auth-utils";
  * 
  * 注意：生产环境应禁用此接口
  */
-export async function POST() {
+export async function POST(request: NextRequest) {
   // 仅允许在开发环境运行
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json(
@@ -16,6 +18,9 @@ export async function POST() {
       { status: 403 }
     );
   }
+
+  const seedAuth = requireSeedBearerIfConfigured(request);
+  if (seedAuth) return seedAuth;
 
   try {
     // 检查是否已存在超级管理员

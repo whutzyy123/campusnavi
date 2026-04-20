@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/auth-server-actions";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 import { getMergedCategories } from "@/lib/category-utils";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
 import { prisma } from "@/lib/prisma";
@@ -9,7 +9,9 @@ import { CATEGORY_GROUP_CONVENIENCE, CATEGORY_GROUP_REGULAR } from "@/types/cate
 // 获取当前学校的分类（合并全局分类和私有分类，应用覆盖逻辑）
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     if (!auth.schoolId) {
       return NextResponse.json(
@@ -101,8 +103,9 @@ export async function GET(request: NextRequest) {
 // 创建新分类
 export async function POST(request: NextRequest) {
   try {
-    const auth = await requireAdmin();
-    const { prisma } = await import("@/lib/prisma");
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     const body = await request.json();
     const { name, icon, isGlobal } = body as {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 
 /**
  * GET /api/admin/market-categories
@@ -9,13 +9,8 @@ import { getAuthCookie } from "@/lib/auth-server-actions";
  */
 export async function GET() {
   try {
-    const auth = await getAuthCookie();
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可访问" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const [categories, links, transactionTypes] = await Promise.all([
       prisma.marketCategory.findMany({
@@ -73,13 +68,8 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可创建" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const body = await request.json();
     const { name, order } = body as { name?: string; order?: number };

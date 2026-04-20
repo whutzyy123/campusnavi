@@ -22,15 +22,15 @@ export interface UploadResult {
 }
 
 /**
- * 校验上传权限：仅 ADMIN 或 STAFF
+ * 校验上传权限：校管、工作人员或超级管理员
  */
 async function requireUploadPermission(): Promise<{ ok: true } | { ok: false; error: string }> {
   const auth = await getAuthCookie();
   if (!auth?.userId) {
     return { ok: false, error: "请先登录" };
   }
-  if (auth.role !== "ADMIN" && auth.role !== "STAFF") {
-    return { ok: false, error: "仅校管或工作人员可上传 POI 图片" };
+  if (auth.role !== "ADMIN" && auth.role !== "STAFF" && auth.role !== "SUPER_ADMIN") {
+    return { ok: false, error: "仅校管、工作人员或超级管理员可上传 POI 图片" };
   }
   return { ok: true };
 }

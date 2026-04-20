@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateInvitationCode } from "@/lib/auth-utils";
+import { requireAdminOrSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/invitation-codes
@@ -10,19 +13,23 @@ import { generateInvitationCode } from "@/lib/auth-utils";
  * {
  *   schoolId: string,
  *   role: number, // 2: 校级管理员, 3: 校内工作人员
- *   issuerId: string, // 发放人ID (映射为 createdByUserId)
  *   expiresAt?: string // 可选过期时间
  * }
+ * createdByUserId 取当前登录用户，勿传发放人 ID
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAdminOrSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     const body = await request.json();
-    const { schoolId, role, issuerId, expiresAt } = body;
+    const { schoolId, role, expiresAt } = body;
 
     // 验证必填字段
-    if (!schoolId || role === undefined || !issuerId) {
+    if (!schoolId || role === undefined) {
       return NextResponse.json(
-        { success: false, message: "缺少必填字段：schoolId, role, issuerId" },
+        { success: false, message: "缺少必填字段：schoolId, role" },
         { status: 400 }
       );
     }
@@ -47,34 +54,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 验证发放人是否存在
-    const issuer = await prisma.user.findUnique({
-      where: { id: issuerId },
-      select: {
-        id: true,
-        schoolId: true,
-        role: true,
-      },
-    });
-
-    if (!issuer) {
-      return NextResponse.json(
-        { success: false, message: "发放人不存在" },
-        { status: 404 }
-      );
-    }
-
-    // 校验发放人权限：只有校级管理员(2)或超级管理员(4)才能生成邀请码
-    if (issuer.role !== 2 && issuer.role !== 4) {
-      return NextResponse.json(
-        { success: false, message: "权限不足，只有管理员才能生成邀请码" },
-        { status: 403 }
-      );
-    }
-
-    // 多租户隔离：校级管理员只能为自己的学校生成邀请码，超级管理员可以为任何学校生成
-    const isSuperAdmin = issuer.role === 4;
-    if (!isSuperAdmin && issuer.schoolId !== schoolId) {
+    const isSuperAdmin = auth.role === "SUPER_ADMIN";
+    if (!isSuperAdmin && auth.schoolId !== schoolId) {
       return NextResponse.json(
         { success: false, message: "无权为该学校生成邀请码" },
         { status: 403 }
@@ -106,7 +87,7 @@ export async function POST(request: NextRequest) {
         code,
         type,
         schoolId,
-        createdByUserId: issuerId,
+        createdByUserId: auth.userId,
         expiresAt: expiresAt ? new Date(expiresAt) : null,
       },
     });
@@ -148,15 +129,27 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAdminOrSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     const searchParams = request.nextUrl.searchParams;
-    const schoolId = searchParams.get("schoolId");
+    const schoolIdParam = searchParams.get("schoolId");
     const issuerId = searchParams.get("issuerId");
     const isUsed = searchParams.get("isUsed");
 
     const where: Record<string, unknown> = {};
+    const isSuperAdmin = auth.role === "SUPER_ADMIN";
+    const schoolId = isSuperAdmin ? schoolIdParam : auth.schoolId;
     if (schoolId) where.schoolId = schoolId;
-    if (issuerId) where.createdByUserId = issuerId;
-    if (isUsed !== null && isUsed !== undefined) {
+    if (issuerId) {
+      if (isSuperAdmin || issuerId === auth.userId) {
+        where.createdByUserId = issuerId;
+      } else {
+        return NextResponse.json({ success: false, message: "无权限" }, { status: 403 });
+      }
+    }
+    if (isUsed != null && isUsed !== "") {
       where.status = isUsed === "true" ? "USED" : "ACTIVE";
     }
 

@@ -1,60 +1,22 @@
 "use client";
 
-import React, { Suspense, useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { Suspense, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import Link from "next/link";
 import Image from "next/image";
 import { updateProfile, updateEmail, updatePassword } from "@/lib/profile-actions";
 import { deleteMyAccount } from "@/lib/user-actions";
-import { getUserLostFoundEvents } from "@/lib/lost-found-actions";
 import { getMe } from "@/lib/auth-server-actions";
 import { getMarketThumbsUpRate } from "@/lib/market-actions";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { AuthGuard } from "@/components/auth-guard";
 import toast from "react-hot-toast";
-import { User, Mail, Lock, Save, Loader2, AlertTriangle, Package, MapPin, ExternalLink, Clock, ShoppingBag, Info } from "lucide-react";
+import { User, Mail, Lock, Save, Loader2, AlertTriangle, Clock, ShoppingBag } from "lucide-react";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
-/** 相对时间格式化，如 "2小时前" */
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffSec < 60) return "刚刚";
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHour < 24) return `${diffHour}小时前`;
-  if (diffDay < 7) return `${diffDay}天前`;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-}
-
-/** 状态徽章文案 */
-function getStatusLabel(status: string): string {
-  switch (status) {
-    case "ACTIVE":
-      return "进行中";
-    case "FOUND":
-      return "已找到";
-    case "EXPIRED":
-      return "已过期";
-    case "HIDDEN":
-      return "已隐藏";
-    default:
-      return status;
-  }
-}
-
-/**
- * 中控台页面
- * 功能：修改昵称、个人简介、换绑邮箱、修改密码
- */
-type ProfileTab = "profileInfo" | "lostFound";
+/** 个人信息 Tab：拉取好评率 */
 
 export default function ProfilePage() {
   return (
@@ -66,42 +28,11 @@ export default function ProfilePage() {
 
 function ProfilePageContent() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { currentUser, setUser } = useAuthStore();
   const { unreadCount, fetchUnreadCounts } = useNotificationStore();
-  const tabParam = searchParams.get("tab");
-  const initialTab: ProfileTab =
-    tabParam === "lostFound" ? "lostFound" : "profileInfo";
-  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab);
-
-  // 同步 URL tab 参数到本地状态
-  useEffect(() => {
-    if (tabParam === "lostFound") setActiveTab("lostFound");
-    else if (tabParam === "profileInfo" || !tabParam) setActiveTab("profileInfo");
-  }, [tabParam]);
   const isMdAndUp = useMediaQuery("(min-width: 768px)");
 
-  const handleTabChange = useCallback((tab: ProfileTab) => {
-    setActiveTab(tab);
-  }, []);
-
   const [marketThumbsUpRate, setMarketThumbsUpRate] = useState<number | null>(null);
-
-  // 我的失物招领
-  const [lostFoundEvents, setLostFoundEvents] = useState<
-    Array<{
-      id: string;
-      poiId: string;
-      description: string;
-      images: string[];
-      contactInfo: string | null;
-      status: string;
-      expiresAt: string;
-      createdAt: string;
-      poi: { id: string; name: string };
-    }>
-  >([]);
-  const [lostFoundLoading, setLostFoundLoading] = useState(false);
 
   // 个人资料表单状态
   const [profileForm, setProfileForm] = useState({
@@ -150,10 +81,10 @@ function ProfilePageContent() {
     if (currentUser) {
       setProfileForm({
         nickname: currentUser.nickname || "",
-        bio: (currentUser as any).bio || "",
-        avatar: (currentUser as any).avatar || "",
+        bio: currentUser.bio || "",
+        avatar: currentUser.avatar || "",
       });
-      setLastProfileUpdateAt((currentUser as any).lastProfileUpdateAt || null);
+      setLastProfileUpdateAt(currentUser.lastProfileUpdateAt || null);
     } else {
       fetchUserInfo();
     }
@@ -161,7 +92,7 @@ function ProfilePageContent() {
 
   // 个人信息 Tab：拉取好评率
   useEffect(() => {
-    if (activeTab !== "profileInfo" || !currentUser?.id) return;
+    if (!currentUser?.id) return;
     getMarketThumbsUpRate(currentUser.id).then((r) => {
       if (r.success && r.data && r.data.total > 0) {
         setMarketThumbsUpRate(r.data.rate);
@@ -169,25 +100,7 @@ function ProfilePageContent() {
         setMarketThumbsUpRate(null);
       }
     });
-  }, [activeTab, currentUser?.id]);
-
-  // 切换到「我的失物招领」时拉取数据
-  useEffect(() => {
-    if (activeTab !== "lostFound" || !currentUser?.id) return;
-
-    const fetchLostFound = async () => {
-      setLostFoundLoading(true);
-      const result = await getUserLostFoundEvents(currentUser.id);
-      setLostFoundLoading(false);
-      if (result.success && result.data) {
-        setLostFoundEvents(result.data);
-      } else {
-        toast.error(result.error || "获取失物招领列表失败");
-      }
-    };
-
-    fetchLostFound();
-  }, [activeTab, currentUser?.id]);
+  }, [currentUser?.id]);
 
   // 进入中控台时刷新分类未读数（供 Tab 红点使用）
   useEffect(() => {
@@ -205,7 +118,7 @@ function ProfilePageContent() {
       const formData = new FormData();
       formData.append("nickname", profileForm.nickname);
       formData.append("bio", profileForm.bio);
-      const currentAvatar = (currentUser as any)?.avatar ?? "";
+      const currentAvatar = currentUser?.avatar ?? "";
       if (profileForm.avatar !== currentAvatar) {
         formData.append("avatar", profileForm.avatar || "");
       }
@@ -218,10 +131,11 @@ function ProfilePageContent() {
           setUser({
             ...currentUser!,
             nickname: result.user.nickname ?? currentUser!.nickname,
-            avatar: result.user.avatar ?? (currentUser as any)?.avatar,
-            lastProfileUpdateAt: (result.user as any).lastProfileUpdateAt ?? null,
+            bio: result.user.bio ?? currentUser!.bio ?? null,
+            avatar: result.user.avatar ?? currentUser!.avatar ?? null,
+            lastProfileUpdateAt: result.user.lastProfileUpdateAt ?? currentUser!.lastProfileUpdateAt ?? null,
           });
-          setLastProfileUpdateAt((result.user as any).lastProfileUpdateAt ?? null);
+          setLastProfileUpdateAt(result.user.lastProfileUpdateAt ?? null);
         }
         const meResult = await getMe();
         if (meResult.success && meResult.user) {
@@ -339,41 +253,10 @@ function ProfilePageContent() {
       >
         <div className="mx-auto w-full max-w-4xl flex-shrink-0 px-4 pt-8 pb-4 md:max-w-6xl">
           <h1 className="text-2xl font-bold text-[#1A1A1B]">中控台</h1>
-          <p className="mt-1 text-sm text-[#7C7C7C]">管理个人资料与失物招领</p>
+          <p className="mt-1 text-sm text-[#7C7C7C]">管理个人资料与账号设置</p>
         </div>
 
-        {/* Tabs 导航 */}
-        <div className="flex-shrink-0 border-b border-[#EDEFF1] bg-white/80 backdrop-blur-sm">
-          <div className="mx-auto flex max-w-4xl gap-6 px-4 md:max-w-6xl">
-            <button
-              onClick={() => handleTabChange("profileInfo")}
-              className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-                activeTab === "profileInfo"
-                  ? "border-[#FF4500] text-[#FF4500]"
-                  : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
-              }`}
-            >
-              <User className="h-4 w-4" />
-              个人信息
-            </button>
-            <button
-              onClick={() => handleTabChange("lostFound")}
-              className={`flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
-                activeTab === "lostFound"
-                  ? "border-[#FF4500] text-[#FF4500]"
-                  : "border-transparent text-[#7C7C7C] hover:text-[#1A1A1B]"
-              }`}
-            >
-              <Package className="h-4 w-4" />
-              我参与的失物找回记录
-            </button>
-          </div>
-        </div>
-
-        {/* Tab 内容区 */}
         <div className="min-h-0 flex-1 overflow-y-auto scrollbar-gutter-stable">
-        {/* Profile Info Tab */}
-        {activeTab === "profileInfo" && (
           <div className="mx-auto max-w-4xl flex flex-col gap-6 px-4 py-6 pb-24">
             {/* 个人资料：表单内容可滚动，保存按钮固定底部 */}
             <div className="flex max-h-[calc(100vh-280px)] flex-col overflow-hidden rounded-lg border border-[#EDEFF1] bg-white">
@@ -665,100 +548,6 @@ function ProfilePageContent() {
               </button>
             </div>
           </div>
-        )}
-
-        {/* 失物招领 Tab */}
-        {activeTab === "lostFound" && (
-          <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
-          <div className="rounded-lg border border-[#EDEFF1] bg-white p-6">
-            <h2 className="mb-4 text-lg font-semibold text-[#1A1A1B]">失物招领</h2>
-
-            {lostFoundLoading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-[#7C7C7C]" />
-              </div>
-            ) : lostFoundEvents.length === 0 ? (
-              <p className="py-12 text-center text-sm text-[#7C7C7C]">
-                You haven&apos;t posted any lost & found items yet.
-              </p>
-            ) : (
-              <div className="space-y-4">
-                {lostFoundEvents.map((event) => {
-                  // PRD R16: 24h 后对他人不可见，expiresAt = createdAt + 24h
-                  const isExpiredByTime = new Date() > new Date(event.expiresAt);
-                  const displayStatus = isExpiredByTime ? "EXPIRED" : event.status;
-                  const statusLabel = isExpiredByTime ? "已过期" : getStatusLabel(event.status);
-                  return (
-                    <div
-                      key={event.id}
-                      className={`rounded-lg border border-[#EDEFF1] p-4 transition-colors ${
-                        isExpiredByTime ? "opacity-60 hover:border-[#EDEFF1]" : "hover:border-[#FFE5DD]"
-                      }`}
-                      title={isExpiredByTime ? "发布 24 小时后该信息已对他人不可见" : undefined}
-                    >
-                      <div className="mb-2 flex items-start justify-between gap-2">
-                        <p className="line-clamp-2 flex-1 text-sm font-medium text-[#1A1A1B]">
-                          {event.description.length > 80
-                            ? `${event.description.slice(0, 80)}...`
-                            : event.description}
-                        </p>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            displayStatus === "ACTIVE"
-                              ? "bg-green-100 text-green-800"
-                              : displayStatus === "FOUND"
-                                ? "bg-[#FFE5DD] text-[#FF4500]"
-                                : displayStatus === "EXPIRED"
-                                  ? "bg-slate-100 text-slate-600"
-                                  : "bg-gray-100 text-gray-500"
-                          }`}
-                        >
-                          {statusLabel}
-                        </span>
-                      </div>
-                      <div className="mb-3 flex items-center gap-1.5 text-xs text-[#7C7C7C]">
-                        <MapPin className="h-3.5 w-3.5 shrink-0" />
-                        <span>{event.poi.name}</span>
-                      </div>
-                      <div className="mb-3 flex items-center gap-2">
-                        <span className="text-xs text-[#7C7C7C]">
-                          {formatRelativeTime(event.createdAt)}
-                        </span>
-                        {isExpiredByTime && (
-                          <span
-                            className="inline-flex items-center gap-1 text-xs text-slate-500"
-                            title="发布 24 小时后该信息已对他人不可见"
-                          >
-                            <Info className="h-3.5 w-3.5" />
-                            24 小时后已对他人不可见
-                          </span>
-                        )}
-                      </div>
-                      {isExpiredByTime ? (
-                        <span
-                          className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm font-medium text-slate-500"
-                          aria-disabled="true"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5 opacity-60" />
-                          已过期
-                        </span>
-                      ) : (
-                        <Link
-                          href={`/?poiId=${event.poi.id}&lostFoundId=${event.id}`}
-                          className="inline-flex items-center gap-1.5 rounded-lg border border-[#EDEFF1] px-3 py-1.5 text-sm font-medium text-[#1A1A1B] transition-colors hover:border-[#FF4500] hover:bg-[#FFE5DD] hover:text-[#FF4500]"
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          查看详情
-                        </Link>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          </div>
-        )}
         </div>
       </div>
     </AuthGuard>

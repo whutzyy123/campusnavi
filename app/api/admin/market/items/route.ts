@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";
 
@@ -11,14 +11,9 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth?.userId) {
-      return NextResponse.json({ success: false, message: "请先登录" }, { status: 401 });
-    }
-    const isAdmin = auth.role === "ADMIN" || auth.role === "STAFF" || auth.role === "SUPER_ADMIN";
-    if (!isAdmin) {
-      return NextResponse.json({ success: false, message: "无权限" }, { status: 403 });
-    }
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     const { searchParams } = new URL(request.url);
     const schoolId = searchParams.get("schoolId");

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";
 
@@ -10,9 +11,17 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
-    // 从查询参数获取 schoolId（实际应该从认证中间件获取）
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
+    // 从查询参数获取 schoolId（仅 SUPER_ADMIN 可用；否则从会话注入）
     const searchParams = request.nextUrl.searchParams;
-    const schoolId = searchParams.get("schoolId");
+    const requestedSchoolId = searchParams.get("schoolId");
+    const schoolId =
+      auth.role === "SUPER_ADMIN"
+        ? requestedSchoolId
+        : auth.schoolId;
 
     if (!schoolId) {
       return NextResponse.json(

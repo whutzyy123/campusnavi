@@ -17,7 +17,7 @@ import { AuthGuard } from "@/components/auth-guard";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { truncateText } from "@/lib/utils";
+import { truncateText, formatRelativeTime } from "@/lib/utils";
 import toast from "react-hot-toast";
 import {
   User,
@@ -44,22 +44,6 @@ function formatActorNames(
   }
   if (totalCount <= 2) return actorNames.slice(0, 2).join("、");
   return `${actorNames.slice(0, 2).join("、")} 等 ${totalCount} 人`;
-}
-
-/** 相对时间 */
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffSec < 60) return "刚刚";
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHour < 24) return `${diffHour}小时前`;
-  if (diffDay < 7) return `${diffDay}天前`;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
 }
 
 function getNotificationActionLabel(type: string, entityType?: string): string {

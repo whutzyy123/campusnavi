@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSessionJson, isAuthError } from "@/lib/api/guards";
 
 /**
  * POST /api/audit/resolve
@@ -9,10 +9,10 @@ import { getAuthCookie } from "@/lib/auth-server-actions";
  */
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-    if (!auth?.userId) {
-      return NextResponse.json({ success: false, message: "请先登录" }, { status: 401 });
-    }
+    const authResult = await requireSessionJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     if (auth.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { success: false, message: "超级管理员不参与内容审核，请使用校级管理员或工作人员账号" },

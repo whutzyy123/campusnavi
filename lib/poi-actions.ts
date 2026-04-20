@@ -9,7 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { getMergedCategories } from "@/lib/category-utils";
 import { validateContent } from "@/lib/content-validator";
 import { CoordinateConverter } from "@/lib/amap-loader";
-import { requireAdmin } from "@/lib/auth-server-actions";
+import { requireAdmin, getAuthCookie } from "@/lib/auth-server-actions";
+import { consumeRateLimit } from "@/lib/rate-limit";
 
 export interface POIActionResult<T = unknown> {
   success: boolean;
@@ -210,7 +211,7 @@ export async function searchPOIs(
 }
 
 /**
- * 举报 POI（需登录，可选匿名）
+ * 举报 POI（必须登录；带用户级与 POI 级限流）
  */
 export async function reportPOI(
   poiId: string,
@@ -218,6 +219,20 @@ export async function reportPOI(
   description?: string | null
 ): Promise<POIActionResult<{ reportCount: number; isHidden: boolean }>> {
   try {
+    const auth = await getAuthCookie();
+    if (!auth?.userId) {
+      return { success: false, error: "请先登录" };
+    }
+
+    const okUser = await consumeRateLimit(
+      `audit:poi-report:user:${auth.userId}`,
+      30,
+      60 * 60 * 1000
+    );
+    if (!okUser) {
+      return { success: false, error: "举报过于频繁，请稍后再试" };
+    }
+
     const validReasons = ["定位不准", "信息错误", "有害内容"];
     if (!validReasons.includes(reason)) {
       return { success: false, error: "无效的举报原因" };
@@ -242,6 +257,15 @@ export async function reportPOI(
 
     if (!poi) {
       return { success: false, error: "POI 不存在" };
+    }
+
+    const okPoi = await consumeRateLimit(
+      `audit:poi-report:poi:${poiId}:user:${auth.userId}`,
+      5,
+      24 * 60 * 60 * 1000
+    );
+    if (!okPoi) {
+      return { success: false, error: "您对该地点的举报次数已达上限，请稍后再试" };
     }
 
     const updated = await prisma.pOI.update({

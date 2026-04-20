@@ -8,16 +8,22 @@ export const maxDuration = 60;
  * GET /api/cron/market-deadlock
  * 集市死锁保护定时任务：自动解锁、单方自动完成
  * 由 Vercel Cron 定期调用，或手动触发
- * 需配置 CRON_SECRET 环境变量以验证请求来源
+ * 须配置 CRON_SECRET；请求头 Authorization: Bearer <CRON_SECRET>（全环境必填）。未配置时 production→500，否则→401。
  */
 export async function GET(request: NextRequest) {
   try {
-    const cronSecret = process.env.CRON_SECRET;
-    if (cronSecret) {
-      const authHeader = request.headers.get("authorization");
-      if (authHeader !== `Bearer ${cronSecret}`) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-      }
+    const cronSecret = process.env.CRON_SECRET?.trim();
+    if (!cronSecret) {
+      const status = process.env.NODE_ENV === "production" ? 500 : 401;
+      return NextResponse.json(
+        { error: "CRON_SECRET is not configured" },
+        { status }
+      );
+    }
+
+    const authHeader = request.headers.get("authorization");
+    if (authHeader !== `Bearer ${cronSecret}`) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     await processMarketDeadlocks();

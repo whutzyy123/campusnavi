@@ -4,7 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, ImageIcon, CheckCircle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import { markAsFound } from "@/lib/lost-found-actions";
 import toast from "react-hot-toast";
 
@@ -26,21 +26,6 @@ interface LostFoundDetailModalProps {
   currentUser: { id: string; role?: string } | null;
   /** 标记为已找到成功后的回调（用于刷新列表） */
   onMarkAsFoundSuccess?: () => void;
-}
-
-/** 相对时间格式化 */
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMins < 1) return "刚刚";
-  if (diffMins < 60) return `${diffMins}分钟前`;
-  if (diffHours < 24) return `${diffHours}小时前`;
-  if (diffDays < 7) return `${diffDays}天前`;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
 }
 
 /** 图片轮播：多图时横向滑动，单图时静态展示 */

@@ -8,7 +8,7 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { centroid, polygon } from "@turf/turf";
-import { ensureLngLat } from "@/lib/campus-label-utils";
+import { getStatusBadgeHtml, parseLngLat } from "@/lib/poi-map-helpers";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/amap-loader";
 import { analytics } from "@/lib/analytics";
@@ -36,31 +36,6 @@ interface POIMapProps {
 export interface POIMapRef {
   locate: () => void;
   isLocating: boolean;
-}
-
-/** 从 [lng, lat] 或 GeoJSON Point 解析坐标，确保 [lng, lat] 顺序 */
-function parseLngLat(v: unknown): [number, number] {
-  if (!v) return [0, 0];
-  if (Array.isArray(v) && v.length >= 2) return ensureLngLat(Number(v[0]), Number(v[1]));
-  const obj = v as { coordinates?: unknown[] };
-  if (obj?.coordinates && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
-    return ensureLngLat(Number(obj.coordinates[0]), Number(obj.coordinates[1]));
-  }
-  return [0, 0];
-}
-
-/** 根据 statusType 返回 Marker 徽章 HTML（空字符串表示无徽章） */
-function getStatusBadgeHtml(statusType: string): string {
-  switch (statusType) {
-    case "CROWDED":
-      return `<span class="poi-status-badge poi-status-crowded" title="人多拥挤">🔥</span>`;
-    case "CONSTRUCTION":
-      return `<span class="poi-status-badge poi-status-construction" title="施工绕行">🚧</span>`;
-    case "CLOSED":
-      return `<span class="poi-status-badge poi-status-closed" title="暂时关闭">🔒</span>`;
-    default:
-      return "";
-  }
 }
 
 export const POIMap = forwardRef<POIMapRef, POIMapProps>(

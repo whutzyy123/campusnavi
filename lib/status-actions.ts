@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie } from "@/lib/auth-server-actions";
+import { deniedBySchoolTenant } from "@/lib/school-scope";
 
 /** 人流状况（EMPTY/BUSY/CROWDED）有效期：20 分钟 */
 const TRAFFIC_EXPIRY_MINUTES = 20;
@@ -62,8 +63,8 @@ export async function reportLiveStatus(
       return { success: false, error: "POI 不存在" };
     }
 
-    // 多租户校验：用户必须有权限上报该校区的 POI
-    if (auth.schoolId !== null && auth.schoolId !== poi.schoolId) {
+    // 多租户校验：用户必须有权限上报该校区的 POI（同校或超级管理员）
+    if (deniedBySchoolTenant(auth, poi.schoolId)) {
       return { success: false, error: "无权对该 POI 上报状态" };
     }
 

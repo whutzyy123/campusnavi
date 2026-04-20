@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSessionJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * DELETE /api/invitation-codes/:id
@@ -12,16 +15,9 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
-    // 获取当前用户（从请求体中获取）
-    const body = await request.json().catch(() => ({}));
-    const userId = body.userId;
-
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, message: "未授权" },
-        { status: 401 }
-      );
-    }
+    const authResult = await requireSessionJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
 
     // 查找邀请码
     const invitationCode = await prisma.invitationCode.findUnique({
@@ -41,25 +37,9 @@ export async function DELETE(
       );
     }
 
-    // 获取当前用户信息
-    const currentUser = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        role: true,
-      },
-    });
-
-    if (!currentUser) {
-      return NextResponse.json(
-        { success: false, message: "用户不存在" },
-        { status: 404 }
-      );
-    }
-
     // 权限校验：只有发放人或超级管理员才能作废
-    const isSuperAdmin = currentUser.role === 4;
-    const isIssuer = invitationCode.createdByUserId === userId;
+    const isSuperAdmin = auth.role === "SUPER_ADMIN";
+    const isIssuer = invitationCode.createdByUserId === auth.userId;
 
     if (!isSuperAdmin && !isIssuer) {
       return NextResponse.json(

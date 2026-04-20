@@ -1,20 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 import { getPaginationMeta } from "@/lib/utils";
 
 // GET /api/admin/global-categories
 // 获取所有全局分类（仅超级管理员）
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可访问" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     // 分页：固定每页 10 条
     const PAGE_SIZE = 10;
@@ -87,14 +81,8 @@ export async function GET(request: NextRequest) {
 // 创建全局分类（仅超级管理员）
 export async function POST(request: NextRequest) {
   try {
-    const auth = await getAuthCookie();
-
-    if (!auth || auth.role !== "SUPER_ADMIN") {
-      return NextResponse.json(
-        { success: false, message: "仅超级管理员可创建全局分类" },
-        { status: 403 }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const body = await request.json();
     const { name, icon } = body as {

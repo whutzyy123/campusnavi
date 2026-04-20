@@ -111,12 +111,17 @@ function LoginPageContent() {
       const user = result.user;
       setUser({
         id: user.id,
-        email: user.email ?? undefined,
-        nickname: user.nickname ?? "",
+        email: user.email ?? null,
+        nickname: user.nickname ?? null,
+        bio: null,
+        avatar: null,
+        lastProfileUpdateAt: null,
         role: user.role as UserRole,
         schoolId: user.schoolId,
-        schoolName: user.schoolName ?? undefined,
+        schoolName: user.schoolName ?? null,
       });
+
+      await useAuthStore.getState().initializeAuth({ force: true });
 
       // 如果用户有学校，设置当前学校
       if (user.schoolId) {

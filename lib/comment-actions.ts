@@ -7,6 +7,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { getAuthCookie, requireAdmin } from "@/lib/auth-server-actions";
+import { deniedBySchoolTenant } from "@/lib/school-scope";
 import { createNotification, markAsRead } from "@/lib/notification-actions";
 import { validateContent } from "@/lib/content-validator";
 import { NotificationType, NotificationEntityType } from "@prisma/client";
@@ -526,8 +527,8 @@ export async function toggleCommentLike(commentId: string): Promise<ToggleLikeRe
       return { success: false, error: "留言不存在" };
     }
 
-    // 多租户校验：非超级管理员只能操作本校留言
-    if (auth.schoolId !== null && auth.schoolId !== comment.schoolId) {
+    // 多租户校验：同校或超级管理员
+    if (deniedBySchoolTenant(auth, comment.schoolId)) {
       return { success: false, error: "无权操作该留言" };
     }
 

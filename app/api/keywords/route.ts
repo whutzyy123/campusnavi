@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/keywords
@@ -8,9 +11,8 @@ import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
  */
 export async function GET(request: NextRequest) {
   try {
-    // 注意：在实际项目中，应该从 Cookie 或 Header 中获取当前用户信息
-    // 这里为了简化，假设已经通过中间件或 AuthGuard 验证了权限
-    // 实际应该检查 currentUser.role === "SUPER_ADMIN"
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     // 获取分页和搜索参数
     const searchParams = request.nextUrl.searchParams;
@@ -80,46 +82,22 @@ export async function GET(request: NextRequest) {
  * POST /api/keywords
  * 新增屏蔽词（仅限超级管理员）
  * 
- * 请求体：
- * {
- *   keyword: string,
- *   addedById: string // 添加人ID（必须是超级管理员）
- * }
+ * 请求体：{ keyword: string }；addedById 使用当前会话用户
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     const body = await request.json();
-    const { keyword, addedById } = body;
+    const { keyword } = body;
 
     // 验证必填字段
-    if (!keyword || !addedById) {
+    if (!keyword) {
       return NextResponse.json(
-        { success: false, message: "缺少必填字段：keyword, addedById" },
+        { success: false, message: "缺少必填字段：keyword" },
         { status: 400 }
-      );
-    }
-
-    // 验证添加人是否存在且是超级管理员
-    const adder = await prisma.user.findUnique({
-      where: { id: addedById },
-      select: {
-        id: true,
-        role: true,
-      },
-    });
-
-    if (!adder) {
-      return NextResponse.json(
-        { success: false, message: "添加人不存在" },
-        { status: 404 }
-      );
-    }
-
-    // 角色 4 是超级管理员
-    if (adder.role !== 4) {
-      return NextResponse.json(
-        { success: false, message: "只有超级管理员才能添加屏蔽词" },
-        { status: 403 }
       );
     }
 
@@ -139,7 +117,7 @@ export async function POST(request: NextRequest) {
     const sensitiveWord = await prisma.sensitiveWord.create({
       data: {
         keyword: keyword.trim(),
-        addedById,
+        addedById: auth.userId,
       },
       include: {
         addedBy: {
@@ -185,4 +163,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

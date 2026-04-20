@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+
+export const dynamic = "force-dynamic";
 
 /**
  * POST /api/admin/school
@@ -13,6 +16,9 @@ import { prisma } from "@/lib/prisma";
  */
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
     const body = await request.json();
     const { name, schoolCode } = body;
 

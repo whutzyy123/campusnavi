@@ -70,6 +70,16 @@ function CenterContent() {
         : "/profile";
 
   const entries: CenterEntry[] = [
+    ...(hasAdminAccess
+      ? [
+          {
+            id: "admin",
+            label: "管理后台",
+            href: isSuperAdmin ? "/super-admin" : "/admin",
+            icon: LayoutDashboard,
+          },
+        ]
+      : []),
     {
       id: "profile",
       label: "中控台",
@@ -108,16 +118,6 @@ function CenterContent() {
       href: "/feedback",
       icon: MessageSquare,
     },
-    ...(hasAdminAccess
-      ? [
-          {
-            id: "admin",
-            label: "管理后台",
-            href: isSuperAdmin ? "/super-admin" : "/admin",
-            icon: LayoutDashboard,
-          },
-        ]
-      : []),
   ];
 
   const userInitial =

@@ -1,21 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
-import { getAuthCookie } from "@/lib/auth-server-actions";
+import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
+import { appRoleToDbRole, dbRoleToAppRole, type AppRole } from "@/lib/role";
 
-/**
- * 验证超级管理员权限（仅限 role=4）
- */
-async function requireSuperAdmin() {
-  const auth = await getAuthCookie();
-  if (!auth) {
-    return { ok: false as const, status: 401, message: "未授权" };
-  }
-  if (auth.role !== "SUPER_ADMIN") {
-    return { ok: false as const, status: 403, message: "权限不足，仅限超级管理员访问" };
-  }
-  return { ok: true as const, auth };
-}
+const patchUserBodySchema = z.object({
+  id: z.string().min(1),
+  status: z.enum(["ACTIVE", "INACTIVE"]),
+});
+
+const deleteUserBodySchema = z.object({
+  id: z.string().min(1),
+});
 
 /**
  * GET /api/admin/users
@@ -27,13 +25,8 @@ async function requireSuperAdmin() {
  */
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireSuperAdmin();
-    if (!authResult.ok) {
-      return NextResponse.json(
-        { success: false, message: authResult.message },
-        { status: authResult.status }
-      );
-    }
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
 
     const searchParams = request.nextUrl.searchParams;
 
@@ -43,24 +36,15 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get("search");
     const searchField = searchParams.get("field") === "email" ? "email" : "nickname";
 
-    // 构建查询条件
-    const whereConditions: any[] = [];
-    
-    // 角色筛选
+    const whereConditions: Prisma.UserWhereInput[] = [];
+
     if (roleFilter) {
-      // 角色映射：STUDENT=1, ADMIN=2, STAFF=3, SUPER_ADMIN=4
-      const roleMap: Record<string, number> = {
-        STUDENT: 1,
-        ADMIN: 2,
-        STAFF: 3,
-        SUPER_ADMIN: 4,
-      };
-      if (roleMap[roleFilter]) {
-        whereConditions.push({ role: roleMap[roleFilter] });
+      const allowed: readonly AppRole[] = ["STUDENT", "ADMIN", "STAFF", "SUPER_ADMIN"];
+      if ((allowed as readonly string[]).includes(roleFilter)) {
+        whereConditions.push({ role: appRoleToDbRole(roleFilter as AppRole) });
       }
     }
 
-    // 学校筛选
     if (schoolIdFilter) {
       if (schoolIdFilter === "null") {
         whereConditions.push({ schoolId: null });
@@ -69,22 +53,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // 搜索功能：根据指定字段进行模糊搜索
     if (search && search.trim()) {
       whereConditions.push({
         [searchField]: { contains: search.trim() },
       });
     }
 
-    // 构建最终的 where 条件
-    const where = whereConditions.length > 0 ? { AND: whereConditions } : {};
+    const where: Prisma.UserWhereInput =
+      whereConditions.length > 0 ? { AND: whereConditions } : {};
 
-    // 获取分页参数
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const { skip, take } = getPaginationParams(page, limit);
 
-    // 并行查询：总数和分页数据（仅取所需字段）
     const [total, users] = await Promise.all([
       prisma.user.count({ where }),
       prisma.user.findMany({
@@ -113,31 +94,19 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
-    // 格式化返回数据
-    const formattedUsers = users.map((user) => {
-      // 角色映射：1=STUDENT, 2=ADMIN, 3=STAFF, 4=SUPER_ADMIN
-      const roleMap: Record<number, string> = {
-        1: "STUDENT",
-        2: "ADMIN",
-        3: "STAFF",
-        4: "SUPER_ADMIN",
-      };
+    const formattedUsers = users.map((user) => ({
+      id: user.id,
+      nickname: user.nickname,
+      email: user.email,
+      role: dbRoleToAppRole(user.role) ?? "UNKNOWN",
+      roleNumber: user.role,
+      schoolId: user.schoolId,
+      schoolName: user.school?.name || "系统",
+      schoolCode: user.school?.schoolCode || null,
+      createdAt: user.createdAt.toISOString(),
+      status: user.status || "ACTIVE",
+    }));
 
-      return {
-        id: user.id,
-        nickname: user.nickname,
-        email: user.email,
-        role: roleMap[user.role] || "UNKNOWN",
-        roleNumber: user.role,
-        schoolId: user.schoolId,
-        schoolName: user.school?.name || "系统",
-        schoolCode: user.school?.schoolCode || null,
-        createdAt: user.createdAt.toISOString(),
-        status: user.status || "ACTIVE",
-      };
-    });
-
-    // 计算分页元数据
     const pagination = getPaginationMeta(total, page, limit);
 
     return NextResponse.json({
@@ -161,37 +130,30 @@ export async function GET(request: NextRequest) {
 /**
  * PATCH /api/admin/users
  * 切换用户状态（停用/激活），仅限超级管理员
- * 请求体：{ id: string, status: "ACTIVE" | "INACTIVE" }
  */
 export async function PATCH(request: NextRequest) {
   try {
-    const authResult = await requireSuperAdmin();
-    if (!authResult.ok) {
-      return NextResponse.json(
-        { success: false, message: authResult.message },
-        { status: authResult.status }
-      );
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, message: "请求体格式错误" }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { id, status } = body;
-
-    if (!id || !status) {
+    const parsed = patchUserBodySchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, message: "缺少 id 或 status" },
+        { success: false, message: parsed.error.issues[0]?.message ?? "参数无效" },
         { status: 400 }
       );
     }
 
-    if (status !== "ACTIVE" && status !== "INACTIVE") {
-      return NextResponse.json(
-        { success: false, message: "status 必须为 ACTIVE 或 INACTIVE" },
-        { status: 400 }
-      );
-    }
+    const { id, status } = parsed.data;
 
-    // 禁止停用自己
-    if (id === authResult.auth.userId) {
+    if (id === authResult.userId) {
       return NextResponse.json(
         { success: false, message: "不能停用自己的账户" },
         { status: 400 }
@@ -204,13 +166,9 @@ export async function PATCH(request: NextRequest) {
     });
 
     if (!targetUser) {
-      return NextResponse.json(
-        { success: false, message: "用户不存在" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "用户不存在" }, { status: 404 });
     }
 
-    // 禁止停用其他超级管理员
     if (targetUser.role === 4) {
       return NextResponse.json(
         { success: false, message: "不能停用其他超级管理员" },
@@ -243,30 +201,30 @@ export async function PATCH(request: NextRequest) {
 /**
  * DELETE /api/admin/users
  * 永久删除用户及其关联数据，仅限超级管理员
- * 请求体：{ id: string }
  */
 export async function DELETE(request: NextRequest) {
   try {
-    const authResult = await requireSuperAdmin();
-    if (!authResult.ok) {
-      return NextResponse.json(
-        { success: false, message: authResult.message },
-        { status: authResult.status }
-      );
+    const authResult = await requireSuperAdminJson();
+    if (isAuthError(authResult)) return authResult;
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json({ success: false, message: "请求体格式错误" }, { status: 400 });
     }
 
-    const body = await request.json();
-    const { id } = body;
-
-    if (!id) {
+    const parsed = deleteUserBodySchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { success: false, message: "缺少 id" },
+        { success: false, message: parsed.error.issues[0]?.message ?? "参数无效" },
         { status: 400 }
       );
     }
 
-    // 禁止删除自己
-    if (id === authResult.auth.userId) {
+    const { id } = parsed.data;
+
+    if (id === authResult.userId) {
       return NextResponse.json(
         { success: false, message: "不能删除自己的账户" },
         { status: 400 }
@@ -279,13 +237,9 @@ export async function DELETE(request: NextRequest) {
     });
 
     if (!targetUser) {
-      return NextResponse.json(
-        { success: false, message: "用户不存在" },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: false, message: "用户不存在" }, { status: 404 });
     }
 
-    // 禁止删除其他超级管理员
     if (targetUser.role === 4) {
       return NextResponse.json(
         { success: false, message: "不能删除其他超级管理员" },

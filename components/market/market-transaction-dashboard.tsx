@@ -21,7 +21,6 @@ import {
   withdrawIntention,
   submitIntention,
   getMarketItemDetail,
-  getMyMarketItems,
   getMarketCategories,
 } from "@/lib/market-actions";
 import { useNotificationStore } from "@/store/use-notification-store";
@@ -51,87 +50,20 @@ import { PostItemModal, type MarketCategoriesByType, type TransactionTypeItem } 
 import { UserProfileModal } from "@/components/shared/user-profile-modal";
 import { EmptyState } from "@/components/empty-state";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { formatRelativeTime } from "@/lib/utils";
+import {
+  getBuyerSubTab,
+  SELLING_STATUS_FILTERS,
+  BUYING_STATUS_FILTERS,
+  type MarketSubTab,
+  type MarketRole,
+  type MarketStatusFilter,
+  type MarketTransactionItem,
+} from "./market-transaction-types";
+import { useMarketTransactionDashboardState } from "./use-market-transaction-dashboard-state";
 
-export type MarketSubTab = "posted" | "interested" | "locked" | "acquired" | "history";
-export type MarketRole = "seller" | "buyer";
-export type MarketStatusFilter = "all" | "ongoing" | "ended";
-
-export const SELLING_STATUS_FILTERS: { id: MarketStatusFilter; label: string }[] = [
-  { id: "all", label: "全部" },
-  { id: "ongoing", label: "进行中" },
-  { id: "ended", label: "已结束" },
-];
-
-export const BUYING_STATUS_FILTERS: { id: MarketStatusFilter; label: string }[] = [
-  { id: "all", label: "全部" },
-  { id: "ongoing", label: "进行中" },
-  { id: "ended", label: "已结束" },
-];
-
-/** 根据买家侧 item 推断 subTab（用于卡片操作按钮） */
-export function getBuyerSubTab(item: MarketTransactionItem, currentUserId: string): MarketSubTab {
-  if (item.status === "LOCKED" && item.selectedBuyerId === currentUserId) return "locked";
-  if (item.status === "COMPLETED" && item.selectedBuyerId === currentUserId) return "acquired";
-  if (item.status === "ACTIVE" && (item.hasIntention ?? true) && item.selectedBuyerId !== currentUserId) return "interested";
-  return "history";
-}
-
-/** 相对时间格式化，如 "2小时前" */
-function formatRelativeTime(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffSec < 60) return "刚刚";
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHour < 24) return `${diffHour}小时前`;
-  if (diffDay < 7) return `${diffDay}天前`;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-}
-
-/** 消息列表用相对时间 */
-function formatRelativeTimeShort(isoString: string): string {
-  const date = new Date(isoString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  const diffMin = Math.floor(diffSec / 60);
-  const diffHour = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffSec < 60) return "刚刚";
-  if (diffMin < 60) return `${diffMin}分钟前`;
-  if (diffHour < 24) return `${diffHour}小时前`;
-  if (diffDay < 7) return `${diffDay}天前`;
-  return date.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
-}
-
-/** 集市交易商品项（我发布的 / 有意向的 / 曾有意向） */
-export interface MarketTransactionItem {
-  id: string;
-  title: string;
-  price: number | null;
-  images: string[];
-  status: string;
-  buyerId: string | null;
-  selectedBuyerId?: string | null;
-  buyerConfirmed: boolean;
-  sellerConfirmed: boolean;
-  lockedAt: string | null;
-  expiresAt: string;
-  createdAt: string;
-  poi: { id: string; name: string };
-  category: { id: string; name: string } | null;
-  transactionType: { id: number; name: string; code: string };
-  buyer?: { id: string; nickname: string | null };
-  seller?: { id: string; nickname: string | null };
-  hasIntention?: boolean;
-  isHidden?: boolean;
-  buyerRatingOfSeller?: boolean | null;
-  sellerRatingOfBuyer?: boolean | null;
-}
+export type { MarketSubTab, MarketRole, MarketStatusFilter, MarketTransactionItem } from "./market-transaction-types";
+export { getBuyerSubTab, SELLING_STATUS_FILTERS, BUYING_STATUS_FILTERS } from "./market-transaction-types";
 
 /** 集市交易商品卡片（按 subTab 显示不同操作） */
 function MarketTransactionCard({
@@ -499,11 +431,19 @@ export function MarketTransactionDashboard({
   const isSmallScreen = !useMediaQuery("(min-width: 480px)");
   const isMdAndUp = useMediaQuery("(min-width: 768px)");
 
-  const [marketSellingAll, setMarketSellingAll] = useState<MarketTransactionItem[]>([]);
-  const [marketBuyingAll, setMarketBuyingAll] = useState<MarketTransactionItem[]>([]);
-  const [marketLoading, setMarketLoading] = useState(false);
-  const [marketRole, setMarketRole] = useState<MarketRole>(initialView === "buying" ? "buyer" : "seller");
-  const [marketStatusFilter, setMarketStatusFilter] = useState<MarketStatusFilter>("all");
+  const {
+    marketSellingAll,
+    setMarketSellingAll,
+    marketBuyingAll,
+    setMarketBuyingAll,
+    marketLoading,
+    marketRole,
+    setMarketRole,
+    marketStatusFilter,
+    setMarketStatusFilter,
+    refreshMarketItems,
+  } = useMarketTransactionDashboardState(currentUser?.id, initialView);
+
   const [marketActionId, setMarketActionId] = useState<string | null>(null);
   const [marketRatingId, setMarketRatingId] = useState<string | null>(null);
   const [selectingBuyerId, setSelectingBuyerId] = useState<string | null>(null);
@@ -517,35 +457,6 @@ export function MarketTransactionDashboard({
   const [marketNotificationsLoading, setMarketNotificationsLoading] = useState(false);
   const [marketSidebarExpanded, setMarketSidebarExpanded] = useState(false);
   const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
-
-  const refreshMarketItems = useCallback(async () => {
-    if (!currentUser?.id) return;
-    setMarketLoading(true);
-    try {
-      const result = await getMyMarketItems();
-      if (result.success && result.data) {
-        const d = result.data;
-        const uid = currentUser.id;
-        const normalize = (items: typeof d.selling): MarketTransactionItem[] =>
-          (items ?? []).map((x) => ({
-            ...x,
-            buyerId: x.buyerId ?? null,
-            buyer: x.buyer ?? undefined,
-            seller: x.seller ?? undefined,
-          }));
-
-        setMarketSellingAll(normalize(d.selling));
-        setMarketBuyingAll(normalize(d.buying));
-      } else {
-        toast.error(result.error || "获取集市交易失败");
-      }
-    } catch (e) {
-      console.error("获取集市交易失败:", e);
-      toast.error("获取失败，请重试");
-    } finally {
-      setMarketLoading(false);
-    }
-  }, [currentUser?.id]);
 
   const refreshMarketNotifications = useCallback(async () => {
     if (!currentUser?.id) return;
@@ -808,7 +719,6 @@ export function MarketTransactionDashboard({
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    refreshMarketItems();
     setMarketNotificationsLoading(true);
     getUserMarketNotifications(currentUser.id, 30).then((r) => {
       setMarketNotificationsLoading(false);
@@ -826,14 +736,14 @@ export function MarketTransactionDashboard({
       }
     };
     fetchCategories();
-  }, [currentUser?.id, refreshMarketItems]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (initialOpenItemId && currentUser?.id) {
       if (initialView === "buying") setMarketRole("buyer");
       openMarketDetail(initialOpenItemId);
     }
-  }, [initialOpenItemId, initialView, currentUser?.id, openMarketDetail]);
+  }, [initialOpenItemId, initialView, currentUser?.id, openMarketDetail, setMarketRole]);
 
   if (!currentUser?.id) {
     return null;
@@ -1131,7 +1041,7 @@ export function MarketTransactionDashboard({
                         />
                       )}
                       <p className="text-sm text-[#1A1A1B] pr-5">{n.message ?? "交易动态"}</p>
-                      <p className="text-xs text-[#7C7C7C]">{formatRelativeTimeShort(n.createdAt)}</p>
+                      <p className="text-xs text-[#7C7C7C]">{formatRelativeTime(n.createdAt)}</p>
                     </button>
                   ))}
                 </div>
@@ -1184,7 +1094,7 @@ export function MarketTransactionDashboard({
                     />
                   )}
                   <p className="pr-5 text-sm text-[#1A1A1B]">{n.message ?? "交易动态"}</p>
-                  <p className="text-xs text-[#7C7C7C]">{formatRelativeTimeShort(n.createdAt)}</p>
+                  <p className="text-xs text-[#7C7C7C]">{formatRelativeTime(n.createdAt)}</p>
                 </button>
               ))}
             </div>

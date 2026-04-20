@@ -127,6 +127,11 @@ export function cn(...inputs: ClassValue[]) {
 /** 分页单页最大数量，防止一次拉取过多数据 */
 const MAX_PAGE_LIMIT = 100;
 
+function normalizePaginationLimit(limit: number): number {
+  const safeLimit = Number.isFinite(limit) ? Math.floor(limit) : 10;
+  return Math.min(MAX_PAGE_LIMIT, Math.max(1, safeLimit));
+}
+
 /**
  * 分页查询辅助函数
  * @param page 页码（从1开始）
@@ -134,8 +139,9 @@ const MAX_PAGE_LIMIT = 100;
  * @returns Prisma 查询参数 { skip, take }
  */
 export function getPaginationParams(page: number, limit: number) {
-  const pageNum = Math.max(1, Math.floor(page));
-  const limitNum = Math.min(MAX_PAGE_LIMIT, Math.max(1, Math.floor(limit)));
+  const safePage = Number.isFinite(page) ? Math.floor(page) : 1;
+  const pageNum = Math.max(1, safePage);
+  const limitNum = normalizePaginationLimit(limit);
 
   return {
     skip: (pageNum - 1) * limitNum,
@@ -151,8 +157,9 @@ export function getPaginationParams(page: number, limit: number) {
  * @returns 分页元数据
  */
 export function getPaginationMeta(total: number, page: number, limit: number) {
-  const pageNum = Math.max(1, Math.floor(page));
-  const limitNum = Math.max(1, Math.floor(limit));
+  const safePage = Number.isFinite(page) ? Math.floor(page) : 1;
+  const pageNum = Math.max(1, safePage);
+  const limitNum = normalizePaginationLimit(limit);
   const pageCount = Math.ceil(total / limitNum);
   
   return {

@@ -112,7 +112,11 @@ export async function createLostFoundEvent(
       return { success: false, error: "POI 不存在" };
     }
 
-    if (auth.schoolId !== null && auth.schoolId !== poi.schoolId) {
+    if (
+      auth.role !== "SUPER_ADMIN" &&
+      auth.schoolId !== null &&
+      auth.schoolId !== poi.schoolId
+    ) {
       return { success: false, error: "无权在该 POI 发布失物招领" };
     }
 
@@ -300,6 +304,75 @@ export async function getUserLostFoundEvents(
 }
 
 /**
+ * 获取学校所有失物招领列表（失物招领页面筛选用）
+ * - 按 createdAt 倒序（最新在前）
+ * - 包含 userId 用于区分"我发布的"和"别人发布的"
+ * - 仅返回 ACTIVE 或 FOUND 状态的记录
+ */
+export async function getSchoolLostFoundEvents(
+  schoolId: string
+): Promise<
+  LostFoundActionResult<
+    Array<{
+      id: string;
+      poiId: string;
+      description: string;
+      images: string[];
+      contactInfo: string | null;
+      status: string;
+      expiresAt: string;
+      createdAt: string;
+      userId: string;
+      userNickname: string | null;
+      poi: { id: string; name: string };
+    }>
+  >
+> {
+  try {
+    if (!schoolId?.trim()) {
+      return { success: false, error: "schoolId 为必填项" };
+    }
+
+    const now = new Date();
+    const events = await prisma.lostFoundEvent.findMany({
+      where: {
+        schoolId: schoolId.trim(),
+        status: { in: [LostFoundStatus.ACTIVE, LostFoundStatus.FOUND] },
+        expiresAt: { gt: now },
+      },
+      include: {
+        poi: { select: { id: true, name: true } },
+        user: { select: { id: true, nickname: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return {
+      success: true,
+      data: events.map((e) => ({
+        id: e.id,
+        poiId: e.poiId,
+        description: e.description,
+        images: (e.images as string[]) ?? [],
+        contactInfo: e.contactInfo,
+        status: e.status,
+        expiresAt: e.expiresAt.toISOString(),
+        createdAt: e.createdAt.toISOString(),
+        userId: e.user.id,
+        userNickname: e.user.nickname,
+        poi: { id: e.poi.id, name: e.poi.name },
+      })),
+    };
+  } catch (err) {
+    console.error("[getSchoolLostFoundEvents]", err);
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "获取失物招领列表失败",
+    };
+  }
+}
+
+/**
  * 检查失物招领是否存在且是否已过期（用于 deep link 保护）
  * - 多租户：仅允许同校访问
  * - 返回 { exists, expired }，不返回实际内容
@@ -350,7 +423,7 @@ export async function checkLostFoundEvent(
 
 /**
  * 标记为已找到
- * 仅允许发布者本人或 Admin/Staff 操作
+ * 发布者本人、超级管理员，或本校 ADMIN/STAFF 可操作
  */
 export async function markAsFound(id: string): Promise<LostFoundActionResult<void>> {
   try {
@@ -361,7 +434,7 @@ export async function markAsFound(id: string): Promise<LostFoundActionResult<voi
 
     const event = await prisma.lostFoundEvent.findUnique({
       where: { id: id.trim() },
-      select: { id: true, userId: true, status: true },
+      select: { id: true, userId: true, status: true, schoolId: true },
     });
 
     if (!event) {
@@ -373,10 +446,21 @@ export async function markAsFound(id: string): Promise<LostFoundActionResult<voi
     }
 
     const isOwner = event.userId === auth.userId;
-    const isAdminOrStaff = auth.role === "ADMIN" || auth.role === "SUPER_ADMIN" || auth.role === "STAFF";
-
-    if (!isOwner && !isAdminOrStaff) {
-      return { success: false, error: "仅发布者本人或管理员可标记为已找到" };
+    if (!isOwner) {
+      const isSuperAdmin = auth.role === "SUPER_ADMIN";
+      const isSameSchoolStaff =
+        (auth.role === "ADMIN" || auth.role === "STAFF") &&
+        auth.schoolId != null &&
+        auth.schoolId === event.schoolId;
+      if (!isSuperAdmin && !isSameSchoolStaff) {
+        return {
+          success: false,
+          error:
+            auth.role === "ADMIN" || auth.role === "STAFF"
+              ? "无权处理其他学校的失物招领"
+              : "仅发布者本人或管理员可标记为已找到",
+        };
+      }
     }
 
     await prisma.lostFoundEvent.update({

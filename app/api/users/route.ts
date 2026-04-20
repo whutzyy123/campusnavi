@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";
+
+const LIST_USER_ROLES = new Set([1, 2, 3]);
 
 /**
  * GET /api/users
@@ -13,10 +17,15 @@ export const dynamic = "force-dynamic";
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireSchoolAdminJson();
+    if (isAuthError(authResult)) return authResult;
+    const auth = authResult;
+
     const searchParams = request.nextUrl.searchParams;
-    const schoolId = searchParams.get("schoolId");
+    const schoolIdParam = searchParams.get("schoolId");
     const role = searchParams.get("role");
 
+    const schoolId = auth.role === "SUPER_ADMIN" ? schoolIdParam : auth.schoolId;
     if (!schoolId) {
       return NextResponse.json(
         { success: false, message: "缺少必填参数：schoolId" },
@@ -36,13 +45,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 构建查询条件
-    const where: any = {
-      schoolId, // 严格遵循 schoolId 隔离
+    const where: Prisma.UserWhereInput = {
+      schoolId,
     };
 
-    if (role) {
-      where.role = parseInt(role, 10);
+    if (role !== null && role !== "") {
+      const roleNum = parseInt(role, 10);
+      if (!Number.isInteger(roleNum) || !LIST_USER_ROLES.has(roleNum)) {
+        return NextResponse.json(
+          { success: false, message: "无效的角色参数，允许值：1（学生）、2（管理员）、3（工作人员）" },
+          { status: 400 }
+        );
+      }
+      where.role = roleNum;
     }
 
     // 查询用户（不返回密码）
@@ -50,7 +65,6 @@ export async function GET(request: NextRequest) {
       where,
       select: {
         id: true,
-        email: true,
         nickname: true,
         role: true,
         createdAt: true,
