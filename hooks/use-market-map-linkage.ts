@@ -3,8 +3,8 @@
 import { useEffect, useRef } from "react";
 import { useMarketStore } from "@/store/use-market-store";
 import { useSchoolStore } from "@/store/use-school-store";
-import { getPOIDetail } from "@/lib/poi-actions";
-import type { POIWithStatus } from "@/lib/poi-utils";
+import { getPOIDetail } from "@/lib/actions/poi";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
 
 /**
  * 集市 Focus Mode 地图联动

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getPaginationParams } from "@/lib/utils";
+import { getPaginationParams } from "@/lib/core/utils";
 
 /**
  * Route Handler 统一错误响应（JSON，不 redirect）

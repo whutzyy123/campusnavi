@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { Download, ChevronDown, Loader2 } from "lucide-react";
-import { exportReportCsv, type ReportPeriod } from "@/lib/admin-report-actions";
+import { exportReportCsv, type ReportPeriod } from "@/lib/actions/admin-report";
 import toast from "react-hot-toast";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 const PERIODS: { value: ReportPeriod; label: string }[] = [
   { value: "week", label: "周报（近7天）" },

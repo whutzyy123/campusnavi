@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getClientIpFromNextRequest } from "@/lib/client-ip";
-import { consumeRateLimit } from "@/lib/rate-limit";
+import { prisma } from "@/lib/core/prisma";
+import { getClientIpFromNextRequest } from "@/lib/auth/client-ip";
+import { consumeRateLimit } from "@/lib/auth/rate-limit";
+
+/** 需读取 request IP / headers，不能参与静态化 */
+export const dynamic = "force-dynamic";
 
 /**
  * GET /api/schools/list

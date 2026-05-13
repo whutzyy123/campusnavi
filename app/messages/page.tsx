@@ -11,13 +11,13 @@ import {
   markAllAsRead,
   markAsReadByEntityTypes,
   type NotificationItem,
-} from "@/lib/notification-actions";
-import { submitQuickReply } from "@/lib/comment-actions";
+} from "@/lib/actions/notification";
+import { submitQuickReply } from "@/lib/actions/comment";
 import { AuthGuard } from "@/components/auth-guard";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { truncateText, formatRelativeTime } from "@/lib/utils";
+import { truncateText, formatRelativeTime } from "@/lib/core/utils";
 import toast from "react-hot-toast";
 import {
   User,

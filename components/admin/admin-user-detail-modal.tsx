@@ -1,11 +1,12 @@
 "use client";
 
-import { createPortal } from "react-dom";
+import Image from "next/image";
 import { X, User, MessageSquare, ShoppingBag, KeyRound } from "lucide-react";
 import { StatusBadge } from "@/components/status-badge";
-import { formatDateTimeDisplay } from "@/lib/utils";
-import type { AdminUserDetail } from "@/lib/user-actions";
-import { cn } from "@/lib/utils";
+import { formatDateTimeDisplay } from "@/lib/core/utils";
+import type { AdminUserDetail } from "@/lib/actions/user";
+import { cn } from "@/lib/core/utils";
+import { Modal } from "@/components/ui/modal";
 
 export interface AdminUserDetailModalProps {
   isOpen: boolean;
@@ -61,27 +62,26 @@ export function AdminUserDetailModal({
   hideSchoolName = false,
 }: AdminUserDetailModalProps) {
   if (!isOpen) return null;
-
-  const content = (
-    <div
-      className="fixed inset-0 flex items-center justify-center bg-black/50 p-4"
-      style={{ zIndex: 110 }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      containerClassName="flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
+      overlayClassName="p-4"
     >
-      <div
-        className="modal-container flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header: Avatar + Nickname + User ID */}
+        {/* 顶栏：头像、昵称、用户 ID */}
         <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
           <div className="flex items-center gap-4">
             {isLoading ? (
               <div className="h-14 w-14 animate-pulse rounded-full bg-gray-200" />
             ) : profileDetail?.basic.avatarUrl ? (
-              <img
+              <Image
                 src={profileDetail.basic.avatarUrl}
                 alt=""
+                width={56}
+                height={56}
                 className="h-14 w-14 rounded-full object-cover ring-2 ring-gray-100"
+                unoptimized={profileDetail.basic.avatarUrl.startsWith("blob:")}
               />
             ) : (
               <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FFE5DD]">
@@ -110,7 +110,7 @@ export function AdminUserDetailModal({
           </button>
         </div>
 
-        {/* Body */}
+        {/* 主体 */}
         <div className="flex-1 overflow-y-auto px-6 py-5">
           {isLoading ? (
             <div className="space-y-6">
@@ -136,7 +136,7 @@ export function AdminUserDetailModal({
             </div>
           ) : profileDetail ? (
             <div className="space-y-6">
-              {/* Info Grid */}
+              {/* 信息栅格 */}
               <section>
                 <h4 className="mb-3 text-sm font-medium text-gray-500">
                   基本信息
@@ -190,7 +190,7 @@ export function AdminUserDetailModal({
                 </dl>
               </section>
 
-              {/* Activity Stats */}
+              {/* 活动统计 */}
               <section>
                 <h4 className="mb-3 text-sm font-medium text-gray-500">
                   活动统计
@@ -222,7 +222,7 @@ export function AdminUserDetailModal({
           ) : null}
         </div>
 
-        {/* Footer */}
+        {/* 底部操作 */}
         <div className="flex justify-end border-t border-gray-200 px-6 py-4">
           <button
             onClick={onClose}
@@ -231,9 +231,6 @@ export function AdminUserDetailModal({
             关闭
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

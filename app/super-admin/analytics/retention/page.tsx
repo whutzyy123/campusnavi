@@ -14,13 +14,13 @@ import {
 import { ChartCard } from "@/components/admin/chart-card";
 import { ChartLoadingState } from "@/components/admin/chart-states";
 import { AnalyticsGranularityTabs, type Granularity } from "@/components/admin/analytics-granularity-tabs";
-import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics-utils";
+import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics/utils";
 import {
   getDauWauMauTrend,
   getRetentionTrend,
   getDormantTrend,
   type TimeSeriesPoint,
-} from "@/lib/admin-analytics-actions";
+} from "@/lib/actions/admin-analytics";
 
 export default function RetentionAnalyticsPage() {
   const [days, setDays] = useState<Granularity>(30);

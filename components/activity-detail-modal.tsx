@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { X, ExternalLink, MapPin } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 import type { ActivityWithPOI } from "@/types/activity";
 
 /** 活动详情弹窗所需的最小数据（兼容无 poi 的旧数据） */

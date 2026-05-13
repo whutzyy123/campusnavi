@@ -4,7 +4,7 @@
  */
 
 import { Badge } from "@/components/badge";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 export type StatusBadgeDomain =
   | "market"
@@ -30,6 +30,7 @@ const STATUS_MAP: Record<StatusBadgeDomain, Record<string, StatusConfig>> = {
     LOCKED: { variant: "info", label: "已锁定", className: "bg-blue-100 text-blue-800" },
     COMPLETED: { variant: "default", label: "已完成" },
     DELETED: { variant: "error", label: "已删除" },
+    EXPIRED: { variant: "default", label: "已过期", className: "bg-gray-200 text-gray-700" },
   },
   invitation: {
     ACTIVE: { variant: "success", label: "激活" },

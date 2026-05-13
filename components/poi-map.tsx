@@ -8,18 +8,18 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useCallback, useMemo } from "react";
 import toast from "react-hot-toast";
 import { centroid, polygon } from "@turf/turf";
-import { getStatusBadgeHtml, parseLngLat } from "@/lib/poi-map-helpers";
+import { getStatusBadgeHtml, parseLngLat } from "@/lib/geo/poi-map-helpers";
 import { useAMap } from "@/hooks/use-amap";
-import { CoordinateConverter } from "@/lib/amap-loader";
+import { CoordinateConverter } from "@/lib/geo/amap-loader";
 import { analytics } from "@/lib/analytics";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useFilterStore } from "@/store/use-filter-store";
 import type { School, MapViewState } from "@/store/use-school-store";
-import type { POIWithStatus } from "@/lib/poi-utils";
-import { getCategoryIcon } from "@/lib/poi-utils";
-import { getActiveStatusesBySchool } from "@/lib/status-actions";
-import { getCampuses, type CampusAreaItem } from "@/lib/school-actions";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
+import { getCategoryIcon } from "@/lib/geo/poi-utils";
+import { getActiveStatusesBySchool } from "@/lib/actions/status";
+import { getCampuses, type CampusAreaItem } from "@/lib/school/actions";
 
 interface POIMapProps {
   school: School | null;

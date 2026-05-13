@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { getMyMarketItems } from "@/lib/market-actions";
+import { getMyMarketItems } from "@/lib/actions/market";
 import type { MarketRole, MarketStatusFilter, MarketTransactionItem } from "./market-transaction-types";
 
 /**

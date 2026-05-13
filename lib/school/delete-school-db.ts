@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 
 /**
  * 删除学校记录。依赖 Prisma schema 中指向 School 的外键 onDelete: Cascade，

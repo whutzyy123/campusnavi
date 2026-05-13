@@ -17,7 +17,7 @@ import {
   updateCategoryOverride,
   removeCategoryOverrideAction,
   updateCategory,
-} from "@/lib/category-actions";
+} from "@/lib/actions/category";
 
 interface Category {
   id: string;

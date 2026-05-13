@@ -18,7 +18,7 @@ import {
   RotateCcw,
   X,
 } from "lucide-react";
-import { formatDateTimeDisplay } from "@/lib/utils";
+import { formatDateTimeDisplay } from "@/lib/core/utils";
 import { TableActions } from "@/components/ui/table-actions";
 import toast from "react-hot-toast";
 import { StatusBadge } from "@/components/status-badge";
@@ -38,8 +38,8 @@ import {
   deleteCode,
   extendInvitationCode,
   type InvitationCodeListItem,
-} from "@/lib/invitation-actions";
-import { getSchoolsWithStats } from "@/lib/school-actions";
+} from "@/lib/actions/invitation";
+import { getSchoolsWithStats } from "@/lib/school/actions";
 
 interface School {
   id: string;
@@ -165,6 +165,13 @@ function InvitationCodesManagementPageContent() {
       window.history.replaceState(null, "", newUrl);
     }
   }, [filterSchool, filterType, filterStatus]);
+
+  // URL 变化时反向同步筛选器，避免前进/后退导致状态不一致
+  useEffect(() => {
+    setFilterSchool(searchParams.get("school") || "");
+    setFilterType(searchParams.get("type") || "");
+    setFilterStatus(searchParams.get("status") || "");
+  }, [searchParams]);
 
   // 加载学校列表
   useEffect(() => {

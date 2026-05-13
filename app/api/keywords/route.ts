@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
+import { prisma } from "@/lib/core/prisma";
+import { getPaginationParams, getPaginationMeta } from "@/lib/core/utils";
 import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";

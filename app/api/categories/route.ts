@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getMergedCategories } from "@/lib/category-utils";
-import { prisma } from "@/lib/prisma";
+import { getMergedCategories } from "@/lib/content/category-utils";
+import { prisma } from "@/lib/core/prisma";
 import { CATEGORY_GROUP_CONVENIENCE, CATEGORY_GROUP_REGULAR } from "@/types/category";
 
 export const dynamic = "force-dynamic";

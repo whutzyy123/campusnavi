@@ -16,8 +16,10 @@
 - **多租户校区地图**：基于地理围栏的学校识别、多校区边界渲染、POI 聚合与 LOD
 - **精准导航**：校内步行路径规划、起终点选点、路径绘制
 - **生存集市**：二手交易、以物换物、物品借用，支持意向→选定→锁定→双确认交易闭环
-- **社交与内容**：POI 留言板、失物招领、活动管理、消息通知
+- **社交与内容**：POI 留言板、失物招领、活动管理、消息通知、POI 收藏
+- **积分体系**：支持留言点赞积分与实时状态上报积分（含频控与日上限）
 - **管理后台**：校级管理（POI/分类/校区/团队/审核）+ 超级管理员（用户/学校/敏感词/集市配置、数据分析、周报/月报/年报导出）
+- **用户反馈**：支持用户提交使用体验反馈与 Bug 报告
 
 ---
 
@@ -121,28 +123,56 @@ npm run dev
 ```
 campusproject/
 ├── app/                    # Next.js App Router
-│   ├── (pages)/            # 页面路由
-│   │   ├── page.tsx        # 首页（地图）
-│   │   ├── login/          # 登录
-│   │   ├── register/       # 注册
-│   │   ├── profile/        # 个人中心
-│   │   ├── admin/          # 校级管理后台
-│   │   └── super-admin/    # 超级管理员后台（含 analytics 数据分析）
-│   └── api/                # Route Handlers
+│   ├── page.tsx           # 首页（地图）
+│   ├── login/             # 登录
+│   ├── register/          # 注册
+│   ├── profile/           # 个人资料
+│   ├── center/            # 个人中心/中控台（含 market 子页）
+│   ├── favorites/         # 我的收藏
+│   ├── feedback/          # 用户反馈
+│   ├── messages/          # 消息通知
+│   ├── lost-found/        # 失物招领
+│   ├── school-onboarding/ # 学校引导
+│   ├── (main)/            # 业务分组路由（当前含 activities）
+│   │   └── activities/    # 校园活动
+│   ├── admin/             # 校级管理后台
+│   │   ├── page.tsx       # 管理控制台
+│   │   ├── school/        # 学校管理（POI、校区、用户、活动等）
+│   │   ├── team/          # 团队管理
+│   │   └── audit/         # 审核管理（留言、集市）
+│   └── super-admin/       # 超级管理员后台
+│       ├── page.tsx       # 系统看板
+│       ├── users/         # 用户管理
+│       ├── schools/       # 学校管理
+│       ├── keywords/      # 敏感词管理
+│       ├── feedback/       # 反馈管理
+│       ├── invitation-codes/  # 邀请码管理
+│       ├── categories/     # 分类管理（POI分类、集市分类）
+│       └── analytics/     # 数据分析（用户、集市、内容、留存等）
 ├── components/             # React 组件
-├── lib/                    # 工具与 Server Actions
-│   ├── *-actions.ts        # Server Actions
-│   ├── prisma.ts           # Prisma 客户端
-│   └── amap-loader.ts      # 高德地图动态加载
-├── store/                  # Zustand 状态
-├── hooks/                  # 自定义 Hooks
+│   ├── ui/               # 基础 UI 组件
+│   ├── admin/           # 管理后台组件
+│   ├── market/          # 集市模块组件
+│   └── shared/          # 共享组件
+├── lib/                   # 工具与 Server Actions
+│   ├── actions/          # Server Actions（poi、market、comment 等）
+│   ├── auth/            # 认证相关
+│   ├── market/          # 集市业务逻辑
+│   ├── geo/             # 地图/GIS 工具
+│   ├── api/             # API 辅助工具
+│   └── school/          # 学校相关逻辑
+├── store/                 # Zustand 状态管理
+├── hooks/                # 自定义 Hooks
 ├── prisma/
-│   ├── schema.prisma       # 数据模型
-│   └── seed.ts             # 种子脚本
-├── docs/                   # 项目文档
-│   ├── PRD.md              # 产品需求文档
-│   └── API接口文档.md      # API 接口文档
-└── scripts/                # 迁移与工具脚本
+│   ├── schema.prisma    # 数据模型
+│   └── seed.ts          # 种子脚本
+├── docs/                 # 项目文档
+│   ├── PRD.md           # 产品需求文档
+│   ├── API.md            # API 接口文档
+│   ├── 数据库设计文档.md  # 数据库设计
+│   ├── 技术栈说明文档.md  # 技术栈与架构约定
+│   └── 数据埋点说明文档.md # 数据埋点规范
+└── scripts/             # 迁移与工具脚本
 ```
 
 ---
@@ -166,8 +196,30 @@ campusproject/
 
 ### 接口架构
 
-- **Server Actions**：主要数据变更方式，位于 `lib/*-actions.ts`
+- **Server Actions**：主要数据变更方式，位于 `lib/actions/*.ts` 和 `lib/market/*.ts`
 - **Route Handlers**：`/api/*`，用于兼容或直接 HTTP 访问
+
+### 认证机制
+
+- **HTTP Only Cookie**：`campus-survival-session` 存储会话 Token
+- **Session 表**：`AuthSession`，支持过期时间与撤销
+- **频控**：`RateLimit` 表，限制登录/注册频率
+
+---
+
+## 核心功能模块
+
+| 模块 | 说明 |
+|------|------|
+| 多租户 | 基于 `schoolId` 的数据隔离，射线法地理围栏判定 |
+| POI | 兴趣点管理、父子层级、Marker 聚合、LOD、分类筛选、便民设施 |
+| 导航 | 校内步行路径规划（AMap.Walking） |
+| 社交 | POI 留言板、失物招领、活动管理、消息通知 |
+| 集市 | 二手交易(SALE/SWAP/BORROW)、意向→锁定→双确认交易闭环、7天过期 |
+| 收藏 | POI 收藏、`/favorites` 页面 |
+| 反馈 | 用户反馈/Bug 提交，超管处理台 |
+| 管理 | 校级管理 + 超级管理员数据分析与报表导出 |
+| 积分 | 用户 `points` 字段；留言获赞 +1；实时状态上报 24h 最多 +10 且全局 10 分钟冷却 |
 
 ---
 
@@ -176,9 +228,11 @@ campusproject/
 | 文档 | 说明 |
 |------|------|
 | [docs/PRD.md](docs/PRD.md) | 产品需求文档 |
-| [docs/API接口文档.md](docs/API接口文档.md) | API 与 Server Actions 接口说明 |
-| [docs/超级管理员数据看板规划.md](docs/超级管理员数据看板规划.md) | 超级管理员数据分析、报表导出、核心率指标 |
+| [docs/API.md](docs/API.md) | API 与 Server Actions 接口说明 |
+| [docs/数据库设计文档.md](docs/数据库设计文档.md) | 数据库设计与 ER 图 |
 | [docs/技术栈说明文档.md](docs/技术栈说明文档.md) | 技术栈与架构约定 |
+| [docs/数据埋点说明文档.md](docs/数据埋点说明文档.md) | 数据埋点规范 |
+| [docs/开发规范.md](docs/开发规范.md) | 工程开发规范与质量门禁 |
 
 ---
 

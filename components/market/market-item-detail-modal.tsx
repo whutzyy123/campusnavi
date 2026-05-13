@@ -22,7 +22,7 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import { getIntentions, type MarketIntentionWithUser, type UserReputation } from "@/lib/market-actions";
+import { getIntentions, type MarketIntentionWithUser, type UserReputation } from "@/lib/actions/market";
 
 export interface MarketItemDetailData {
   id: string;
@@ -33,8 +33,6 @@ export interface MarketItemDetailData {
   price: number | null;
   images: string[];
   status: string;
-  /** @deprecated 使用 selectedBuyerId */
-  buyerId?: string | null;
   selectedBuyerId?: string | null;
   buyerConfirmed?: boolean;
   sellerConfirmed?: boolean;
@@ -63,8 +61,6 @@ export interface MarketItemDetailData {
   sellerRatingOfBuyer?: boolean | null;
   masked?: boolean;
   message?: string;
-  /** 是否被下架 */
-  isHidden?: boolean;
 }
 
 interface MarketItemDetailModalProps {
@@ -161,7 +157,7 @@ export function MarketItemDetailModal({
 
   if (!isOpen || !item) return null;
 
-  const selectedBuyerId = item.selectedBuyerId ?? item.buyerId ?? null;
+  const selectedBuyerId = item.selectedBuyerId ?? null;
   const AvatarButton = ({
     userId,
     children,
@@ -199,7 +195,7 @@ export function MarketItemDetailModal({
     ((isCompleted && selectedBuyerId !== currentUser?.id) ||
       isExpired ||
       isDeleted ||
-      item.isHidden === true);
+      item.status === "HIDDEN");
   const unavailableBannerLabel = isUnavailableForBuyer
     ? isCompleted && selectedBuyerId !== currentUser?.id
       ? "该商品已售出"
@@ -210,11 +206,8 @@ export function MarketItemDetailModal({
   const myConfirmed = isSeller ? item.sellerConfirmed : item.buyerConfirmed;
   const loading = actionId === item.id || submittingIntentionId === item.id || deletingItemId === item.id;
 
-  /** 卖家联系方式：仅卖家本人、或已提交意向的潜在买家、或已选定的买家可见 */
-  const showSellerContact =
-    variant === "profile"
-      ? isSeller || isBuyer
-      : isSeller || hasSubmittedIntention || isBuyer;
+  /** 卖家联系方式：卖家本人、已提交意向者、已选定买家可见 */
+  const showSellerContact = isSeller || hasSubmittedIntention || isBuyer;
 
   const handleDelete = () => {
     if (onDelete && confirm("确定要删除该商品吗？")) {

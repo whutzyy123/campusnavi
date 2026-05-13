@@ -2,10 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { X, Copy, Check, Loader2, Search } from "lucide-react";
-import { createInvitationCodes } from "@/lib/invitation-actions";
-import type { InvitationCodeTypeStr } from "@/lib/invitation-actions";
+import { createInvitationCodes } from "@/lib/actions/invitation";
+import type { InvitationCodeTypeStr } from "@/lib/actions/invitation";
 import toast from "react-hot-toast";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 interface School {
   id: string;

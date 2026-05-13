@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { deleteSchoolCascade } from "@/lib/school/delete-school-db";
 import { requireSchoolAdminJson, requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 

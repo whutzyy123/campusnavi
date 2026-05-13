@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
+import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { ToastProvider } from "@/components/toast-provider";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
@@ -34,9 +35,13 @@ export default function RootLayout({
         <Navbar />
         <ToastProvider />
         <PageViewTracker />
-        <main className="min-h-0 flex-1 overflow-y-auto bg-gray-50">
+        <main
+          className="min-h-0 flex-1 overflow-y-auto bg-gray-50"
+          style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
+        >
           {children}
         </main>
+        <BottomTabBar />
       </body>
     </html>
   );

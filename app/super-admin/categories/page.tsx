@@ -20,7 +20,7 @@ import {
   createGlobalCategory,
   deleteGlobalCategory,
   type MicroCategoryItem,
-} from "@/lib/category-actions";
+} from "@/lib/actions/category";
 
 interface Category {
   id: string;
@@ -49,7 +49,7 @@ function SuperAdminCategoriesPageContent() {
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<TabType>("regular");
 
-  // Regular global categories
+  // 常规全局分类
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingRegular, setIsLoadingRegular] = useState(true);
   const [pagination, setPagination] = useState<{
@@ -59,12 +59,12 @@ function SuperAdminCategoriesPageContent() {
   } | null>(null);
   const [deletingRegularId, setDeletingRegularId] = useState<string | null>(null);
 
-  // Micro categories
+  // 便民类分类
   const [microCategories, setMicroCategories] = useState<MicroCategoryItem[]>([]);
   const [isLoadingMicro, setIsLoadingMicro] = useState(false);
   const [deletingMicroId, setDeletingMicroId] = useState<string | null>(null);
 
-  // Create/Edit modal
+  // 新建 / 编辑弹窗
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
   const [modalIsMicro, setModalIsMicro] = useState(false);
@@ -73,7 +73,7 @@ function SuperAdminCategoriesPageContent() {
   const [modalEditingId, setModalEditingId] = useState<string | null>(null);
   const [modalSubmitting, setModalSubmitting] = useState(false);
 
-  // Load regular global categories
+  // 加载常规全局分类
   const fetchRegularCategories = useCallback(async () => {
     setIsLoadingRegular(true);
     try {
@@ -93,7 +93,7 @@ function SuperAdminCategoriesPageContent() {
     }
   }, [searchParams]);
 
-  // Load micro categories
+  // 加载便民类分类
   const fetchMicroCategories = useCallback(async () => {
     setIsLoadingMicro(true);
     try {
@@ -307,7 +307,7 @@ function SuperAdminCategoriesPageContent() {
             ) : null
           }
         >
-          {/* Tab content - scrollable list */}
+          {/* 标签内容：可滚动列表 */}
           <div className="flex flex-col">
             {activeTab === "regular" && (
               <>
@@ -442,7 +442,7 @@ function SuperAdminCategoriesPageContent() {
           </div>
         </AdminPageContainer>
 
-        {/* Create/Edit Modal */}
+        {/* 新建/编辑弹窗 */}
         {modalOpen && (
           <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
           <div className="modal-container max-w-md">
@@ -490,7 +490,7 @@ function SuperAdminCategoriesPageContent() {
                     </label>
                     {modalIsMicro && (
                       <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                        This will be available to all schools globally.
+                        启用后，该便民设施分类将同步至全平台，供各校使用。
                       </p>
                     )}
                   </div>

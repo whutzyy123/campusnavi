@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
-import { EmptyState } from "@/components/empty-state";
+import { PageEmpty, PageLoading } from "@/components/ui/page-state";
 import { Users2, Ban, Key, Info, RotateCcw } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
 import toast from "react-hot-toast";
@@ -28,11 +28,12 @@ import {
   deactivateUser,
   type SchoolUserListItem,
   type AdminUserDetail,
-} from "@/lib/user-actions";
+} from "@/lib/actions/user";
 import { useAuthStore } from "@/store/use-auth-store";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/core/utils";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 
 export default function SchoolUsersPage() {
   return (
@@ -183,7 +184,11 @@ function SchoolUsersPageContent() {
 
   return (
     <AdminLayout>
-      <div className="p-6">
+      <AdminPageContainer
+        title="本校用户管理"
+        description="查看和管理本校注册用户"
+        scrollKey={`${currentPage}-${debouncedSearch}-${roleFilter}`}
+      >
         <Card title="本校用户管理" description="查看和管理本校注册用户">
           <div className="mb-4 rounded-lg border border-gray-200 bg-gray-50 p-4">
             <AdminFilterBar
@@ -209,11 +214,9 @@ function SchoolUsersPageContent() {
           </div>
 
           {isLoading ? (
-            <div className="flex justify-center py-12">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent" />
-            </div>
+            <PageLoading className="flex justify-center py-12" />
           ) : users.length === 0 ? (
-            <EmptyState
+            <PageEmpty
               icon={Users2}
               title="暂无用户"
               description="没有符合条件的用户"
@@ -316,7 +319,7 @@ function SchoolUsersPageContent() {
           userNickname={selectedUserForReset?.nickname}
           onReset={handleResetPasswordConfirm}
         />
-      </div>
+      </AdminPageContainer>
     </AdminLayout>
   );
 }

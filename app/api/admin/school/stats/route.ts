@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";

@@ -6,7 +6,7 @@
  * 运行: npx tsx scripts/verify-market-content-shielding.ts
  */
 
-import { shieldNumericSequences } from "../lib/content-validator";
+import { shieldNumericSequences } from "@/lib/content/validator";
 
 function runTests() {
   let passed = 0;

@@ -17,7 +17,7 @@ import { StatCard } from "@/components/admin/stat-card";
 import { CommandShortcuts } from "@/components/admin/command-shortcuts";
 import { SetupGuide } from "@/components/admin/setup-guide";
 import { LiveClock } from "@/components/admin/live-clock";
-import type { SchoolAdminStats } from "@/lib/admin-actions";
+import type { SchoolAdminStats } from "@/lib/actions/admin";
 
 interface AdminDashboardContentProps {
   stats: SchoolAdminStats | null;

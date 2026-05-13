@@ -4,8 +4,8 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { createPortal } from "react-dom";
 import { X, ImageIcon, CheckCircle } from "lucide-react";
-import { cn, formatRelativeTime } from "@/lib/utils";
-import { markAsFound } from "@/lib/lost-found-actions";
+import { cn, formatRelativeTime } from "@/lib/core/utils";
+import { markAsFound } from "@/lib/actions/lost-found";
 import toast from "react-hot-toast";
 
 /** 失物招领详情项（与 getActiveLostFoundByPoi 返回结构一致） */
@@ -171,7 +171,7 @@ export function LostFoundDetailModal({
         aria-modal="true"
         aria-labelledby="lost-found-detail-modal-title"
       >
-        {/* Header */}
+        {/* 顶栏 */}
         <div className="modal-header flex shrink-0 flex-row items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
           <h3
             id="lost-found-detail-modal-title"
@@ -189,7 +189,7 @@ export function LostFoundDetailModal({
           </button>
         </div>
 
-        {/* Body */}
+        {/* 主体 */}
         <div className="modal-body min-h-0 flex-1 overflow-y-auto px-6 py-4 scrollbar-gutter-stable">
           {/* 图片轮播 */}
           {item.images.length > 0 && (

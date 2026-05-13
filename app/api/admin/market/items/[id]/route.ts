@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminMarketItemAction } from "@/lib/market-actions";
+import { adminMarketItemAction } from "@/lib/actions/market";
 
 /**
  * PATCH /api/admin/market/items/[id]
- * 管理员操作（校管/工作人员/超管）：
- * - delete: 下架（ACTIVE/LOCKED → isHidden）或彻底删除（isHidden/COMPLETED/EXPIRED/DELETED）
- * - relist: 重新上架，仅限管理员下架的商品（isHidden），禁止对 COMPLETED/DELETED/已过期 操作
+ * 管理员操作（仅校管/工作人员）：
+ * - delete: 下架（ACTIVE/LOCKED → HIDDEN）或彻底删除（HIDDEN/COMPLETED/EXPIRED/DELETED）
+ * - relist: 重新上架，仅限管理员下架的商品（HIDDEN），禁止对 COMPLETED/DELETED/已过期 操作
  * Body: { action: "delete" | "relist" }
  */
 export async function PATCH(

@@ -9,7 +9,7 @@ import { MarketTransactionDashboard } from "@/components/market/market-transacti
 import { MarketSchoolList } from "@/components/market/market-school-list";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Store, ShoppingBag } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
 
 type MarketTab = "browse" | "my";
 
@@ -104,6 +104,7 @@ function MarketPageContent() {
           <MarketTransactionDashboard
             currentUser={currentUser}
             schoolId={currentUser?.schoolId}
+            schoolName={schoolName}
             initialOpenItemId={activeTab === "my" ? openItemId : null}
             initialView={view === "buying" ? "buying" : view === "selling" ? "selling" : null}
           />

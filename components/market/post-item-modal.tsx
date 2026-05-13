@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { createMarketItem, updateMarketItem } from "@/lib/market-actions";
-import { uploadMarketImage } from "@/lib/upload-actions";
+import { createMarketItem, updateMarketItem } from "@/lib/actions/market";
+import { uploadMarketImage } from "@/lib/actions/upload";
 import { POICombobox } from "@/components/market/poi-combobox";
 import toast from "react-hot-toast";
 import { X, Loader2 } from "lucide-react";
 import type { MarketItemDetailData } from "@/components/market/market-item-detail-modal";
+import { Modal } from "@/components/ui/modal";
+import { FormField } from "@/components/ui/form-field";
 
 const MAX_IMAGES = 9;
 
@@ -193,9 +194,8 @@ export function PostItemModal({
 
   if (!isOpen) return null;
 
-  const modalContent = (
-    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-      <div className="modal-container">
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} containerClassName="bg-white">
         <div className="modal-header flex items-center justify-between px-4 py-3">
           <h2 className="text-lg font-semibold text-[#1A1A1B]">
             {isEditMode ? "编辑商品" : "发布商品"}
@@ -216,10 +216,7 @@ export function PostItemModal({
             </p>
           )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              物品名称 <span className="text-red-500">*</span>
-            </label>
+          <FormField label="物品名称" required>
             <input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -227,12 +224,9 @@ export function PostItemModal({
               maxLength={100}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
-          </div>
+          </FormField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              交易类型 <span className="text-red-500">*</span>
-            </label>
+          <FormField label="交易类型" required hint={isEditMode ? "编辑时不可修改交易类型" : undefined}>
             <select
               value={typeId}
               onChange={(e) => setTypeId(Number(e.target.value))}
@@ -245,15 +239,9 @@ export function PostItemModal({
                 </option>
               ))}
             </select>
-            {isEditMode && (
-              <p className="mt-1 text-xs text-gray-500">编辑时不可修改交易类型</p>
-            )}
-          </div>
+          </FormField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              物品分类 - 选填
-            </label>
+          <FormField label="物品分类 - 选填">
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
@@ -270,12 +258,14 @@ export function PostItemModal({
                 </option>
               ))}
             </select>
-          </div>
+          </FormField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              地点 (POI) <span className="text-red-500">*</span>
-            </label>
+          <FormField
+            label="地点 (POI)"
+            required
+            error={poiError || null}
+            hint="仅支持选择本校已有地点，输入关键词后从下拉列表中选择"
+          >
             <POICombobox
               schoolId={schoolId}
               value={selectedPOI}
@@ -286,15 +276,9 @@ export function PostItemModal({
               placeholder="搜索地点（如：越园）"
               error={poiError || undefined}
             />
-            <p className="mt-1 text-xs text-gray-500">
-              仅支持选择本校已有地点，输入关键词后从下拉列表中选择
-            </p>
-          </div>
+          </FormField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              描述 <span className="text-red-500">*</span>
-            </label>
+          <FormField label="描述" required>
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -303,13 +287,10 @@ export function PostItemModal({
               rows={4}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
-          </div>
+          </FormField>
 
           {needsPrice && (
-            <div>
-              <label className="mb-1 block text-sm font-medium text-gray-700">
-                价格 (元) <span className="text-red-500">*</span>
-              </label>
+            <FormField label="价格 (元)" required>
               <input
                 type="number"
                 step="0.01"
@@ -319,13 +300,10 @@ export function PostItemModal({
                 placeholder="0.00"
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
               />
-            </div>
+            </FormField>
           )}
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              图片（最多 {MAX_IMAGES} 张）
-            </label>
+          <FormField label={`图片（最多 ${MAX_IMAGES} 张）`}>
             <div className="flex flex-wrap gap-2">
               {Array.from({ length: Math.min(images.length + 1, MAX_IMAGES) }).map((_, i) => (
                 <ImageUpload
@@ -339,10 +317,9 @@ export function PostItemModal({
                 />
               ))}
             </div>
-          </div>
+          </FormField>
 
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">联系方式（可选）</label>
+          <FormField label="联系方式（可选）">
             <input
               value={contact}
               onChange={(e) => setContact(e.target.value)}
@@ -350,7 +327,7 @@ export function PostItemModal({
               maxLength={100}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
-          </div>
+          </FormField>
 
           </div>
 
@@ -372,11 +349,6 @@ export function PostItemModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
-
-  return typeof document !== "undefined"
-    ? createPortal(modalContent, document.body)
-    : modalContent;
 }

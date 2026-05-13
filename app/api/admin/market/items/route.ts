@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
     if (isAuthError(authResult)) return authResult;
     const auth = authResult;
 
+    if (auth.role === "SUPER_ADMIN") {
+      return NextResponse.json({ success: false, message: "超管请使用超管控制台" }, { status: 403 });
+    }
+
     const { searchParams } = new URL(request.url);
     const schoolId = searchParams.get("schoolId");
     const search = searchParams.get("search")?.trim();
@@ -27,13 +31,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: "schoolId 为必填项" }, { status: 400 });
     }
 
-    if (auth.role !== "SUPER_ADMIN" && auth.schoolId !== schoolId) {
+    if (auth.schoolId !== schoolId) {
       return NextResponse.json({ success: false, message: "只能查看本校数据" }, { status: 403 });
     }
 
     const where: Record<string, unknown> = { schoolId: schoolId.trim() };
     if (categoryId) where.categoryId = categoryId;
-    if (status && ["ACTIVE", "LOCKED", "COMPLETED", "DELETED"].includes(status)) {
+    if (status && ["ACTIVE", "LOCKED", "HIDDEN", "COMPLETED", "DELETED"].includes(status)) {
       where.status = status;
     }
     if (search) {
@@ -54,7 +58,6 @@ export async function GET(request: NextRequest) {
           typeId: true,
           status: true,
           reportCount: true,
-          isHidden: true,
           expiresAt: true,
           createdAt: true,
           selectedBuyerId: true,
@@ -81,7 +84,6 @@ export async function GET(request: NextRequest) {
         transactionType: item.transactionType,
         status: item.status,
         reportCount: item.reportCount,
-        isHidden: item.isHidden,
         expiresAt: item.expiresAt.toISOString(),
         createdAt: item.createdAt.toISOString(),
         user: item.user,

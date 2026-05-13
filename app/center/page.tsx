@@ -9,18 +9,21 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import {
   User,
+  Settings,
+  ShieldCheck,
+  LayoutDashboard,
   ShoppingBag,
   Calendar,
   Heart,
   Package,
   MessageSquare,
-  LayoutDashboard,
   LogOut,
   Loader2,
   ChevronRight,
 } from "lucide-react";
 import toast from "react-hot-toast";
 import { analytics } from "@/lib/analytics";
+import { getAdminHrefByRole, hasAdminAccess } from "@/lib/auth/role-access";
 
 interface CenterEntry {
   id: string;
@@ -35,12 +38,6 @@ function CenterContent() {
   const router = useRouter();
   const { currentUser, isLoggingOut } = useAuthStore();
   const { unreadCount, marketUnread, messagesUnread, fetchUnreadCounts } = useNotificationStore();
-
-  const hasAdminAccess =
-    currentUser?.role === "ADMIN" ||
-    currentUser?.role === "STAFF" ||
-    currentUser?.role === "SUPER_ADMIN";
-  const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
 
   useEffect(() => {
     if (currentUser?.id) {
@@ -68,18 +65,10 @@ function CenterContent() {
       : messagesUnread > 0
         ? "/messages"
         : "/profile";
+  const canAccessAdmin = hasAdminAccess(currentUser?.role);
+  const adminHref = getAdminHrefByRole(currentUser?.role);
 
   const entries: CenterEntry[] = [
-    ...(hasAdminAccess
-      ? [
-          {
-            id: "admin",
-            label: "管理后台",
-            href: isSuperAdmin ? "/super-admin" : "/admin",
-            icon: LayoutDashboard,
-          },
-        ]
-      : []),
     {
       id: "profile",
       label: "中控台",
@@ -87,6 +76,28 @@ function CenterContent() {
       icon: User,
       badge: unreadCount > 0 ? unreadCount : undefined,
     },
+    {
+      id: "account",
+      label: "账号管理",
+      href: "/profile",
+      icon: Settings,
+    },
+    {
+      id: "security",
+      label: "安全设置",
+      href: "/profile",
+      icon: ShieldCheck,
+    },
+    ...(canAccessAdmin
+      ? [
+          {
+            id: "admin-console",
+            label: "管理后台",
+            href: adminHref,
+            icon: LayoutDashboard,
+          } as CenterEntry,
+        ]
+      : []),
     {
       id: "market",
       label: "生存集市",
@@ -151,6 +162,7 @@ function CenterContent() {
             {currentUser?.nickname || "用户"}
           </h1>
           <p className="truncate text-sm text-[#7C7C7C]">{currentUser?.email}</p>
+          <p className="mt-1 text-xs text-[#7C7C7C]">积分：{currentUser?.points ?? 0}</p>
         </div>
       </div>
 

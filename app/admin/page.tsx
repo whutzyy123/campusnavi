@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth-server-actions";
-import { getSchoolAdminStats } from "@/lib/admin-actions";
-import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/auth/server-actions";
+import { getSchoolAdminStats } from "@/lib/actions/admin";
+import { prisma } from "@/lib/core/prisma";
 import { AdminLayout } from "@/components/admin-layout";
 import { AdminDashboardContent } from "@/components/admin/admin-dashboard-content";
 

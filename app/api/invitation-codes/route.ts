@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { generateInvitationCode } from "@/lib/auth-utils";
+import { prisma } from "@/lib/core/prisma";
+import { generateInvitationCode } from "@/lib/auth/utils";
 import { requireAdminOrSuperAdminJson, isAuthError } from "@/lib/api/guards";
 
 export const dynamic = "force-dynamic";

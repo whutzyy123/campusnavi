@@ -16,21 +16,21 @@ import { analytics } from "@/lib/analytics";
 import { useAuthStore, type User } from "@/store/use-auth-store";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
-import type { POIWithStatus } from "@/lib/poi-utils";
-import { getCategoryIcon } from "@/lib/poi-utils";
-import { reportLiveStatus, getActiveStatusesByPoi } from "@/lib/status-actions";
-import { toggleFavorite, checkIsFavorite } from "@/lib/favorite-actions";
-import { getActiveActivitiesByPoi } from "@/lib/activity-actions";
-import { getActiveLostFoundByPoi, checkLostFoundEvent } from "@/lib/lost-found-actions";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
+import { getCategoryIcon } from "@/lib/geo/poi-utils";
+import { reportLiveStatus, getActiveStatusesByPoi } from "@/lib/actions/status";
+import { toggleFavorite, checkIsFavorite } from "@/lib/actions/favorite";
+import { getActiveActivitiesByPoi } from "@/lib/actions/activity";
+import { getActiveLostFoundByPoi, checkLostFoundEvent } from "@/lib/actions/lost-found";
 import { LostFoundForm } from "@/components/lost-found-form";
 import { UserProfileModal } from "@/components/shared/user-profile-modal";
 import { ActivityDetailModal } from "@/components/activity-detail-modal";
-import { toggleCommentLike, deleteComment, reportComment, getPOIComments, createComment } from "@/lib/comment-actions";
-import { getPOIDetail } from "@/lib/poi-actions";
+import { toggleCommentLike, deleteComment, reportComment, getPOIComments, createComment } from "@/lib/actions/comment";
+import { getPOIDetail } from "@/lib/actions/poi";
 import toast from "react-hot-toast";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { Drawer } from "vaul";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/core/utils";
 import {
   CommentBlock,
   CommentTextarea,
@@ -1182,6 +1182,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     } else if (!isOpen) {
       drawerOpenTimeRef.current = null;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅依赖 id/name 等，避免 displayPoi 引用变化导致重复埋点
   }, [isOpen, displayPoi?.id, displayPoi?.name, selectedSubPOI, poi]);
 
   const handleClose = useCallback(() => {
@@ -1404,6 +1405,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
       }
     };
     check();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 用 id 稳定依赖，避免 displayPoi/poi 引用抖动重复请求
   }, [displayPoi?.id, poi?.id, isOpen, isAuthenticated]);
 
   // 加载实时情报列表（抽屉打开或 displayPoi 变化时）
@@ -1563,7 +1565,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     } finally {
       setIsTogglingFavorite(false);
     }
-  }, [displayPoi?.id, isAuthenticated, isTogglingFavorite]);
+  }, [displayPoi, isAuthenticated, isTogglingFavorite]);
 
   if (!displayPoi) return null;
 
@@ -1633,7 +1635,7 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
     setIsReporting(true);
 
     try {
-      const { reportPOI } = await import("@/lib/poi-actions");
+      const { reportPOI } = await import("@/lib/actions/poi");
       const result = await reportPOI(
         displayPoi.id,
         reportReason,
@@ -1769,12 +1771,12 @@ export function POIDrawer({ poi, schoolId, isOpen, onClose, onStatusUpdate, user
               <Drawer.Content
                 className="fixed bottom-0 left-0 right-0 z-[110] mx-auto flex w-full max-w-[var(--mobile-content-max)] flex-col bg-white h-[85dvh] rounded-t-[14px] focus:outline-none"
               >
-                {/* 1. Fixed Drag Handle Area (Grabbable) */}
+                {/* 1. 固定拖拽条区域（可抓取） */}
                 <div className="flex-none pt-4 pb-2 w-full flex justify-center bg-white rounded-t-[14px] cursor-grab active:cursor-grabbing">
                   <div className="w-12 h-1.5 bg-gray-300 rounded-full" aria-hidden />
                 </div>
 
-                {/* 2. Scrollable Content Area */}
+                {/* 2. 可滚动内容区 */}
                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-4 pb-8" data-vaul-no-drag>
                   <PoiDrawerContent
                     displayPoi={displayPoi}

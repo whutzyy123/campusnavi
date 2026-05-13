@@ -21,9 +21,9 @@ import {
   getActivitiesBySchool,
   deleteActivity,
   type ActivityWithPOI,
-} from "@/lib/activity-actions";
+} from "@/lib/actions/activity";
 import { getActivityStatus } from "@/types/activity";
-import { formatDateTime, truncateText } from "@/lib/utils";
+import { formatDateTime, truncateText } from "@/lib/core/utils";
 import { useDebounce } from "@/hooks/use-debounce";
 import { CalendarDays, Plus, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
@@ -189,6 +189,7 @@ export default function ActivitiesManagementPage() {
                   <TableBody>
                     {filteredActivities.map((a) => {
                       const isExpired = new Date(a.endAt) <= now;
+                      const activityStatus = getActivityStatus(a, now);
                       return (
                         <TableRow
                           key={a.id}
@@ -207,7 +208,7 @@ export default function ActivitiesManagementPage() {
                           <TableCell responsiveHide="sm">
                             <StatusBadge
                               domain="activity"
-                              status={status === "ONGOING" ? "ongoing" : status === "UPCOMING" ? "upcoming" : "expired"}
+                              status={activityStatus === "ONGOING" ? "ongoing" : activityStatus === "UPCOMING" ? "upcoming" : "expired"}
                             />
                           </TableCell>
                           <TableCell className="text-sm text-gray-600" responsiveHide="lg">

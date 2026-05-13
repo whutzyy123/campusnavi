@@ -31,7 +31,7 @@ import {
   TableRow,
 } from "@/components/table";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
-import { formatDate, formatDateTimeDisplay } from "@/lib/utils";
+import { formatDate, formatDateTimeDisplay } from "@/lib/core/utils";
 import { GenerateCodeModal } from "@/components/invitation-code-generate-modal";
 import {
   listInvitationCodes,
@@ -40,9 +40,9 @@ import {
   deleteCode,
   extendInvitationCode,
   type InvitationCodeListItem,
-} from "@/lib/invitation-actions";
-import { getSchoolUsers } from "@/lib/user-actions";
-import { getSchoolsList } from "@/lib/school-actions";
+} from "@/lib/actions/invitation";
+import { getSchoolUsers } from "@/lib/actions/user";
+import { getSchoolsList } from "@/lib/school/actions";
 
 interface StaffMember {
   id: string;

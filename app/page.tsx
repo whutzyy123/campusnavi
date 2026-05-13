@@ -11,10 +11,10 @@ import { POIDrawer } from "@/components/poi-drawer";
 import { LostFoundDetailModal, type LostFoundEventWithRelations } from "@/components/lost-found-detail-modal";
 import { motion } from "framer-motion";
 import { LocateFixed, Route, Eye, X } from "lucide-react";
-import type { POIWithStatus } from "@/lib/poi-utils";
-import { getPOIsBySchool } from "@/lib/poi-actions";
-import { getSchoolById, getSchoolsList, detectSchoolByLocation } from "@/lib/school-actions";
-import { analytics } from "@/lib/analytics";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
+import { getPOIsBySchool } from "@/lib/actions/poi";
+import { getSchoolById, getSchoolsList, detectSchoolByLocation } from "@/lib/school/actions";
+import { analytics } from "@/lib/analytics/index";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { NavInfoCard } from "@/components/nav-info-card";
 import { NavigationPanel } from "@/components/navigation-panel";
@@ -306,7 +306,7 @@ function HomeContent() {
       {/* POI 分类筛选面板 */}
       <POIFilterPanel schoolId={currentSchool?.id ?? null} />
 
-      {/* 生存集市 Overlay Drawer（Map-Centric） */}
+      {/* 生存集市：贴地图的叠加抽屉 */}
       <MarketOverlayDrawer />
 
       {/* 集市商品详情 Modal（选中时展示，z-[210]，含「在地图中查看」→ Focus Mode） */}

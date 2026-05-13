@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { POIWithStatus } from "@/lib/poi-utils";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
 
 interface MapSearchState {
   pois: POIWithStatus[];

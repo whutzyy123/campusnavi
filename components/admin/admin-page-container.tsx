@@ -58,7 +58,7 @@ export function AdminPageContainer({
       transition={{ duration: 0.2 }}
       className="flex flex-col h-full w-full overflow-hidden"
     >
-      {/* Header Section (Fixed) - shadow when scrolled */}
+      {/* 顶栏区（固定，滚动时显阴影） */}
       <header
         className={`flex-none p-6 pb-2 transition-shadow transition-colors duration-200 ${
           isScrolled ? "bg-white shadow-md border-b border-gray-200" : ""
@@ -79,7 +79,7 @@ export function AdminPageContainer({
         </div>
       </header>
 
-      {/* Content Section (Scrollable) */}
+      {/* 内容区（可滚动） */}
       <div
         ref={bodyRef}
         className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 pt-2 custom-scrollbar"
@@ -87,7 +87,7 @@ export function AdminPageContainer({
         {children}
       </div>
 
-      {/* Footer Section (Fixed) */}
+      {/* 底栏区（固定） */}
       {footer != null && (
         <footer className="flex-none border-t border-gray-200 bg-white p-4 shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
           {footer}

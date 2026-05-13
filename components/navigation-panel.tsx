@@ -8,9 +8,9 @@ import { analytics } from "@/lib/analytics";
 import { useNavigationStore } from "@/store/use-navigation-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useMapSearchStore } from "@/store/use-map-search-store";
-import { distanceMeters } from "@/lib/geo-utils";
-import { loadAMap } from "@/lib/amap-loader";
-import { getPOIsBySchool } from "@/lib/poi-actions";
+import { distanceMeters } from "@/lib/geo/geo-utils";
+import { loadAMap } from "@/lib/geo/amap-loader";
+import { getPOIsBySchool } from "@/lib/actions/poi";
 import { MapPin, ArrowUpDown, X, Search, ChevronDown, LocateFixed, Footprints, Bike } from "lucide-react";
 import toast from "react-hot-toast";
 

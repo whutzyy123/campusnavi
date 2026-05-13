@@ -9,8 +9,8 @@ import { MapPin, Plus, Trash2, Edit, MoreVertical, Filter, X, ChevronRight, Chev
 import toast from "react-hot-toast";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { POIEditDialog } from "@/components/poi-edit-dialog";
-import { getPOIsBySchool, deletePOI } from "@/lib/poi-actions";
-import { getSchoolCategoriesForAdmin } from "@/lib/category-actions";
+import { getPOIsBySchool, deletePOI } from "@/lib/actions/poi";
+import { getSchoolCategoriesForAdmin } from "@/lib/actions/category";
 
 interface POI {
   id: string;
@@ -413,7 +413,7 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
                       onFocusPOI?.(poi);
                     }}
                   >
-                    {/* Top Row: checkbox + name | actions */}
+                    {/* 首行：复选框+名称 | 操作 */}
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex min-w-0 flex-1 items-center gap-1">
                         <input
@@ -477,14 +477,14 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
                       </div>
                     </div>
 
-                    {/* Middle Row: category badge */}
+                    {/* 次行：分类徽标 */}
                     <div className="mt-1">
                       <span className="inline-block rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-600">
                         {poi.category}
                       </span>
                     </div>
 
-                    {/* Bottom Row: +二级点 or child count */}
+                    {/* 末行：子点或数量 */}
                     <div className="mt-1 flex items-center gap-2">
                       {isPrimary && onAddSubPOI && (
                         <button

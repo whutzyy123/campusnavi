@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { centroid } from "@turf/turf";
 import type { Feature, Polygon } from "geojson";
-import { computeLabelCenter } from "@/lib/campus-label-utils";
+import { computeLabelCenter } from "@/lib/geo/campus-label-utils";
 
 /**
  * PUT /api/admin/campuses/[id]

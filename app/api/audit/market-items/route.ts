@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSessionJson, isAuthError } from "@/lib/api/guards";
+import { MarketItemStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/audit/market-items
- * 获取被举报或已隐藏的生存集市商品（管理员审核用）
+ * 获取被举报或已下架的生存集市商品（管理员审核用）
  * Query: schoolId (必填), minReportCount? (默认 1)
  */
 export async function GET(request: NextRequest) {
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
         schoolId: schoolId.trim(),
         OR: [
           { reportCount: { gte: minReportCount } },
-          { isHidden: true },
+          { status: MarketItemStatus.HIDDEN },
         ],
       },
       select: {
@@ -53,7 +54,6 @@ export async function GET(request: NextRequest) {
         typeId: true,
         status: true,
         reportCount: true,
-        isHidden: true,
         expiresAt: true,
         createdAt: true,
         user: { select: { id: true, nickname: true, email: true } },
@@ -76,7 +76,6 @@ export async function GET(request: NextRequest) {
         transactionType: item.transactionType,
         status: item.status,
         reportCount: item.reportCount,
-        isHidden: item.isHidden,
         expiresAt: item.expiresAt.toISOString(),
         createdAt: item.createdAt.toISOString(),
         user: item.user,

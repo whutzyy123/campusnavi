@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { booleanPointInPolygon } from "@turf/turf";
 import type { Point, Polygon, Feature } from "geojson";
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
-import { upsertCategoryOverride, removeCategoryOverride } from "@/lib/category-utils";
+import { upsertCategoryOverride, removeCategoryOverride } from "@/lib/content/category-utils";
 
 // PATCH /api/admin/categories/[id]/override
 // 创建或更新分类覆盖（隐藏或修改名称）

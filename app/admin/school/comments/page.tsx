@@ -10,15 +10,15 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { StatusBadge } from "@/components/status-badge";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
-import { EmptyState } from "@/components/empty-state";
-import { formatDateTimeShort } from "@/lib/utils";
+import { PageEmpty, PageLoading } from "@/components/ui/page-state";
+import { formatDateTimeShort } from "@/lib/core/utils";
 import { Modal } from "@/components/ui/modal";
 import {
   getSchoolComments,
   getSchoolCommentDetail,
   reviewComment,
   hardDeleteComment,
-} from "@/lib/comment-actions";
+} from "@/lib/actions/comment";
 import { useDebounce } from "@/hooks/use-debounce";
 import toast from "react-hot-toast";
 import Image from "next/image";
@@ -34,6 +34,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 
 interface SchoolCommentItem {
   id: string;
@@ -248,13 +249,11 @@ function SchoolCommentsPageContent() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
-        <div className="p-4 lg:p-6">
-          <div className="mb-4">
-            <h1 className="text-xl font-semibold text-[#1A1A1B]">留言管理</h1>
-            <p className="mt-1 text-sm text-[#7C7C7C]">
-              查看和管理本校全部留言，支持按 POI 名称、用户昵称搜索及状态筛选
-            </p>
-          </div>
+        <AdminPageContainer
+          title="留言管理"
+          description="查看和管理本校全部留言，支持按 POI 名称、用户昵称搜索及状态筛选"
+          scrollKey={`${currentPage}-${debouncedSearch}-${statusFilter}`}
+        >
 
           {/* 筛选栏 */}
           <div className="mb-4">
@@ -278,11 +277,9 @@ function SchoolCommentsPageContent() {
           {/* 数据表格 */}
           <div className="min-w-0 overflow-x-auto rounded-lg border border-[#EDEFF1] bg-white">
             {isLoading ? (
-              <div className="flex justify-center py-16">
-                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#FF4500] border-t-transparent" />
-              </div>
+              <PageLoading className="flex justify-center py-16" />
             ) : comments.length === 0 ? (
-              <EmptyState
+              <PageEmpty
                 icon={MessageSquare}
                 title="暂无留言数据"
               />
@@ -375,12 +372,16 @@ function SchoolCommentsPageContent() {
                                   onClick: () => handleHide(c.id),
                                 },
                             "separator",
-                            {
-                              label: "彻底删除",
-                              icon: Trash2,
-                              onClick: () => handleDelete(c.id),
-                              variant: "destructive",
-                            },
+                            ...(c.isReviewed
+                              ? [
+                                  {
+                                    label: "彻底删除",
+                                    icon: Trash2,
+                                    onClick: () => handleDelete(c.id),
+                                    variant: "destructive" as const,
+                                  },
+                                ]
+                              : []),
                           ]}
                         />
                       </TableCell>
@@ -415,7 +416,7 @@ function SchoolCommentsPageContent() {
             onRestore={handleRestore}
             onDelete={handleDelete}
           />
-        </div>
+        </AdminPageContainer>
       </AdminLayout>
     </AuthGuard>
   );
@@ -594,21 +595,27 @@ function CommentDetailModal({
                 下架隐藏
               </button>
             )}
-            <button
-              onClick={async () => {
-                const ok = await onDelete(comment.id);
-                if (ok) onClose();
-              }}
-              disabled={processingId === comment.id}
-              className="flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-            >
-              {processingId === comment.id ? (
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
-              ) : (
-                <Trash2 className="h-4 w-4" />
-              )}
-              彻底删除
-            </button>
+            {comment.isReviewed ? (
+              <button
+                onClick={async () => {
+                  const ok = await onDelete(comment.id);
+                  if (ok) onClose();
+                }}
+                disabled={processingId === comment.id}
+                className="flex items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {processingId === comment.id ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                彻底删除
+              </button>
+            ) : (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700">
+                需先完成审核（隐藏或恢复）后，才可彻底删除
+              </div>
+            )}
           </div>
         </>
       ) : null}

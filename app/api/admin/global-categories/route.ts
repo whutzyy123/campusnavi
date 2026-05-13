@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
-import { getPaginationMeta } from "@/lib/utils";
+import { getPaginationMeta } from "@/lib/core/utils";
 
 // GET /api/admin/global-categories
 // 获取所有全局分类（仅超级管理员）

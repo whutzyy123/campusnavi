@@ -54,7 +54,7 @@ export function POIFilterPanel({ schoolId, className }: POIFilterPanelProps) {
     const fetchCategories = async () => {
       setIsLoading(true);
       try {
-        const { getCategoriesForFilter } = await import("@/lib/category-actions");
+        const { getCategoriesForFilter } = await import("@/lib/actions/category");
         const result = await getCategoriesForFilter(effectiveSchoolId);
         if (result.success && result.data) {
           const { regular = [], convenience = [] } = result.data;

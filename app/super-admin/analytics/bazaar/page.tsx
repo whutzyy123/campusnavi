@@ -19,12 +19,12 @@ import {
 import { ChartCard } from "@/components/admin/chart-card";
 import { ChartLoadingState, ChartEmptyState } from "@/components/admin/chart-states";
 import { AnalyticsGranularityTabs, type Granularity } from "@/components/admin/analytics-granularity-tabs";
-import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics-utils";
+import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics/utils";
 import {
   getMarketListingsTrend,
   getMarketByType,
   getMarketBySchool,
-} from "@/lib/admin-analytics-actions";
+} from "@/lib/actions/admin-analytics";
 
 const PIE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
 

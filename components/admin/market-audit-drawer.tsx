@@ -6,8 +6,18 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, History, User, Pencil, CheckCircle, RotateCcw, Shield, Info, FileDown, Loader2 } from "lucide-react";
 import Image from "next/image";
 import toast from "react-hot-toast";
-import { getAdminItemAuditTrail, generateMarketAuditReport, type AdminItemAuditTrailResult } from "@/lib/market-actions";
-import { cn, formatDateTime } from "@/lib/utils";
+import { getAdminItemAuditTrail, generateMarketAuditReport, type AdminItemAuditTrailResult } from "@/lib/actions/market";
+import { cn, formatDateTime } from "@/lib/core/utils";
+
+/** 商品状态枚举 → 展示文案 */
+const MARKET_STATUS_LABELS: Record<string, string> = {
+  ACTIVE: "在售",
+  LOCKED: "已锁定",
+  COMPLETED: "交易完成",
+  DELETED: "已删除",
+  EXPIRED: "已过期",
+  HIDDEN: "已隐藏",
+};
 
 const ACTION_LABELS: Record<string, string> = {
   INTENTION_CREATED: "提交了意向",
@@ -228,7 +238,7 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
           aria-modal="true"
           aria-labelledby="audit-drawer-title"
         >
-          {/* Header */}
+          {/* 顶栏 */}
           <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 py-3 border-b border-gray-200">
             <div className="flex items-center gap-2 min-w-0">
               <History className="h-5 w-5 shrink-0 text-[#FF4500]" />
@@ -262,7 +272,7 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
             </div>
           </div>
 
-          {/* Content - scrollable */}
+          {/* 可滚动内容区 */}
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-none px-4 py-4">
             {isLoading ? (
               <TimelineSkeleton />
@@ -270,11 +280,13 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
               <div className="py-8 text-center text-red-600">{error}</div>
             ) : data ? (
               <>
-                {/* Item summary */}
+                {/* 商品摘要 */}
                 <div className="mb-6 p-3 rounded-lg bg-gray-50 border border-gray-100">
                   <p className="text-sm font-medium text-gray-900 truncate">{data.item.title}</p>
                   <div className="mt-1 flex flex-wrap gap-2 text-xs text-gray-500">
-                    <span>状态: {data.item.status}</span>
+                    <span>
+                      状态: {MARKET_STATUS_LABELS[data.item.status] ?? data.item.status}
+                    </span>
                     {data.item.category && (
                       <span>· 分类: {data.item.category.name}</span>
                     )}
@@ -282,7 +294,7 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
                   </div>
                 </div>
 
-                {/* Timeline */}
+                {/* 时间线 */}
                 <div className="relative">
                   <div className="absolute left-[11rem] top-6 bottom-6 w-0.5 bg-gray-200" />
                   <div className="space-y-6">

@@ -14,8 +14,8 @@ import {
 import { ChartCard } from "@/components/admin/chart-card";
 import { ChartLoadingState } from "@/components/admin/chart-states";
 import { AnalyticsGranularityTabs, type Granularity } from "@/components/admin/analytics-granularity-tabs";
-import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics-utils";
-import { getNotificationsTrend } from "@/lib/admin-analytics-actions";
+import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics/utils";
+import { getNotificationsTrend } from "@/lib/actions/admin-analytics";
 
 export default function HealthAnalyticsPage() {
   const [days, setDays] = useState<Granularity>(30);

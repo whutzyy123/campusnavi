@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { createPortal } from "react-dom";
 import { X, Eye, EyeOff, KeyRound, AlertTriangle } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/core/utils";
+import { Modal } from "@/components/ui/modal";
+import { FormField } from "@/components/ui/form-field";
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -72,17 +73,10 @@ export function ResetPasswordModal({
 
   if (!isOpen) return null;
 
-  const content = (
-    <div
-      className="fixed inset-0 z-modal-overlay flex items-center justify-center bg-black/50 p-4"
-      onClick={(e) => e.target === e.currentTarget && handleClose()}
-    >
-      <div
-        className="modal-container w-full max-w-md rounded-xl bg-white shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Modal isOpen={isOpen} onClose={handleClose} containerClassName="w-full max-w-md rounded-xl bg-white shadow-xl">
         <form onSubmit={handleSubmit}>
-          {/* Header */}
+          {/* 标题栏 */}
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100">
@@ -106,19 +100,16 @@ export function ResetPasswordModal({
             </button>
           </div>
 
-          {/* Warning */}
+          {/* 风险说明 */}
           <div className="mx-6 mt-4 flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
             <span>此操作将立即生效，用户需使用新密码登录。</span>
           </div>
 
-          {/* Body */}
+          {/* 主体 */}
           <div className="space-y-4 px-6 py-5">
-            {/* New Password */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                新密码 <span className="text-red-500">*</span>
-              </label>
+            {/* 新密码 */}
+            <FormField label="新密码" required>
               <div className="relative">
                 <input
                   type={showNewPassword ? "text" : "password"}
@@ -152,13 +143,10 @@ export function ResetPasswordModal({
                   密码长度至少为 {MIN_PASSWORD_LENGTH} 个字符
                 </p>
               )}
-            </div>
+            </FormField>
 
-            {/* Confirm Password */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700">
-                确认新密码 <span className="text-red-500">*</span>
-              </label>
+            {/* 确认密码 */}
+            <FormField label="确认新密码" required>
               <div className="relative">
                 <input
                   type={showConfirmPassword ? "text" : "password"}
@@ -192,7 +180,7 @@ export function ResetPasswordModal({
               {confirmPassword && !passwordsMatch && (
                 <p className="mt-1 text-xs text-red-500">两次输入的密码不一致</p>
               )}
-            </div>
+            </FormField>
 
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -201,7 +189,7 @@ export function ResetPasswordModal({
             )}
           </div>
 
-          {/* Footer */}
+          {/* 底部操作 */}
           <div className="flex gap-3 border-t border-gray-200 px-6 py-4">
             <button
               type="button"
@@ -220,9 +208,6 @@ export function ResetPasswordModal({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

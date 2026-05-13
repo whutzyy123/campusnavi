@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { reportPOI } from "@/lib/poi-actions";
+import { reportPOI } from "@/lib/actions/poi";
 
 export const dynamic = "force-dynamic";
 

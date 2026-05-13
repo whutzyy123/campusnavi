@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
-import { upsertCategoryOverride } from "@/lib/category-utils";
+import { upsertCategoryOverride } from "@/lib/content/category-utils";
 
 // DELETE /api/admin/categories/[id]
 // 删除分类（全局分类创建覆盖记录，私有分类物理删除）

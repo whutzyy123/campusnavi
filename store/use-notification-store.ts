@@ -3,7 +3,7 @@ import {
   getUnreadNotificationCount,
   getUnreadNotificationCounts,
   type UnreadCounts,
-} from "@/lib/notification-actions";
+} from "@/lib/actions/notification";
 
 interface NotificationState {
   unreadCount: number;

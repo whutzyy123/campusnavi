@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import { X, User } from "lucide-react";
-import { getPublicProfile, type PublicProfile } from "@/lib/user-actions";
-import { cn } from "@/lib/utils";
+import { getPublicProfile, type PublicProfile } from "@/lib/actions/user";
+import { cn } from "@/lib/core/utils";
 
 interface UserProfileModalProps {
   userId: string | null;

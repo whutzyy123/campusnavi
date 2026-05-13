@@ -5,7 +5,7 @@
 
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuthStore } from "@/store/use-auth-store";
 
@@ -19,6 +19,11 @@ export function AuthGuard({ children, requiredRole = "ADMIN", requireSchoolId = 
   const router = useRouter();
   const pathname = usePathname();
   const { currentUser, isAuthenticated, isInitialized, initializeAuth } = useAuthStore();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // 组件挂载时立即触发一次用户信息获取
   useEffect(() => {
@@ -58,7 +63,7 @@ export function AuthGuard({ children, requiredRole = "ADMIN", requireSchoolId = 
   }, [isInitialized, isAuthenticated, currentUser, requiredRole, requireSchoolId, router, pathname]);
 
   // 如果还未初始化，显示加载界面（严禁执行重定向）
-  if (!isInitialized) {
+  if (!mounted || !isInitialized) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white">
         <div className="text-center">

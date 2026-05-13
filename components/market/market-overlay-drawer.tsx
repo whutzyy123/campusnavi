@@ -13,10 +13,10 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   getPublicMarketItems,
   getMarketCategories,
-} from "@/lib/market-actions";
-import { getPOIsBySchool } from "@/lib/poi-actions";
+} from "@/lib/actions/market";
+import { getPOIsBySchool } from "@/lib/actions/poi";
 import { PostItemModal } from "@/components/market/post-item-modal";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/core/utils";
 
 interface MarketCategoryItem {
   id: string;

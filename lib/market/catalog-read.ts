@@ -1,6 +1,6 @@
 "use server";
 
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import type { MarketActionResult, MarketCategoriesByType, MarketCategoriesResult } from "./types";
 
 /**

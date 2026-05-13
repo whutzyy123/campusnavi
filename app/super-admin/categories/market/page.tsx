@@ -15,7 +15,7 @@ import {
   deleteMarketCategory,
   toggleTypeCategory,
   getAdminMarketCategoriesConfig,
-} from "@/lib/market-actions";
+} from "@/lib/actions/market";
 import {
   ShoppingBag,
   Plus,
@@ -62,7 +62,7 @@ export default function SuperAdminMarketCategoriesPage() {
   const [selectedTypeId, setSelectedTypeId] = useState<number | null>(null);
   const initializedTypeRef = useRef(false);
 
-  // Category modal
+  // 物品分类弹窗
   const [catModalOpen, setCatModalOpen] = useState(false);
   const [catModalMode, setCatModalMode] = useState<"create" | "edit">("create");
   const [catModalEditingId, setCatModalEditingId] = useState<string | null>(null);
@@ -70,7 +70,7 @@ export default function SuperAdminMarketCategoriesPage() {
   const [catModalOrder, setCatModalOrder] = useState(0);
   const [catModalSubmitting, setCatModalSubmitting] = useState(false);
 
-  // Transaction type modal
+  // 交易类型弹窗
   const [typeModalOpen, setTypeModalOpen] = useState(false);
   const [typeModalMode, setTypeModalMode] = useState<"create" | "edit">("create");
   const [typeModalEditingId, setTypeModalEditingId] = useState<number | null>(null);
@@ -107,7 +107,7 @@ export default function SuperAdminMarketCategoriesPage() {
     fetchData();
   }, [fetchData]);
 
-  // --- Category CRUD ---
+  // --- 物品分类增删改 ---
   const openCreateCategoryModal = () => {
     setCatModalMode("create");
     setCatModalEditingId(null);
@@ -182,7 +182,7 @@ export default function SuperAdminMarketCategoriesPage() {
     }
   };
 
-  // --- Transaction Type CRUD ---
+  // --- 交易类型增删改 ---
   const openCreateTypeModal = () => {
     setTypeModalMode("create");
     setTypeModalEditingId(null);
@@ -269,7 +269,7 @@ export default function SuperAdminMarketCategoriesPage() {
     }
   };
 
-  // --- Type-Category Mapping ---
+  // --- 类型与分类关联 ---
   const handleToggleMapping = async (typeId: number, categoryId: string) => {
     const key = `${typeId}-${categoryId}`;
     setToggling(key);
@@ -318,7 +318,7 @@ export default function SuperAdminMarketCategoriesPage() {
               </TabsTrigger>
             </TabsList>
 
-            {/* Tab 1: Transaction Types */}
+            {/* 标签 1：交易类型 */}
             <TabsContent value="types" className="mt-4">
               <section className="rounded-xl border border-[#EDEFF1] bg-white overflow-hidden">
                 <div className="flex items-center justify-between border-b border-[#EDEFF1] bg-[#F6F7F8] px-4 py-3">
@@ -347,7 +347,7 @@ export default function SuperAdminMarketCategoriesPage() {
                       <thead>
                         <tr className="border-b border-[#EDEFF1] bg-[#FAFAFA]">
                           <th className="px-4 py-3 text-left font-medium text-[#1A1A1B]">名称</th>
-                          <th className="px-4 py-3 text-left font-medium text-[#7C7C7C]">Code</th>
+                          <th className="px-4 py-3 text-left font-medium text-[#7C7C7C]">业务编码</th>
                           <th className="px-4 py-3 text-left font-medium text-[#7C7C7C]">排序</th>
                           <th className="px-4 py-3 text-left font-medium text-[#7C7C7C]">状态</th>
                           <th className="px-4 py-3 text-right font-medium text-[#1A1A1B]">操作</th>
@@ -397,7 +397,7 @@ export default function SuperAdminMarketCategoriesPage() {
               </section>
             </TabsContent>
 
-            {/* Tab 2: Global Item Categories */}
+            {/* 标签 2：全局物品分类 */}
             <TabsContent value="categories" className="mt-4">
               <section className="rounded-xl border border-[#EDEFF1] bg-white overflow-hidden">
                 <div className="flex items-center justify-between border-b border-[#EDEFF1] bg-[#F6F7F8] px-4 py-3">
@@ -473,7 +473,7 @@ export default function SuperAdminMarketCategoriesPage() {
               </section>
             </TabsContent>
 
-            {/* Tab 3: Type-Category Mapping */}
+            {/* 标签 3：类型与分类关联 */}
             <TabsContent value="mapping" className="mt-4">
               <section className="rounded-xl border border-[#EDEFF1] bg-white overflow-hidden">
                 <div className="border-b border-[#EDEFF1] bg-[#F6F7F8] px-4 py-3">
@@ -483,7 +483,7 @@ export default function SuperAdminMarketCategoriesPage() {
                   </p>
                 </div>
                 <div className="flex flex-col md:flex-row min-h-[320px]">
-                  {/* Left: Transaction Types */}
+                  {/* 左侧：交易类型列表 */}
                   <div className="md:w-64 border-b md:border-b-0 md:border-r border-[#EDEFF1] bg-[#FAFAFA] p-4">
                     <p className="mb-2 text-xs font-medium text-[#7C7C7C]">交易类型</p>
                     {transactionTypes.length === 0 ? (
@@ -506,7 +506,7 @@ export default function SuperAdminMarketCategoriesPage() {
                       </div>
                     )}
                   </div>
-                  {/* Right: Categories with checkboxes */}
+                  {/* 右侧：分类多选 */}
                   <div className="flex-1 p-4">
                     <p className="mb-3 text-xs font-medium text-[#7C7C7C]">
                       {selectedTypeId != null
@@ -563,7 +563,7 @@ export default function SuperAdminMarketCategoriesPage() {
           </Tabs>
         </div>
 
-        {/* Category Add/Edit Modal */}
+        {/* 物品分类 新建/编辑 弹窗 */}
         <Modal
           isOpen={catModalOpen}
           onClose={() => setCatModalOpen(false)}
@@ -619,7 +619,7 @@ export default function SuperAdminMarketCategoriesPage() {
           </div>
         </Modal>
 
-        {/* Transaction Type Add/Edit Modal */}
+        {/* 交易类型 新建/编辑 弹窗 */}
         <Modal
           isOpen={typeModalOpen}
           onClose={() => setTypeModalOpen(false)}

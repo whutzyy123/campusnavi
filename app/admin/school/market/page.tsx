@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect, useCallback } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AuthGuard } from "@/components/auth-guard";
@@ -14,14 +14,16 @@ import { ShoppingBag, Loader2, Trash2, RotateCcw, EyeOff, History } from "lucide
 import { TableActions } from "@/components/ui/table-actions";
 import toast from "react-hot-toast";
 import Image from "next/image";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { MarketAuditDrawer } from "@/components/admin/market-audit-drawer";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   getAdminMarketItems,
   adminMarketItemAction,
   getMarketCategories,
-} from "@/lib/market-actions";
-import { formatDate } from "@/lib/utils";
+} from "@/lib/actions/market";
+import { formatDate } from "@/lib/core/utils";
 
 const STATUS_FILTERS = [
   { value: "", label: "全部" },
@@ -38,7 +40,6 @@ interface MarketItemRow {
   transactionType: { id: number; name: string; code: string } | null;
   status: string;
   reportCount: number;
-  isHidden: boolean;
   expiresAt: string;
   createdAt: string;
   user: { id: string; nickname: string | null; email: string };
@@ -51,7 +52,16 @@ interface MarketItemRow {
 }
 
 export default function AdminMarketPage() {
+  return (
+    <Suspense fallback={<LoadingSpinner />}>
+      <AdminMarketPageContent />
+    </Suspense>
+  );
+}
+
+function AdminMarketPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { currentUser } = useAuthStore();
   const [items, setItems] = useState<MarketItemRow[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
@@ -70,6 +80,7 @@ export default function AdminMarketPage() {
   } | null>(null);
 
   const schoolId = currentUser?.schoolId;
+  const currentPage = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
 
   const fetchItems = useCallback(async () => {
     if (!schoolId) return;
@@ -79,7 +90,7 @@ export default function AdminMarketPage() {
         search: debouncedSearch || undefined,
         categoryId: filterCategory || undefined,
         status: filterStatus || undefined,
-        page: 1,
+        page: currentPage,
         limit: 20,
       });
       if (result.success && result.data) {
@@ -100,7 +111,24 @@ export default function AdminMarketPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [schoolId, debouncedSearch, filterCategory, filterStatus]);
+  }, [schoolId, debouncedSearch, filterCategory, filterStatus, currentPage]);
+
+  const goToPage = useCallback(
+    (page: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (page <= 1) params.delete("page");
+      else params.set("page", String(page));
+      const query = params.toString();
+      router.replace(query ? `/admin/school/market?${query}` : "/admin/school/market");
+    },
+    [router, searchParams]
+  );
+
+  useEffect(() => {
+    if (currentPage > 1) {
+      goToPage(1);
+    }
+  }, [debouncedSearch, filterCategory, filterStatus, currentPage, goToPage]);
 
   const handleAdminAction = useCallback(
     async (itemId: string, action: "delete" | "relist") => {
@@ -178,7 +206,9 @@ export default function AdminMarketPage() {
                 <button
                   key={value || "all"}
                   type="button"
-                  onClick={() => setFilterStatus(value)}
+                  onClick={() => {
+                    setFilterStatus(value);
+                  }}
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                     filterStatus === value
                       ? "bg-[#FF4500] text-white"
@@ -273,15 +303,11 @@ export default function AdminMarketPage() {
                         </TableCell>
                         <TableCell responsiveHide="sm">{item.poi?.name ?? "—"}</TableCell>
                         <TableCell responsiveHide="sm">
-                          {item.isHidden ? (
-                            <StatusBadge domain="market" status="HIDDEN" />
-                          ) : (
-                            <StatusBadge domain="market" status={item.status} />
-                          )}
+                          <StatusBadge domain="market" status={item.status} />
                         </TableCell>
                         <TableCell responsiveHide="sm">
                           {item.reportCount > 0 ? (
-                            <StatusBadge domain="market" status="HIDDEN" labelOverride={`${item.reportCount} 次`} variantOverride="error" />
+                            <StatusBadge domain="market" status="REPORTED" labelOverride={`${item.reportCount} 次`} variantOverride="error" />
                           ) : (
                             "—"
                           )}
@@ -293,14 +319,15 @@ export default function AdminMarketPage() {
                           <TableActions
                             disabled={processingActionId === item.id}
                             items={(() => {
+                              const isHidden = item.status === "HIDDEN";
                               const canRelist =
-                                item.isHidden && (item.status === "ACTIVE" || item.status === "LOCKED");
+                                isHidden;
                               const canHide =
+                                !isHidden &&
                                 (item.status === "ACTIVE" || item.status === "LOCKED") &&
-                                !item.isHidden &&
                                 !(item.status === "ACTIVE" && new Date(item.expiresAt) < new Date());
                               const canDelete =
-                                item.isHidden ||
+                                isHidden ||
                                 item.status === "COMPLETED" ||
                                 item.status === "DELETED" ||
                                 (item.status === "ACTIVE" && new Date(item.expiresAt) < new Date());
@@ -350,6 +377,16 @@ export default function AdminMarketPage() {
                 </Table>
               </div>
             )}
+            {pagination && pagination.total > 0 ? (
+              <div className="mt-4 flex justify-center">
+                <PaginationControls
+                  total={pagination.total}
+                  pageCount={pagination.pageCount}
+                  currentPage={pagination.currentPage}
+                  limit={pagination.limit}
+                />
+              </div>
+            ) : null}
           </Card>
 
           <MarketAuditDrawer

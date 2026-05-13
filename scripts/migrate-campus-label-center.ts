@@ -8,7 +8,7 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { computeLabelCenter } from "@/lib/campus-label-utils";
+import { computeLabelCenter } from "@/lib/geo/campus-label-utils";
 
 const prisma = new PrismaClient();
 

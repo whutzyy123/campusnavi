@@ -34,7 +34,6 @@ export interface MarketTransactionItem {
   buyer?: { id: string; nickname: string | null };
   seller?: { id: string; nickname: string | null };
   hasIntention?: boolean;
-  isHidden?: boolean;
   buyerRatingOfSeller?: boolean | null;
   sellerRatingOfBuyer?: boolean | null;
 }

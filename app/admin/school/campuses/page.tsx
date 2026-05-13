@@ -8,9 +8,9 @@ import { useSchoolStore } from "@/store/use-school-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
-import { loadAMapPlugin } from "@/lib/amap-loader";
+import { loadAMapPlugin } from "@/lib/geo/amap-loader";
 import polylabel from "polylabel";
-import { ensureLngLat } from "@/lib/campus-label-utils";
+import { ensureLngLat } from "@/lib/geo/campus-label-utils";
 import toast from "react-hot-toast";
 import {
   getSchoolById,
@@ -18,7 +18,7 @@ import {
   createCampus,
   updateCampus,
   deleteCampus,
-} from "@/lib/school-actions";
+} from "@/lib/school/actions";
 import {
   Plus,
   Edit2,
@@ -1165,7 +1165,7 @@ export default function CampusManagementPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [newCampusName, newCampusBoundary, getTargetSchoolId, currentUser?.role, fetchCampuses]);
+  }, [newCampusName, newCampusBoundary, getTargetSchoolId, fetchCampuses]);
 
   // 取消创建新校区（名称输入阶段）
   const handleCancelNewCampus = useCallback(() => {

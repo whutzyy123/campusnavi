@@ -15,13 +15,13 @@ import {
 import { ChartCard } from "@/components/admin/chart-card";
 import { ChartLoadingState, ChartEmptyState } from "@/components/admin/chart-states";
 import { AnalyticsGranularityTabs, type Granularity } from "@/components/admin/analytics-granularity-tabs";
-import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics-utils";
+import { formatChartDate, tooltipLabelFormatter } from "@/lib/analytics/utils";
 import {
   getPoiTrend,
   getCommentsTrend,
   getContentBySchool,
   type TimeSeriesPoint,
-} from "@/lib/admin-analytics-actions";
+} from "@/lib/actions/admin-analytics";
 
 export default function ContentAnalyticsPage() {
   const [days, setDays] = useState<Granularity>(30);

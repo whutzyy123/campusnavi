@@ -8,7 +8,7 @@ import {
   submitIntention,
   selectBuyerAndLock,
   deleteMarketItem,
-} from "@/lib/market-actions";
+} from "@/lib/actions/market";
 import { useMarketStore } from "@/store/use-market-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -40,7 +40,7 @@ export function MarketItemDetailModalController() {
       const result = await getMarketItemDetail(id);
       if (result.success && result.data) {
         const d = result.data as MarketItemDetailData;
-        if (d.masked) {
+        if (d.status === "HIDDEN") {
           setDetailItem({
             ...d,
             title: "内容已被屏蔽",
@@ -49,7 +49,6 @@ export function MarketItemDetailModalController() {
             poi: { id: "", name: "—" },
             category: { id: "", name: "—" },
             user: { id: "", nickname: null },
-            buyerId: null,
             selectedBuyerId: null,
             hasSubmittedIntention: false,
           });

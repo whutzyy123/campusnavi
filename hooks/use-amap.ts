@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useState } from "react";
-import { loadAMap, isAMapLoaded, getAMapInstance } from "@/lib/amap-loader";
+import { loadAMap, isAMapLoaded, getAMapInstance } from "@/lib/geo/amap-loader";
 
 export function useAMap() {
   const [amap, setAmap] = useState<any>(null);
@@ -23,7 +23,7 @@ export function useAMap() {
       })
       .catch((err) => {
         if (mounted) {
-          setError(err instanceof Error ? err : new Error("Failed to load AMap"));
+          setError(err instanceof Error ? err : new Error("高德地图加载失败"));
           setLoading(false);
         }
       });

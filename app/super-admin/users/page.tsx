@@ -8,10 +8,9 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
-import { EmptyState } from "@/components/empty-state";
+import { PageEmpty, PageLoading } from "@/components/ui/page-state";
 import { Users, Ban, Key, Filter, X, Trash2, AlertTriangle, Info } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
-import toast from "react-hot-toast";
 import { StatusBadge } from "@/components/status-badge";
 import { SearchInput } from "@/components/shared/search-input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/table";
@@ -23,10 +22,13 @@ import {
   deactivateUser,
   deleteUser,
   type AdminUserDetail,
-} from "@/lib/user-actions";
+} from "@/lib/actions/user";
 import { AdminUserDetailModal } from "@/components/admin/admin-user-detail-modal";
 import { ResetPasswordModal } from "@/components/admin/reset-password-modal";
-import { getSchoolsList } from "@/lib/school-actions";
+import { getSchoolsList } from "@/lib/school/actions";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
+import { ListPageScaffold } from "@/components/admin/list-page-scaffold";
+import { notify } from "@/lib/ui/notify";
 
 interface User {
   id: string;
@@ -119,11 +121,11 @@ function UserManagementPageContent() {
         setUsers(result.data);
         setPagination(result.pagination || null);
       } else {
-        toast.error(result.error || "获取用户列表失败");
+        notify.error(result.error || "获取用户列表失败");
       }
     } catch (error) {
       console.error("获取用户列表失败:", error);
-      toast.error(error instanceof Error ? error.message : "获取用户列表失败");
+      notify.error(error instanceof Error ? error.message : "获取用户列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -138,7 +140,7 @@ function UserManagementPageContent() {
   const handleToggleStatus = async (user: User) => {
     if (!currentUser?.id) return;
     if (user.id === currentUser.id) {
-      toast.error("不能操作自己的账户");
+      notify.error("不能操作自己的账户");
       return;
     }
 
@@ -150,10 +152,10 @@ function UserManagementPageContent() {
       if (!result.success) {
         throw new Error(result.message || "操作失败");
       }
-      toast.success(result.message || (newStatus === "ACTIVE" ? "已激活" : "已停用"));
+      notify.success(result.message || (newStatus === "ACTIVE" ? "已激活" : "已停用"));
       await fetchUsers();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "操作失败");
+      notify.error(error instanceof Error ? error.message : "操作失败");
     } finally {
       setIsPatching(false);
     }
@@ -167,7 +169,7 @@ function UserManagementPageContent() {
       (deleteTarget.nickname && deleteConfirm.trim() === deleteTarget.nickname) ||
       (deleteTarget.id && deleteConfirm.trim() === deleteTarget.id);
     if (!isConfirmed) {
-      toast.error("请输入正确的邮箱、昵称或用户ID以确认删除");
+      notify.error("请输入正确的邮箱、昵称或用户ID以确认删除");
       return;
     }
 
@@ -177,12 +179,12 @@ function UserManagementPageContent() {
       if (!result.success) {
         throw new Error(result.message || "删除失败");
       }
-      toast.success(result.message || "用户已永久删除");
+      notify.success(result.message || "用户已永久删除");
       setDeleteTarget(null);
       setDeleteConfirm("");
       await fetchUsers();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "删除失败");
+      notify.error(error instanceof Error ? error.message : "删除失败");
     } finally {
       setIsDeleting(false);
     }
@@ -202,10 +204,10 @@ function UserManagementPageContent() {
     const result = await adminResetUserPassword(userId, newPassword);
     if (result.success) {
       const nickname = selectedUserForReset?.nickname || selectedUserForReset?.email || "该用户";
-      toast.success(`已为 ${nickname} 重置密码成功`);
+      notify.success(`已为 ${nickname} 重置密码成功`);
       closeResetModal();
     } else {
-      toast.error(result.message);
+      notify.error(result.message);
     }
     return result;
   };
@@ -220,11 +222,11 @@ function UserManagementPageContent() {
       if (result.success && result.data) {
         setProfileDetail(result.data);
       } else {
-        toast.error(result.error || "获取资料失败");
+        notify.error(result.error || "获取资料失败");
         closeViewModal();
       }
     }).catch(() => {
-      toast.error("获取资料失败");
+      notify.error("获取资料失败");
       closeViewModal();
     }).finally(() => {
       setProfileLoading(false);
@@ -240,15 +242,15 @@ function UserManagementPageContent() {
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="flex flex-col h-full p-4 md:p-6 gap-4">
-          {/* Header Section */}
-          <div>
-            <h2 className="text-xl font-semibold text-gray-900">全局用户管理</h2>
-            <p className="mt-1 text-sm text-gray-500">查看和管理所有注册用户</p>
-          </div>
+        <AdminPageContainer
+          title="全局用户管理"
+          description="查看和管理所有注册用户"
+          scrollKey={`${roleFilter}-${schoolFilter}-${debouncedSearchQuery}-${searchField}-${searchParams.get("page") || "1"}`}
+        >
 
-          {/* Filter Bar Card */}
-          <Card className="flex-shrink-0">
+          <ListPageScaffold
+            filters={
+              <Card className="flex-shrink-0">
             <div className="flex flex-wrap gap-4">
               <div className="flex items-center gap-2">
                 <Filter className="h-4 w-4 text-gray-500" />
@@ -328,17 +330,14 @@ function UserManagementPageContent() {
               )}
             </div>
           </Card>
-
-          {/* Table Container */}
-          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+            }
+          >
             <div className="h-full min-h-0 rounded-lg bg-white shadow overflow-hidden flex flex-col">
               <div className="h-full min-h-0 overflow-y-auto custom-scrollbar p-6">
               {isLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent"></div>
-                </div>
+                <PageLoading className="flex items-center justify-center py-12" />
               ) : users.length === 0 ? (
-                <EmptyState
+                <PageEmpty
                   icon={Users}
                   title="暂无用户数据"
                   description="没有符合条件的用户"
@@ -446,7 +445,7 @@ function UserManagementPageContent() {
               )}
               </div>
             </div>
-          </div>
+          </ListPageScaffold>
 
           {/* 删除确认弹窗 */}
           {deleteTarget && (
@@ -530,7 +529,7 @@ function UserManagementPageContent() {
             profileDetail={profileDetail}
             isLoading={profileLoading}
           />
-        </div>
+        </AdminPageContainer>
       </AdminLayout>
     </AuthGuard>
   );

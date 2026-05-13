@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSchoolAdminJson, isAuthError } from "@/lib/api/guards";
-import { getMergedCategories } from "@/lib/category-utils";
-import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
-import { prisma } from "@/lib/prisma";
+import { getMergedCategories } from "@/lib/content/category-utils";
+import { getPaginationParams, getPaginationMeta } from "@/lib/core/utils";
+import { prisma } from "@/lib/core/prisma";
 import { CATEGORY_GROUP_CONVENIENCE, CATEGORY_GROUP_REGULAR } from "@/types/category";
 
 // GET /api/admin/categories

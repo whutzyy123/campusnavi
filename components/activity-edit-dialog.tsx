@@ -8,9 +8,11 @@ import {
   updateActivity,
   validateActivityContent,
   type ActivityWithPOI,
-} from "@/lib/activity-actions";
-import { getPOIsBySchool } from "@/lib/poi-actions";
+} from "@/lib/actions/activity";
+import { getPOIsBySchool } from "@/lib/actions/poi";
 import { useAuthStore } from "@/store/use-auth-store";
+import { Modal } from "@/components/ui/modal";
+import { FormField, FormFieldInputClass } from "@/components/ui/form-field";
 
 interface POIItem {
   id: string;
@@ -270,8 +272,7 @@ export function ActivityEditDialog({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-      <div className="modal-container max-w-lg">
+    <Modal isOpen={isOpen} onClose={onClose} containerClassName="max-w-lg bg-white">
         <div className="modal-header flex items-center justify-between px-6 py-4">
           <h2 className="text-lg font-semibold text-gray-900">
             {activity ? "编辑活动" : "新建活动"}
@@ -288,10 +289,8 @@ export function ActivityEditDialog({
         <form onSubmit={handleSubmit} className="flex flex-1 min-h-0 flex-col">
           <div className="modal-body space-y-4 px-6 py-4 scrollbar-gutter-stable">
           {/* POI 搜索选择（编辑时不可更改） */}
-          <div className="relative" ref={dropdownRef}>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              关联 POI <span className="text-red-500">*</span>
-            </label>
+          <FormField label="关联 POI" required className="relative" hint={formData.poiId && !poiSearch ? `已选：${formData.poiName}` : undefined}>
+            <div ref={dropdownRef}>
             <input
               ref={poiInputRef}
               type="text"
@@ -307,7 +306,7 @@ export function ActivityEditDialog({
               onFocus={() => !activity && setPoiDropdownOpen(true)}
               placeholder={isLoadingPois ? "加载中..." : "搜索地点/设施..."}
               disabled={isLoadingPois || !!activity}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+              className={FormFieldInputClass()}
             />
             {poiDropdownOpen && !activity && filteredPois.length > 0 && (
               <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
@@ -327,16 +326,11 @@ export function ActivityEditDialog({
                 ))}
               </div>
             )}
-            {formData.poiId && !poiSearch && (
-              <p className="mt-1 text-xs text-gray-500">已选：{formData.poiName}</p>
-            )}
-          </div>
+            </div>
+          </FormField>
 
           {/* 标题 */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              标题 <span className="text-red-500">*</span>
-            </label>
+          <FormField label="标题" required error={titleError}>
             <input
               type="text"
               value={formData.title}
@@ -347,21 +341,15 @@ export function ActivityEditDialog({
               onBlur={() => formData.title.trim() && validateContentFields()}
               placeholder="最多 100 字"
               maxLength={100}
-              className={`w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20 ${
-                titleError ? "border-red-500 focus:border-red-500" : "border-gray-300 focus:border-[#FF4500]"
-              }`}
+              className={FormFieldInputClass(!!titleError)}
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <span className="text-xs text-gray-500">{formData.title.length}/100</span>
-              {titleError && <span className="text-xs text-red-600">{titleError}</span>}
             </div>
-          </div>
+          </FormField>
 
           {/* 描述 */}
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              描述 <span className="text-red-500">*</span>
-            </label>
+          <FormField label="描述" required error={descriptionError}>
             <textarea
               value={formData.description}
               onChange={(e) => {
@@ -378,9 +366,8 @@ export function ActivityEditDialog({
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <span className="text-xs text-gray-500">{formData.description.length}/1000</span>
-              {descriptionError && <span className="text-xs text-red-600">{descriptionError}</span>}
             </div>
-          </div>
+          </FormField>
 
           {/* 链接（可选） */}
           <div>
@@ -389,7 +376,7 @@ export function ActivityEditDialog({
               type="url"
               value={formData.link}
               onChange={(e) => setFormData((prev) => ({ ...prev, link: e.target.value }))}
-              placeholder="https://..."
+              placeholder="https:// 开头的活动详情链接"
               className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
           </div>
@@ -447,7 +434,6 @@ export function ActivityEditDialog({
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -7,9 +7,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useAMap } from "@/hooks/use-amap";
-import { ensureLngLat } from "@/lib/campus-label-utils";
+import { ensureLngLat } from "@/lib/geo/campus-label-utils";
 import type { School } from "@/store/use-school-store";
-import { getCampuses, type CampusAreaItem } from "@/lib/school-actions";
+import { getCampuses, type CampusAreaItem } from "@/lib/school/actions";
 
 interface SchoolMapProps {
   school: School | null;

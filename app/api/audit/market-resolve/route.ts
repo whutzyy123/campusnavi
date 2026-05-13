@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 import { requireSessionJson, isAuthError } from "@/lib/api/guards";
-import { createNotification } from "@/lib/notification-actions";
-import { NotificationType, NotificationEntityType } from "@prisma/client";
+import { createNotification } from "@/lib/actions/notification";
+import { MarketItemStatus, NotificationType, NotificationEntityType } from "@prisma/client";
 
 /**
  * POST /api/audit/market-resolve
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
     if (action === "pass") {
       await prisma.marketItem.update({
         where: { id: item.id },
-        data: { reportCount: 0, isHidden: false },
+        data: { reportCount: 0, status: MarketItemStatus.ACTIVE },
       });
       return NextResponse.json({
         success: true,

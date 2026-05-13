@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { prisma } from "@/lib/core/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     const sid = schoolId.trim();
-    const baseWhere = { schoolId: sid, reportCount: { lt: 3 } };
+    const baseWhere = { schoolId: sid, reportCount: { lt: 5 } };
     const limit = 50;
 
     // 快捷筛选：仅返回有进行中活动的 POI（用于「正在进行」入口）
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       }> = [];
 
       for (const act of activities) {
-        if (!act.poi || act.poi.reportCount >= 3) continue;
+        if (!act.poi || act.poi.reportCount >= 5) continue;
         if (seenPoiIds.has(act.poiId)) continue;
         seenPoiIds.add(act.poiId);
         data.push({
@@ -150,7 +150,7 @@ export async function GET(request: NextRequest) {
 
       for (const act of matchingActivities) {
         if (activityMatchItems.length >= remainingAfterAlias) break;
-        if (!act.poi || act.poi.reportCount >= 3) continue;
+        if (!act.poi || act.poi.reportCount >= 5) continue;
         if (excludeIds.has(act.poiId) || seenPoiIds.has(act.poiId)) continue;
         seenPoiIds.add(act.poiId);
         activityMatchItems.push({

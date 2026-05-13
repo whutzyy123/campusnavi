@@ -26,7 +26,7 @@ import {
   createKeyword,
   bulkCreateKeywords,
   deleteKeyword,
-} from "@/lib/keyword-actions";
+} from "@/lib/actions/keyword";
 
 interface SensitiveWord {
   id: string;

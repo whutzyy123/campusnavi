@@ -70,6 +70,7 @@ model User {
   lastProfileUpdateAt DateTime? @map("last_profile_update_at") // 昵称/头像最后修改时间，用于 7 天冷却
   password            String?   @db.VarChar(255) // 哈希后的密码
   role                Int       @default(0) // 0: 游客, 1: 认证学生, 2: 校级管理员, 3: 校内工作人员, 4: 超级管理员
+  points              Int       @default(0) // 用户积分
   status              String    @default("ACTIVE") @db.VarChar(20) // ACTIVE: 正常, INACTIVE: 已停用/封禁
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -221,13 +222,13 @@ model POI {
   alias       String?  @db.VarChar(200) // 别称，多个用逗号隔开，用于搜索匹配
   categoryId  String?  @map("category_id") // 关联分类ID（可选，兼容旧数据）
   category    String?  @db.VarChar(50) // 保留旧字段用于兼容（可选）
-  lat         Float
-  lng         Float
+  lat         Decimal  @db.Decimal(10, 8)
+  lng         Decimal  @db.Decimal(10, 8)
   isOfficial  Boolean  @default(false) @map("is_official") // true: PGC, false: UGC
   entryPoints Json?    @map("entry_points") // JSON 格式存储建筑的具体入口坐标点
   description String?  @db.Text
   imageUrl    String?  @map("image_url") @db.VarChar(512) // 主图 URL（对象存储返回的绝对地址，非 Base64）
-  reportCount Int      @default(0) @map("report_count") // 举报次数，>=3 时自动隐藏
+  reportCount Int      @default(0) @map("report_count") // 举报次数，>=5 时自动隐藏
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -576,9 +577,12 @@ model MarketTypeCategory {
 }
 
 // 生存集市商品状态（闭环交易生命周期）
+// 状态流转：ACTIVE -> LOCKED -> COMPLETED/DELETED
+// HIDDEN 为管理员下架状态，可通过 relist 操作恢复到 ACTIVE
 enum MarketItemStatus {
   ACTIVE // 在架可见
   LOCKED // 暂离市场（已达成意向，待线下交接）
+  HIDDEN // 管理员下架（可重新上架）
   COMPLETED // 交易完成（永久下架）
   DELETED // 用户删除
 }
@@ -615,7 +619,6 @@ model MarketItem {
   images      Json // 图片 URL 数组
   status      MarketItemStatus @default(ACTIVE)
   reportCount Int              @default(0) @map("report_count")
-  isHidden    Boolean          @default(false) @map("is_hidden")
   expiresAt   DateTime         @map("expires_at") // createdAt + 7 天
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")

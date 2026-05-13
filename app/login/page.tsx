@@ -3,7 +3,7 @@
 import { Suspense, useState, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { loginUser } from "@/lib/auth-server-actions";
+import { loginUser } from "@/lib/auth/server-actions";
 import { analytics } from "@/lib/analytics";
 import { useAuthStore, type UserRole } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
@@ -38,7 +38,7 @@ function LoginPageContent() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const { getSchoolsList } = await import("@/lib/school-actions");
+        const { getSchoolsList } = await import("@/lib/school/actions");
         const result = await getSchoolsList();
         if (result.success && result.data) {
           useSchoolStore.getState().setSchools(result.data);
@@ -116,6 +116,7 @@ function LoginPageContent() {
         bio: null,
         avatar: null,
         lastProfileUpdateAt: null,
+        points: user.points ?? 0,
         role: user.role as UserRole,
         schoolId: user.schoolId,
         schoolName: user.schoolName ?? null,
@@ -141,7 +142,7 @@ function LoginPageContent() {
 
       router.push(target);
     } catch (err) {
-      console.error("Login client error:", err);
+      console.error("登录端处理失败:", err);
       analytics.auth.loginFail({ error_reason: "登录失败，请重试" });
       setError("登录失败，请重试");
     } finally {

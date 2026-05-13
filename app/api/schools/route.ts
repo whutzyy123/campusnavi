@@ -1,4 +1,4 @@
-import { getSchoolsWithStats } from "@/lib/school-actions";
+import { getSchoolsWithStats } from "@/lib/school/actions";
 import { jsonErr, jsonOk } from "@/lib/api/http";
 import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
 

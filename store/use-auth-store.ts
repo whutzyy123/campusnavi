@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { logoutUser, getMe, type MeUser } from "@/lib/auth-server-actions";
+import { logoutUser, getMe, type MeUser } from "@/lib/auth/server-actions";
 import { useNotificationStore } from "@/store/use-notification-store";
 
 export type UserRole = "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
@@ -61,8 +61,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       if (e instanceof Error && e.message?.includes?.("NEXT_REDIRECT")) throw e;
       try {
         await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
-      } catch {
-        /*忽略网络错误，仍跳转登录页 */
+      } catch (err) {
+        console.error("[Auth] Failed to call /api/auth/logout:", err);
       }
       window.location.href = "/login";
       return;

@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { getCurrentUser } from "@/lib/auth-server-actions";
-import { getOngoingActivities } from "@/lib/activity-actions";
+import { getCurrentUser } from "@/lib/auth/server-actions";
+import { getOngoingActivities } from "@/lib/actions/activity";
 import { ActivitiesListClient } from "@/components/activity/activities-list-client";
 import { ActivityListSkeleton } from "@/components/activity/activity-card";
 import { EmptyState } from "@/components/empty-state";

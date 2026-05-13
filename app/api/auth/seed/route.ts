@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth-utils";
-import { requireSeedBearerIfConfigured } from "@/lib/seed-route-auth";
+import { prisma } from "@/lib/core/prisma";
+import { hashPassword } from "@/lib/auth/utils";
+import { requireSeedBearerIfConfigured } from "@/lib/auth/seed-route-auth";
 
 /**
  * POST /api/auth/seed

@@ -24,7 +24,7 @@ import {
   getFeedbackById,
   updateFeedbackStatus,
   type FeedbackItem,
-} from "@/lib/feedback-actions";
+} from "@/lib/actions/feedback";
 import { MessageCircle, Loader2, X, MessageSquare, Bug } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -124,6 +124,11 @@ function SuperAdminFeedbackPageContent() {
   useEffect(() => {
     fetchFeedbacks();
   }, [fetchFeedbacks]);
+
+  useEffect(() => {
+    setFilterType(searchParams.get("type") || "");
+    setFilterStatus(searchParams.get("status") || "");
+  }, [searchParams]);
 
   const updateFilterUrl = useCallback(
     (type: string, status: string) => {

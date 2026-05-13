@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthCookie, type AuthCookieData } from "@/lib/auth-server-actions";
+import { getAuthCookie, type AuthCookieData } from "@/lib/auth/server-actions";
 import { jsonErr } from "@/lib/api/http";
 
 const SCHOOL_ADMIN_ROLES = new Set(["ADMIN", "STAFF", "SUPER_ADMIN"]);

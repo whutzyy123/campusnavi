@@ -13,13 +13,13 @@ import {
   getUserFeedbacks,
   getFeedbackById,
   type FeedbackItem,
-} from "@/lib/feedback-actions";
+} from "@/lib/actions/feedback";
 import Image from "next/image";
 import { Loader2, MessageSquare, Bug, X, Send, Info, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { uploadFeedbackImage } from "@/lib/upload-actions";
-import { formatRelativeTime } from "@/lib/utils";
+import { uploadFeedbackImage } from "@/lib/actions/upload";
+import { formatRelativeTime } from "@/lib/core/utils";
 
 function getTypeLabel(type: string): string {
   return type === "FEEDBACK" ? "使用体验反馈" : "Bug 提交";

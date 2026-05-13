@@ -76,7 +76,7 @@ export function POICombobox({
       setIsSearching(true);
       setHasSearched(true);
       try {
-        const { searchPOIs } = await import("@/lib/poi-actions");
+        const { searchPOIs } = await import("@/lib/actions/poi");
         const result = await searchPOIs(schoolId, { q: query.trim() });
         if (result.success && Array.isArray(result.data)) {
           setOptions(result.data);

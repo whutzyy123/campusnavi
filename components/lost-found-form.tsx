@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { uploadLostFoundImage } from "@/lib/upload-actions";
-import { createLostFoundEvent } from "@/lib/lost-found-actions";
+import { uploadLostFoundImage } from "@/lib/actions/upload";
+import { createLostFoundEvent } from "@/lib/actions/lost-found";
 import toast from "react-hot-toast";
 
 const MAX_IMAGES = 3;

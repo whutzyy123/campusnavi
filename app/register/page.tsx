@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { registerUser } from "@/lib/auth-server-actions";
-import { getAgreementContent } from "@/lib/agreement-actions";
+import { registerUser } from "@/lib/auth/server-actions";
+import { getAgreementContent } from "@/lib/actions/agreement";
 import { analytics } from "@/lib/analytics";
-import { validateInvitationCode } from "@/lib/invitation-actions";
+import { validateInvitationCode } from "@/lib/actions/invitation";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { UserPlus, CheckCircle, AlertCircle, Loader2, Lock } from "lucide-react";
@@ -67,7 +67,7 @@ export default function RegisterPage() {
   useEffect(() => {
     const fetchSchools = async () => {
       try {
-        const { getSchoolsList } = await import("@/lib/school-actions");
+        const { getSchoolsList } = await import("@/lib/school/actions");
         const result = await getSchoolsList();
         if (result.success && result.data) {
           setSchools(result.data);
@@ -224,7 +224,7 @@ export default function RegisterPage() {
         setSuccess(true);
         
         // 获取用户信息
-        const { getMe } = await import("@/lib/auth-server-actions");
+        const { getMe } = await import("@/lib/auth/server-actions");
         const meResult = await getMe();
         if (meResult.success && meResult.user) {
           setUser(meResult.user);
@@ -353,7 +353,7 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* 邀请码（可选）- Code-First 流程 */}
+            {/* 邀请码（可选）- 以邀请码为先的流程 */}
             <div>
               <label htmlFor="invitationCode" className="mb-2 block text-sm font-medium text-gray-700">
                 邀请码（可选）

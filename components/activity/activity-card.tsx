@@ -3,8 +3,8 @@
 import Link from "next/link";
 import { MapPin, Map } from "lucide-react";
 import type { ActivityWithPOI } from "@/types/activity";
-import { formatTimeRemaining, formatDateTime } from "@/lib/utils";
-import { cn } from "@/lib/utils";
+import { formatTimeRemaining, formatDateTime } from "@/lib/core/utils";
+import { cn } from "@/lib/core/utils";
 
 interface ActivityCardProps {
   activity: ActivityWithPOI;

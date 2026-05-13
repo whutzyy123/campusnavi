@@ -35,7 +35,7 @@ export default function SchoolOnboardingPage() {
       <div className="pointer-events-none absolute inset-0 -z-10 landing-dot-pattern opacity-60" />
 
       <div className="mx-auto max-w-4xl px-4 py-16 sm:px-6 sm:py-24 lg:px-8">
-        {/* Hero */}
+        {/* 主视觉 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -18,8 +18,8 @@ import {
   updateSchoolStatus,
   deleteSchool,
   createSchool,
-} from "@/lib/school-actions";
-import { createInvitationCode } from "@/lib/invitation-actions";
+} from "@/lib/school/actions";
+import { createInvitationCode } from "@/lib/actions/invitation";
 
 interface School {
   id: string;

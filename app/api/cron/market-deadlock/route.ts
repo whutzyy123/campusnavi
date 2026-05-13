@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { processMarketDeadlocks } from "@/lib/market-actions";
+import { processMarketDeadlocks } from "@/lib/actions/market";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

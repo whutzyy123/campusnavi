@@ -11,13 +11,13 @@ import {
   submitIntention,
   reportMarketItem,
   deleteMarketItem,
-} from "@/lib/market-actions";
-import { getPOIsBySchool } from "@/lib/poi-actions";
+} from "@/lib/actions/market";
+import { getPOIsBySchool } from "@/lib/actions/poi";
 import { useMarketStore } from "@/store/use-market-store";
 import { PostItemModal } from "@/components/market/post-item-modal";
 import { MarketItemDetailModal, type MarketItemDetailData } from "@/components/market/market-item-detail-modal";
 import { UserProfileModal } from "@/components/shared/user-profile-modal";
-import { formatRelativeTime } from "@/lib/utils";
+import { formatRelativeTime } from "@/lib/core/utils";
 import toast from "react-hot-toast";
 
 interface MarketCategoryItem {
@@ -185,7 +185,7 @@ export function MarketSchoolList({
       const result = await getMarketItemDetail(id);
       if (result.success && result.data) {
         const d = result.data as MarketItemDetailData;
-        if (d.masked) {
+        if (d.status === "HIDDEN") {
           setDetailItem({
             ...d,
             title: "内容已被屏蔽",
@@ -194,7 +194,6 @@ export function MarketSchoolList({
             poi: { id: "", name: "—" },
             category: { id: "", name: "—" },
             user: { id: "", nickname: null },
-            buyerId: null,
             selectedBuyerId: null,
             hasSubmittedIntention: false,
           });
@@ -324,19 +323,19 @@ export function MarketSchoolList({
 
   return (
     <>
-      <div className="flex flex-col">
+      <div className="mx-auto flex w-full max-w-6xl flex-col px-4 pb-4">
         {/* 筛选栏 + 发布 */}
-        <div className="flex-shrink-0 border-b border-[#EDEFF1] bg-white px-4 py-3">
+        <div className="flex-shrink-0 rounded-t-xl border-x border-t border-[#EDEFF1] bg-white px-4 py-4 md:px-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-600">类型</span>
+                <span className="text-sm text-gray-600">类型</span>
                 <select
                   value={filterTypeId === "" ? "" : String(filterTypeId)}
                   onChange={(e) =>
                     setFilterTypeId(e.target.value === "" ? "" : Number(e.target.value))
                   }
-                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="">全部</option>
                   {transactionTypes.map((t) => (
@@ -347,11 +346,11 @@ export function MarketSchoolList({
                 </select>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-600">分类</span>
+                <span className="text-sm text-gray-600">分类</span>
                 <select
                   value={filterCategoryId}
                   onChange={(e) => setFilterCategoryId(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="">全部</option>
                   {allCategories.map((c) => (
@@ -362,11 +361,11 @@ export function MarketSchoolList({
                 </select>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="text-xs text-gray-600">地点</span>
+                <span className="text-sm text-gray-600">地点</span>
                 <select
                   value={filterPoiId}
                   onChange={(e) => setFilterPoiId(e.target.value)}
-                  className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
+                  className="rounded-lg border border-gray-300 px-2.5 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
                 >
                   <option value="">全部</option>
                   {pois.map((p) => (
@@ -393,7 +392,7 @@ export function MarketSchoolList({
         </div>
 
         {/* 商品列表 */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-b-xl border-x border-b border-[#EDEFF1] bg-white p-4 md:p-5">
           {loading ? (
             <div className="flex min-h-[200px] items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />

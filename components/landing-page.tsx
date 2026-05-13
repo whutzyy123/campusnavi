@@ -1,7 +1,7 @@
 /**
  * 营销落地页
- * GIS-Tech meets Student Life：现代、高能、科技感
- * 布局优化：视觉重心平衡、响应式协调
+ * 现代、高能、科技感的视觉风格
+ * 布局：视觉重心平衡、响应式协调
  */
 
 "use client";
@@ -54,11 +54,11 @@ const itemVariants = {
 export function LandingPage() {
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden pt-[max(5rem,8vh)] pb-0">
-      {/* Mesh gradient + dot pattern background */}
+      {/* 网格渐变 + 点阵背景 */}
       <div className="pointer-events-none absolute inset-0 -z-10 landing-mesh-bg" />
       <div className="pointer-events-none absolute inset-0 -z-10 landing-dot-pattern opacity-60" />
 
-      {/* Hero Section - 居中布局，左右视觉权重平衡 */}
+      {/* 主视觉区：居中布局，左右平衡 */}
       <section className="flex flex-1 flex-col items-center justify-center py-8 sm:py-12">
         <div className="container mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8">
           <motion.div
@@ -67,7 +67,7 @@ export function LandingPage() {
             initial="hidden"
             animate="visible"
           >
-            {/* Block 1: Hero + CTA（桌面端左上） */}
+            {/* 块 1：主文案与 CTA（桌面端左侧偏上） */}
             <div className="flex flex-col items-center text-center lg:items-start lg:text-left">
               <motion.div variants={itemVariants} className="space-y-4">
                 <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl lg:text-[2.75rem] xl:text-6xl">
@@ -88,7 +88,7 @@ export function LandingPage() {
               </motion.div>
             </div>
 
-            {/* Block 2: Phone Mockup（桌面端右侧，垂直居中） */}
+            {/* 块 2：手机示意（桌面端右侧垂直居中） */}
             <motion.div
               variants={itemVariants}
               className="flex min-h-[260px] items-center justify-center lg:min-h-[320px] lg:row-span-2 [perspective:1000px]"
@@ -103,7 +103,7 @@ export function LandingPage() {
                   ease: "easeInOut",
                 }}
               >
-                {/* Shadow that scales with float */}
+                {/* 与浮动动画联动的底部阴影 */}
                 <motion.div
                   className="absolute -bottom-6 left-1/2 h-8 w-32 -translate-x-1/2 rounded-full bg-black/15 blur-xl"
                   animate={{ scale: [1, 1.1, 1] }}
@@ -114,7 +114,7 @@ export function LandingPage() {
                   }}
                 />
 
-                {/* Phone / Card UI */}
+                {/* 手机/卡片壳 */}
                 <div
                   className="relative flex h-full w-full flex-col rounded-3xl border-8 border-slate-800 bg-white shadow-2xl overflow-hidden"
                   style={{
@@ -122,7 +122,7 @@ export function LandingPage() {
                       "0 25px 50px -12px rgba(0,0,0,0.25), 0 0 0 1px rgba(0,0,0,0.05)",
                   }}
                 >
-                  {/* Header - Nav Bar */}
+                  {/* 顶栏示意 */}
                   <div className="h-12 flex items-center justify-between px-4 border-b border-slate-100 bg-white">
                     <div className="h-2 w-16 rounded-full bg-slate-200" />
                     <div className="flex gap-1.5">
@@ -132,9 +132,9 @@ export function LandingPage() {
                     </div>
                   </div>
 
-                  {/* Map Area */}
+                  {/* 地图区域 */}
                   <div className="relative min-h-0 flex-1 bg-[#FFF5F2]">
-                    {/* Map grid lines (subtle blueprint) */}
+                    {/* 地图格线（淡色示意） */}
                     <div className="absolute inset-0 opacity-20">
                       <div className="absolute top-1/4 left-0 right-0 h-px bg-[#FF4500]/20" />
                       <div className="absolute top-2/4 left-0 right-0 h-px bg-[#FF4500]/20" />
@@ -144,17 +144,17 @@ export function LandingPage() {
                       <div className="absolute left-3/4 top-0 bottom-0 w-px bg-[#FF4500]/20" />
                     </div>
 
-                    {/* Animated Map Markers */}
+                    {/* 动效标注点 */}
                     <div className="absolute top-[18%] left-[22%] marker-pulse-soft h-8 w-8 rounded-full bg-[#FF4500] shadow-md border-2 border-white" />
                     <div className="absolute top-[35%] right-[28%] marker-pulse-soft marker-pulse-delay-2 h-6 w-6 rounded-full bg-[#FF4500] shadow-md border-2 border-white" />
                     <div className="absolute bottom-[35%] left-[30%] marker-pulse-soft marker-pulse-delay-3 h-7 w-7 rounded-full bg-emerald-500 shadow-md border-2 border-white" />
                     <div className="absolute top-[55%] right-[18%] marker-pulse-soft marker-pulse-delay-4 h-5 w-5 rounded-full bg-amber-500 shadow-md border-2 border-white" />
                     <div className="absolute bottom-[25%] right-[35%] marker-pulse-soft marker-pulse-delay-1 h-6 w-6 rounded-full bg-violet-500 shadow-md border-2 border-white" />
 
-                    {/* Search bar mock */}
+                    {/* 搜索条示意 */}
                     <div className="absolute top-3 left-1/2 -translate-x-1/2 w-[90%] h-9 rounded-full bg-white/95 shadow-md border border-slate-100" />
 
-                    {/* Bottom Card - POI Drawer */}
+                    {/* 底部 POI 抽屉示意 */}
                     <div className="absolute bottom-0 left-0 right-0 rounded-t-2xl bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.08)] p-4">
                       <div className="h-1 w-12 rounded-full bg-slate-200 mx-auto mb-3" />
                       <div className="h-3 w-3/4 rounded bg-slate-200 mb-2" />
@@ -169,7 +169,7 @@ export function LandingPage() {
               </motion.div>
             </motion.div>
 
-            {/* Block 3: Feature Cards（桌面端左下，与 Hero 形成左栏） */}
+            {/* 块 3：特性卡片（桌面端左下，与主文案成栏） */}
             <motion.div
               className="mt-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-3 lg:mt-10"
               variants={containerVariants}
@@ -194,7 +194,7 @@ export function LandingPage() {
         </div>
       </section>
 
-      {/* Footer - 底部锚定，视觉收束 */}
+      {/* 页脚：收束版心 */}
       <footer className="mt-auto border-t border-slate-200/60 bg-white/30 backdrop-blur-sm py-6">
         <div className="mx-auto max-w-6xl px-4 text-center text-sm text-slate-500">
           © {new Date().getFullYear()} 校园生存指北 · 精细化校区地理信息系统

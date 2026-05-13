@@ -14,7 +14,7 @@ import {
   reviewComment,
   hardDeleteComment,
   hardDeleteComments,
-} from "@/lib/comment-actions";
+} from "@/lib/actions/comment";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -114,6 +114,10 @@ function CommentAuditPageContent() {
   useEffect(() => {
     fetchComments();
   }, [fetchComments]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [statusFilter, comments, searchParams]);
 
   const refreshAfterAction = useCallback(() => {
     fetchComments();
@@ -442,14 +446,6 @@ function ProcessedTable({
   onBulkDelete: (ids: string[]) => Promise<boolean>;
   onViewDetail: (c: CommentForAudit) => void;
 }) {
-  const toggleSelect = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const next = new Set(selectedIds);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    onSelectedIdsChange(next);
-  };
-
   const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       onSelectedIdsChange(new Set(comments.map((c) => c.id)));
@@ -509,8 +505,13 @@ function ProcessedTable({
                   <input
                     type="checkbox"
                     checked={selectedIds.has(c.id)}
-                    onChange={() => {}}
-                    onClick={(e) => toggleSelect(c.id, e as unknown as React.MouseEvent)}
+                    onChange={(e) => {
+                      e.stopPropagation();
+                      const next = new Set(selectedIds);
+                      if (e.target.checked) next.add(c.id);
+                      else next.delete(c.id);
+                      onSelectedIdsChange(next);
+                    }}
                     className="h-4 w-4 rounded border-gray-300"
                   />
                 </TableCell>

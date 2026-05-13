@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Card } from "@/components/card";
-import { EmptyState } from "@/components/empty-state";
+import { PageEmpty, PageLoading } from "@/components/ui/page-state";
 import { Badge } from "@/components/badge";
 import { AlertTriangle, Trash2, RotateCcw, ShoppingBag, MapPin } from "lucide-react";
 import toast from "react-hot-toast";
@@ -14,7 +14,8 @@ import {
   getAuditMarketItems,
   resolveAudit,
   resolveMarketAudit,
-} from "@/lib/audit-actions";
+} from "@/lib/actions/audit";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 
 interface ReportedPOI {
   id: string;
@@ -38,7 +39,6 @@ interface ReportedMarketItem {
   transactionType: { id: number; name: string; code: string } | null;
   status: string;
   reportCount: number;
-  isHidden: boolean;
   expiresAt: string;
   createdAt: string;
   user: { id: string; nickname: string | null; email: string };
@@ -155,7 +155,7 @@ export default function AuditPage() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
-        <div className="p-6">
+        <AdminPageContainer title="举报审核" description="审核 POI 与生存集市举报内容">
           <Card title="举报审核">
             <div className="mb-4 flex gap-2 border-b border-gray-200">
               <button
@@ -185,11 +185,9 @@ export default function AuditPage() {
             {activeTab === "poi" && (
               <>
                 {isLoadingPOI ? (
-                  <div className="flex justify-center py-12">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent" />
-                  </div>
+                  <PageLoading className="flex justify-center py-12" />
                 ) : reportedPOIs.length === 0 ? (
-                  <EmptyState
+                  <PageEmpty
                     icon={AlertTriangle}
                     title="暂无举报"
                     description="当前没有需要审核的 POI 举报"
@@ -267,11 +265,9 @@ export default function AuditPage() {
             {activeTab === "market" && (
               <>
                 {isLoadingMarket ? (
-                  <div className="flex justify-center py-12">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent" />
-                  </div>
+                  <PageLoading className="flex justify-center py-12" />
                 ) : marketItems.length === 0 ? (
-                  <EmptyState
+                  <PageEmpty
                     icon={ShoppingBag}
                     title="暂无举报"
                     description="当前没有需要审核的生存集市举报"
@@ -286,8 +282,8 @@ export default function AuditPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
                           <Badge variant="error">被举报 {item.reportCount} 次</Badge>
-                          {item.isHidden && (
-                            <Badge variant="warning">已自动隐藏</Badge>
+                          {item.status === "HIDDEN" && (
+                            <Badge variant="warning">已下架</Badge>
                           )}
                         </div>
                         <div className="my-2 h-px bg-gray-100" />
@@ -340,7 +336,7 @@ export default function AuditPage() {
               </>
             )}
           </Card>
-        </div>
+        </AdminPageContainer>
       </AdminLayout>
     </AuthGuard>
   );

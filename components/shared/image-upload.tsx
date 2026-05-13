@@ -3,9 +3,9 @@
 import { useState, useRef, useEffect } from "react";
 import { ImagePlus, Loader2, Trash2 } from "lucide-react";
 import Image from "next/image";
-import { compressImage } from "@/lib/image-utils";
-import { uploadImageAction } from "@/lib/image-actions";
-import { cn } from "@/lib/utils";
+import { compressImage } from "@/lib/image/utils";
+import { uploadImageAction } from "@/lib/image/actions";
+import { cn } from "@/lib/core/utils";
 import toast from "react-hot-toast";
 
 export interface ImageUploadProps {
@@ -72,7 +72,7 @@ export function ImageUpload({
       }
     } catch (err) {
       onChange("");
-      console.warn("Image upload failed:", err);
+      console.warn("图片上传失败:", err);
     } finally {
       setIsCompressing(false);
       setIsUploading(false);

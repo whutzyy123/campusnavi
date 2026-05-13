@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { removeAuthCookie } from "@/lib/auth-server-actions";
+import { removeAuthCookie } from "@/lib/auth/server-actions";
 
 export const dynamic = "force-dynamic";
 

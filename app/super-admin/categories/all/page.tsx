@@ -23,8 +23,8 @@ import {
   deleteCategory,
   type SystemCategoryItem,
   type LocalCategoryItem,
-} from "@/lib/category-actions";
-import { formatDate } from "@/lib/utils";
+} from "@/lib/actions/category";
+import { formatDate } from "@/lib/core/utils";
 
 /**
  * 超级管理员 - 全量分类监控
@@ -132,7 +132,7 @@ function SuperAdminAllCategoriesPageContent() {
             </p>
           </div>
 
-          {/* Section A: 系统分类 */}
+          {/* 区块 A：系统分类 */}
           <section className="mb-10">
             <h2 className="mb-3 flex items-center gap-2 text-base font-medium text-[#1A1A1B]">
               <Globe className="h-4 w-4 text-[#FF4500]" />
@@ -236,7 +236,7 @@ function SuperAdminAllCategoriesPageContent() {
             )}
           </section>
 
-          {/* Section B: 校内分类画廊 */}
+          {/* 区块 B：校内分类画廊 */}
           <section>
             <h2 className="mb-3 flex items-center gap-2 text-base font-medium text-[#1A1A1B]">
               <Building2 className="h-4 w-4 text-emerald-600" />

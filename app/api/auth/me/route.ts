@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-import { getAuthCookie, removeAuthCookie } from "@/lib/auth-server-actions";
-import { prisma } from "@/lib/prisma";
+import { getAuthCookie, removeAuthCookie } from "@/lib/auth/server-actions";
+import { prisma } from "@/lib/core/prisma";
 
 /**
  * GET /api/auth/me
@@ -30,6 +30,7 @@ export async function GET(request: NextRequest) {
         bio: true,
         avatar: true,
         lastProfileUpdateAt: true,
+        points: true,
         role: true,
         schoolId: true,
         status: true,
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
         bio: user.bio,
         avatar: user.avatar || null,
         lastProfileUpdateAt: user.lastProfileUpdateAt?.toISOString() || null,
+        points: user.points,
         role: authData.role,
         schoolId: user.schoolId || null,
         schoolName: user.school?.name || null,

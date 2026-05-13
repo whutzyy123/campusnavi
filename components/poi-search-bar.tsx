@@ -11,11 +11,11 @@ import { analytics } from "@/lib/analytics";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useMapSearchStore } from "@/store/use-map-search-store";
-import { distanceMeters } from "@/lib/geo-utils";
+import { distanceMeters } from "@/lib/geo/geo-utils";
 import { useSearchHistory } from "@/hooks/use-search-history";
 import { useDebounce } from "@/hooks/use-debounce";
-import { getActiveActivitiesCount } from "@/lib/activity-actions";
-import type { POIWithStatus } from "@/lib/poi-utils";
+import { getActiveActivitiesCount } from "@/lib/actions/activity";
+import type { POIWithStatus } from "@/lib/geo/poi-utils";
 
 const DROPDOWN_MAX_HEIGHT = "max-h-[18.5rem]";
 
@@ -78,7 +78,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     if (showOngoingOnly) {
       setIsSearching(true);
       try {
-        const { searchPOIs } = await import("@/lib/poi-actions");
+        const { searchPOIs } = await import("@/lib/actions/poi");
         const result = await searchPOIs(schoolId, { ongoingOnly: true });
         if (result.success && Array.isArray(result.data)) {
           setSearchResults(result.data);
@@ -99,7 +99,7 @@ export function POISearchBar({ pois, onSelectPOI, className = "", placeholder = 
     }
     setIsSearching(true);
     try {
-      const { searchPOIs } = await import("@/lib/poi-actions");
+      const { searchPOIs } = await import("@/lib/actions/poi");
       const result = await searchPOIs(schoolId, { q: debouncedQ });
       if (result.success && Array.isArray(result.data)) {
         setSearchResults(result.data);

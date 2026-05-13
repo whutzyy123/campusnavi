@@ -10,10 +10,10 @@ import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchInput } from "@/components/shared/search-input";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
-import { getSchoolLostFoundEvents } from "@/lib/lost-found-actions";
+import { getSchoolLostFoundEvents } from "@/lib/actions/lost-found";
 import { useDebounce } from "@/hooks/use-debounce";
 import { Loader2, MapPin, ExternalLink, Info, User } from "lucide-react";
-import { cn, formatRelativeTime } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/core/utils";
 
 type LostFoundFilter = "all" | "mine" | "others";
 

@@ -7,9 +7,9 @@ import { AuthGuard } from "@/components/auth-guard";
 import { EmptyState } from "@/components/empty-state";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
-import { getMyFavorites, type FavoritePOIItem } from "@/lib/favorite-actions";
+import { getMyFavorites, type FavoritePOIItem } from "@/lib/actions/favorite";
 import { Heart, Loader2, MapPin, ExternalLink } from "lucide-react";
-import { formatDate } from "@/lib/utils";
+import { formatDate } from "@/lib/core/utils";
 
 function FavoritesContent() {
   const router = useRouter();

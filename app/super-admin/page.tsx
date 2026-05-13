@@ -24,7 +24,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { ReportExportButton } from "@/components/admin/report-export-button";
-import { getSuperAdminStats, type SuperAdminStats } from "@/lib/admin-actions";
+import { getSuperAdminStats, type SuperAdminStats } from "@/lib/actions/admin";
 
 /**
  * 超级管理员后台 - 系统看板

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { getPaginationParams, getPaginationMeta } from "@/lib/utils";
+import { prisma } from "@/lib/core/prisma";
+import { getPaginationParams, getPaginationMeta } from "@/lib/core/utils";
 import { requireSuperAdminJson, isAuthError } from "@/lib/api/guards";
-import { appRoleToDbRole, dbRoleToAppRole, type AppRole } from "@/lib/role";
+import { appRoleToDbRole, dbRoleToAppRole, type AppRole } from "@/lib/auth/role";
 
 const patchUserBodySchema = z.object({
   id: z.string().min(1),

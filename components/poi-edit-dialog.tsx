@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useRef } from "react";
 import { X, MapPin, Save, Loader2, Trash2 } from "lucide-react";
-import { uploadPOIImage } from "@/lib/upload-actions";
-import { updatePOI, deletePOI } from "@/lib/poi-actions";
-import { getSchoolCategoriesForAdmin } from "@/lib/category-actions";
+import { uploadPOIImage } from "@/lib/actions/upload";
+import { updatePOI, deletePOI } from "@/lib/actions/poi";
+import { getSchoolCategoriesForAdmin } from "@/lib/actions/category";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { useAMap } from "@/hooks/use-amap";
-import { CoordinateConverter } from "@/lib/amap-loader";
+import { CoordinateConverter } from "@/lib/geo/amap-loader";
 import toast from "react-hot-toast";
 
 interface CategoryItem {
