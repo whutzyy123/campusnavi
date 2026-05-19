@@ -71,12 +71,20 @@ DATABASE_URL="mysql://user:password@localhost:3306/campus_survival"
 NEXT_PUBLIC_AMAP_KEY="your-amap-js-api-key"
 NEXT_PUBLIC_AMAP_SECURITY_KEY="your-amap-security-key"
 
-# Vercel Blob（图片存储，可选）
+# Vercel Blob（图片上传必填）
 BLOB_READ_WRITE_TOKEN="your-vercel-blob-token"
 
-# 定时任务（可选，用于集市死锁处理）
+# JWT（必填，登录与 Middleware 鉴权）
+JWT_SECRET="your-strong-random-secret-at-least-32-bytes"
+
+# 定时任务（生产必填，集市死锁 Cron）
 CRON_SECRET="your-cron-secret"
+
+# 开发 Seed（可选；未配置时仅 development 可匿名调用 seed 路由）
+# SEED_SECRET="your-seed-secret"
 ```
+
+完整变量清单与「未配置时的行为」见根目录 [`.env.example`](.env.example)。
 
 > 高德地图 Key 需在 [高德开放平台](https://lbs.amap.com/) 申请，并配置 Web 端 JS API 与安全密钥。
 
@@ -159,7 +167,7 @@ campusproject/
 │   ├── auth/            # 认证相关
 │   ├── market/          # 集市业务逻辑
 │   ├── geo/             # 地图/GIS 工具
-│   ├── api/             # API 辅助工具
+│   ├── analytics/       # 数据埋点
 │   └── school/          # 学校相关逻辑
 ├── store/                 # Zustand 状态管理
 ├── hooks/                # 自定义 Hooks
@@ -168,11 +176,11 @@ campusproject/
 │   └── seed.ts          # 种子脚本
 ├── docs/                 # 项目文档
 │   ├── PRD.md           # 产品需求文档
-│   ├── API.md            # API 接口文档
+│   ├── API.md           # HTTP 白名单与接口说明
+│   ├── 开发规范.md       # 工程规范（含技术栈 §2）
 │   ├── 数据库设计文档.md  # 数据库设计
-│   ├── 技术栈说明文档.md  # 技术栈与架构约定
-│   └── 数据埋点说明文档.md # 数据埋点规范
-└── scripts/             # 迁移与工具脚本
+│   └── 代码修复建议.md   # 债务清单与修复路线图
+├── scripts/             # 迁移与工具脚本（见 scripts/README.md）
 ```
 
 ---
@@ -196,12 +204,13 @@ campusproject/
 
 ### 接口架构
 
-- **Server Actions**：主要数据变更方式，位于 `lib/actions/*.ts` 和 `lib/market/*.ts`
-- **Route Handlers**：`/api/*`，用于兼容或直接 HTTP 访问
+- **Server Actions**：主要数据变更与页面数据加载，位于 `lib/actions/*.ts`、`lib/market/*`、`lib/school/actions.ts`
+- **Route Handlers**：仅 HTTP 必需端点（cron、登出兜底、开发 seed），详见 [docs/API.md](docs/API.md)
 
 ### 认证机制
 
 - **HTTP Only Cookie**：`campus-survival-session` 存储会话 Token
+- **JWT Cookie**：`campus-auth-jwt`，供 Middleware 解析管理端角色（无 `/api/auth/me` 自省）
 - **Session 表**：`AuthSession`，支持过期时间与撤销
 - **频控**：`RateLimit` 表，限制登录/注册频率
 
@@ -227,12 +236,12 @@ campusproject/
 
 | 文档 | 说明 |
 |------|------|
-| [docs/PRD.md](docs/PRD.md) | 产品需求文档 |
-| [docs/API.md](docs/API.md) | API 与 Server Actions 接口说明 |
+| [docs/PRD.md](docs/PRD.md) | 产品需求文档（含埋点契约 §8.7） |
+| [docs/API.md](docs/API.md) | HTTP 白名单与 Server Actions 说明 |
+| [docs/开发规范.md](docs/开发规范.md) | 工程开发规范、技术栈（§2）与质量门禁 |
 | [docs/数据库设计文档.md](docs/数据库设计文档.md) | 数据库设计与 ER 图 |
-| [docs/技术栈说明文档.md](docs/技术栈说明文档.md) | 技术栈与架构约定 |
-| [docs/数据埋点说明文档.md](docs/数据埋点说明文档.md) | 数据埋点规范 |
-| [docs/开发规范.md](docs/开发规范.md) | 工程开发规范与质量门禁 |
+| [docs/代码修复建议.md](docs/代码修复建议.md) | 技术债清单与修复路线图 |
+| [scripts/README.md](scripts/README.md) | 数据库同步（`db:push`）与迁移脚本 |
 
 ---
 

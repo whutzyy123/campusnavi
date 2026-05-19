@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, MapPin, Save, Loader2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { X, MapPin, Save } from "lucide-react";
+import { notify } from "@/lib/ui/notify";
 import {
   createActivity,
   updateActivity,
@@ -12,7 +12,9 @@ import {
 import { getPOIsBySchool } from "@/lib/actions/poi";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Modal } from "@/components/ui/modal";
-import { FormField, FormFieldInputClass } from "@/components/ui/form-field";
+import { FormField } from "@/components/ui/form-field";
+import { Input, Textarea } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 interface POIItem {
   id: string;
@@ -90,7 +92,7 @@ export function ActivityEditDialog({
         }
       } catch (err) {
         console.error("获取 POI 列表失败:", err);
-        toast.error("获取 POI 列表失败");
+        notify.error("获取 POI 列表失败");
       } finally {
         setIsLoadingPois(false);
       }
@@ -210,24 +212,24 @@ export function ActivityEditDialog({
     e.preventDefault();
 
     if (!formData.poiId.trim()) {
-      toast.error("请选择关联的 POI");
+      notify.error("请选择关联的 POI");
       return;
     }
     if (!formData.title.trim()) {
-      toast.error("请填写活动标题");
+      notify.error("请填写活动标题");
       return;
     }
     if (!formData.description.trim()) {
-      toast.error("请填写活动描述");
+      notify.error("请填写活动描述");
       return;
     }
     if (!formData.startAt || !formData.endAt) {
-      toast.error("请填写开始时间和结束时间");
+      notify.error("请填写开始时间和结束时间");
       return;
     }
 
     setIsSaving(true);
-    const toastId = toast.loading(activity ? "保存中..." : "创建中...");
+    const toastId = notify.loading(activity ? "保存中..." : "创建中...");
 
     try {
       if (activity) {
@@ -239,11 +241,11 @@ export function ActivityEditDialog({
           endAt: new Date(formData.endAt).toISOString(),
         });
         if (result.success) {
-          toast.success("活动已更新", { id: toastId });
+          notify.success("活动已更新", { id: toastId });
           onSave();
           onClose();
         } else {
-          toast.error(result.error ?? "更新失败", { id: toastId });
+          notify.error(result.error ?? "更新失败", { id: toastId });
         }
       } else {
         const result = await createActivity({
@@ -255,15 +257,15 @@ export function ActivityEditDialog({
           endAt: new Date(formData.endAt).toISOString(),
         });
         if (result.success) {
-          toast.success("活动已创建", { id: toastId });
+          notify.success("活动已创建", { id: toastId });
           onSave();
           onClose();
         } else {
-          toast.error(result.error ?? "创建失败", { id: toastId });
+          notify.error(result.error ?? "创建失败", { id: toastId });
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "操作失败", { id: toastId });
+      notify.error(err instanceof Error ? err.message : "操作失败", { id: toastId });
     } finally {
       setIsSaving(false);
     }
@@ -291,7 +293,7 @@ export function ActivityEditDialog({
           {/* POI 搜索选择（编辑时不可更改） */}
           <FormField label="关联 POI" required className="relative" hint={formData.poiId && !poiSearch ? `已选：${formData.poiName}` : undefined}>
             <div ref={dropdownRef}>
-            <input
+            <Input
               ref={poiInputRef}
               type="text"
               value={poiSearch}
@@ -306,7 +308,6 @@ export function ActivityEditDialog({
               onFocus={() => !activity && setPoiDropdownOpen(true)}
               placeholder={isLoadingPois ? "加载中..." : "搜索地点/设施..."}
               disabled={isLoadingPois || !!activity}
-              className={FormFieldInputClass()}
             />
             {poiDropdownOpen && !activity && filteredPois.length > 0 && (
               <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
@@ -331,7 +332,7 @@ export function ActivityEditDialog({
 
           {/* 标题 */}
           <FormField label="标题" required error={titleError}>
-            <input
+            <Input
               type="text"
               value={formData.title}
               onChange={(e) => {
@@ -341,7 +342,7 @@ export function ActivityEditDialog({
               onBlur={() => formData.title.trim() && validateContentFields()}
               placeholder="最多 100 字"
               maxLength={100}
-              className={FormFieldInputClass(!!titleError)}
+              hasError={!!titleError}
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <span className="text-xs text-gray-500">{formData.title.length}/100</span>
@@ -350,7 +351,7 @@ export function ActivityEditDialog({
 
           {/* 描述 */}
           <FormField label="描述" required error={descriptionError}>
-            <textarea
+            <Textarea
               value={formData.description}
               onChange={(e) => {
                 setFormData((prev) => ({ ...prev, description: e.target.value }));
@@ -360,9 +361,7 @@ export function ActivityEditDialog({
               placeholder="最多 1000 字"
               maxLength={1000}
               rows={4}
-              className={`w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20 ${
-                descriptionError ? "border-red-500 focus:border-red-500" : "border-gray-300 focus:border-[#FF4500]"
-              }`}
+              hasError={!!descriptionError}
             />
             <div className="mt-1 flex items-center justify-between gap-2">
               <span className="text-xs text-gray-500">{formData.description.length}/1000</span>
@@ -409,29 +408,17 @@ export function ActivityEditDialog({
           </div>
 
           <div className="modal-footer flex justify-end gap-2 px-6 py-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            >
+            <Button type="button" variant="secondary" onClick={onClose}>
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
-              disabled={
-                isSaving ||
-                isValidating ||
-                (!isExempt && (!!titleError || !!descriptionError))
-              }
-              className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              loading={isSaving}
+              disabled={isValidating || (!isExempt && (!!titleError || !!descriptionError))}
             >
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
+              {!isSaving ? <Save className="h-4 w-4" /> : null}
               {activity ? "保存" : "创建"}
-            </button>
+            </Button>
           </div>
         </form>
     </Modal>

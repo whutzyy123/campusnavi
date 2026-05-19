@@ -6,23 +6,27 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useDebounce } from "@/hooks/use-debounce";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
-import { Card } from "@/components/card";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
+import { ListPageScaffold } from "@/components/admin/list-page-scaffold";
 import { EmptyState } from "@/components/empty-state";
 import { StatusBadge } from "@/components/status-badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
-import { ShoppingBag, Loader2, Trash2, RotateCcw, EyeOff, History } from "lucide-react";
+import { ShoppingBag, Trash2, RotateCcw, EyeOff, History } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import Image from "next/image";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { PageError, PageLoading } from "@/components/ui/page-state";
 import { MarketAuditDrawer } from "@/components/admin/market-audit-drawer";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
+import { Button } from "@/components/ui/button";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   getAdminMarketItems,
   adminMarketItemAction,
   getMarketCategories,
-} from "@/lib/actions/market";
+} from "@/lib/market";
 import { formatDate } from "@/lib/core/utils";
 
 const STATUS_FILTERS = [
@@ -66,6 +70,7 @@ function AdminMarketPageContent() {
   const [items, setItems] = useState<MarketItemRow[]>([]);
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
   const debouncedSearch = useDebounce(searchTerm, 300);
   const [filterCategory, setFilterCategory] = useState("");
@@ -85,6 +90,7 @@ function AdminMarketPageContent() {
   const fetchItems = useCallback(async () => {
     if (!schoolId) return;
     setIsLoading(true);
+    setListError(null);
     try {
       const result = await getAdminMarketItems(schoolId, {
         search: debouncedSearch || undefined,
@@ -104,10 +110,14 @@ function AdminMarketPageContent() {
         setItems(rows);
         setPagination(result.data.pagination ?? null);
       } else {
-        toast.error(result.success === false ? (result.error ?? "获取列表失败") : "获取列表失败");
+        setItems([]);
+        setPagination(null);
+        setListError(result.success === false ? (result.error ?? "获取列表失败") : "获取列表失败");
       }
-    } catch (e) {
-      toast.error("获取列表失败");
+    } catch {
+      setItems([]);
+      setPagination(null);
+      setListError("获取列表失败，请稍后重试");
     } finally {
       setIsLoading(false);
     }
@@ -138,16 +148,16 @@ function AdminMarketPageContent() {
         const result = await adminMarketItemAction(itemId, action);
         if (result.success) {
           const msg = result.data?.message ?? (action === "delete" ? "操作成功" : "已重新上架");
-          toast.success(msg.includes("彻底删除") ? "物品已从数据库永久删除" : msg);
+          notify.success(msg.includes("彻底删除") ? "物品已从数据库永久删除" : msg);
           await fetchItems();
           router.refresh();
         } else {
           console.error("[AdminMarket] 操作失败:", result.error);
-          toast.error(result.error ?? "操作失败");
+          notify.error(result.error ?? "操作失败");
         }
       } catch (e) {
         console.error("[AdminMarket] 请求异常:", e);
-        toast.error("操作失败，请重试");
+        notify.error("操作失败，请重试");
       } finally {
         setProcessingActionId(null);
       }
@@ -181,15 +191,13 @@ function AdminMarketPageContent() {
     return (
       <AuthGuard requiredRole="ADMIN">
         <AdminLayout>
-          <div className="p-6">
-            <Card title="生存集市管理">
-              <EmptyState
-                icon={ShoppingBag}
-                title="无学校绑定"
-                description="您需要绑定学校后才能管理生存集市"
-              />
-            </Card>
-          </div>
+          <AdminPageContainer title="生存集市管理" description="管理本校生存集市商品">
+            <EmptyState
+              icon={ShoppingBag}
+              title="无学校绑定"
+              description="您需要绑定学校后才能管理生存集市"
+            />
+          </AdminPageContainer>
         </AdminLayout>
       </AuthGuard>
     );
@@ -198,62 +206,69 @@ function AdminMarketPageContent() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
-        <div className="p-4 lg:p-6">
-          <Card title="生存集市管理">
-            {/* 状态筛选 Tab */}
-            <div className="mb-4 flex flex-wrap gap-2 border-b border-gray-200 pb-3">
-              {STATUS_FILTERS.map(({ value, label }) => (
-                <button
-                  key={value || "all"}
-                  type="button"
-                  onClick={() => {
-                    setFilterStatus(value);
+        <AdminPageContainer
+          title="生存集市管理"
+          description="管理本校生存集市商品"
+          scrollKey={`${debouncedSearch}-${filterCategory}-${filterStatus}-${currentPage}`}
+        >
+          <ListPageScaffold
+            filters={
+              <>
+                <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-3">
+                  {STATUS_FILTERS.map(({ value, label }) => (
+                    <Button
+                      key={value || "all"}
+                      type="button"
+                      variant={filterStatus === value ? "primary" : "secondary"}
+                      onClick={() => {
+                        setFilterStatus(value);
+                      }}
+                      className={
+                        filterStatus !== value
+                          ? "border-transparent bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          : undefined
+                      }
+                    >
+                      {label}
+                    </Button>
+                  ))}
+                </div>
+                <AdminFilterBar
+                  search={{
+                    value: searchTerm,
+                    onChange: setSearchTerm,
+                    placeholder: "搜索标题或用户...",
                   }}
-                  className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                    filterStatus === value
-                      ? "bg-[#FF4500] text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mb-4">
-              <AdminFilterBar
-                search={{
-                  value: searchTerm,
-                  onChange: setSearchTerm,
-                  placeholder: "搜索标题或用户...",
-                }}
-                filters={[
-                  {
-                    label: "分类",
-                    value: filterCategory,
-                    onChange: setFilterCategory,
-                    options: [
-                      { value: "", label: "全部分类" },
-                      ...categories.map((c) => ({ value: c.id, label: c.name })),
-                    ],
-                  },
-                ]}
-              />
-            </div>
-
-            {isLoading ? (
-              <div className="flex justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-              </div>
-            ) : items.length === 0 ? (
-              <EmptyState
-                icon={ShoppingBag}
-                title="暂无商品"
-                description="当前没有符合条件的商品"
-              />
-            ) : (
-              <div className="w-full min-w-0 overflow-x-auto">
-                <Table>
+                  filters={[
+                    {
+                      label: "分类",
+                      value: filterCategory,
+                      onChange: setFilterCategory,
+                      options: [
+                        { value: "", label: "全部分类" },
+                        ...categories.map((c) => ({ value: c.id, label: c.name })),
+                      ],
+                    },
+                  ]}
+                />
+              </>
+            }
+          >
+            <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg bg-white shadow">
+              <div className="custom-scrollbar flex h-full min-h-0 flex-col overflow-hidden">
+                <div className="min-h-0 flex-1 overflow-y-auto overflow-x-auto p-6">
+                  {listError ? (
+                    <PageError description={listError} onRetry={fetchItems} />
+                  ) : isLoading ? (
+                    <PageLoading className="flex justify-center py-12" />
+                  ) : items.length === 0 ? (
+                    <EmptyState
+                      icon={ShoppingBag}
+                      title="暂无商品"
+                      description="当前没有符合条件的商品"
+                    />
+                  ) : (
+                    <Table>
                   <TableHeader>
                     <TableRow>
                       <TableHead responsiveHide="sm">图片</TableHead>
@@ -345,9 +360,12 @@ function AdminMarketPageContent() {
                                   label: "下架",
                                   icon: EyeOff,
                                   onClick: () => {
-                                    if (confirm("确定要下架此物品吗？下架后用户将无法在集市看到它。")) {
-                                      handleAdminAction(item.id, "delete");
-                                    }
+                                    openConfirm({
+                                      title: "下架物品",
+                                      description: "确定要下架此物品吗？下架后用户将无法在集市看到它。",
+                                      confirmText: "下架",
+                                      onConfirm: () => handleAdminAction(item.id, "delete"),
+                                    });
                                   },
                                 });
                               }
@@ -356,9 +374,14 @@ function AdminMarketPageContent() {
                                   label: "彻底删除",
                                   icon: Trash2,
                                   onClick: () => {
-                                    if (confirm("确定要彻底删除此物品吗？此操作不可恢复，将从数据库中永久移除。")) {
-                                      handleAdminAction(item.id, "delete");
-                                    }
+                                    openConfirm({
+                                      title: "彻底删除物品",
+                                      description:
+                                        "确定要彻底删除此物品吗？此操作不可恢复，将从数据库中永久移除。",
+                                      variant: "danger",
+                                      confirmText: "删除",
+                                      onConfirm: () => handleAdminAction(item.id, "delete"),
+                                    });
                                   },
                                   variant: "destructive",
                                 });
@@ -374,27 +397,29 @@ function AdminMarketPageContent() {
                       </TableRow>
                     ))}
                   </TableBody>
-                </Table>
+                    </Table>
+                  )}
+                </div>
+                {pagination && pagination.total > 0 ? (
+                  <div className="flex flex-shrink-0 justify-center border-t border-gray-100 py-4">
+                    <PaginationControls
+                      total={pagination.total}
+                      pageCount={pagination.pageCount}
+                      currentPage={pagination.currentPage}
+                      limit={pagination.limit}
+                    />
+                  </div>
+                ) : null}
               </div>
-            )}
-            {pagination && pagination.total > 0 ? (
-              <div className="mt-4 flex justify-center">
-                <PaginationControls
-                  total={pagination.total}
-                  pageCount={pagination.pageCount}
-                  currentPage={pagination.currentPage}
-                  limit={pagination.limit}
-                />
-              </div>
-            ) : null}
-          </Card>
+            </div>
+          </ListPageScaffold>
+        </AdminPageContainer>
 
-          <MarketAuditDrawer
-            itemId={auditDrawerItemId}
-            isOpen={!!auditDrawerItemId}
-            onClose={() => setAuditDrawerItemId(null)}
-          />
-        </div>
+        <MarketAuditDrawer
+          itemId={auditDrawerItemId}
+          isOpen={!!auditDrawerItemId}
+          onClose={() => setAuditDrawerItemId(null)}
+        />
       </AdminLayout>
     </AuthGuard>
   );

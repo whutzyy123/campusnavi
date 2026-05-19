@@ -7,39 +7,21 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { Trash2, CheckCircle2, MapPin, X, EyeOff } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirmAsync } from "@/components/ui/confirm-dialog";
 import {
   getAuditComments,
   getAuditCommentCounts,
   reviewComment,
   hardDeleteComment,
   hardDeleteComments,
+  type AuditCommentItem,
 } from "@/lib/actions/comment";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-
-interface CommentForAudit {
-  id: string;
-  content: string;
-  createdAt: string;
-  reportCount: number;
-  isHidden: boolean;
-  isReviewed?: boolean;
-  reviewedAt?: string | null;
-  reviewer?: { id: string; nickname: string | null; email: string | null } | null;
-  user: {
-    id: string;
-    nickname: string | null;
-    email: string | null;
-    avatar: string | null;
-  };
-  poi: {
-    id: string;
-    name: string;
-    category: string;
-  };
-}
 
 /**
  * 留言审核后台
@@ -58,7 +40,7 @@ function CommentAuditPageContent() {
   const { currentUser } = useAuthStore();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [comments, setComments] = useState<CommentForAudit[]>([]);
+  const [comments, setComments] = useState<AuditCommentItem[]>([]);
   const [counts, setCounts] = useState<{ pending: number; processed: number }>({ pending: 0, processed: 0 });
   const [isLoading, setIsLoading] = useState(true);
   const [pagination, setPagination] = useState<{
@@ -68,7 +50,7 @@ function CommentAuditPageContent() {
   } | null>(null);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [detailComment, setDetailComment] = useState<CommentForAudit | null>(null);
+  const [detailComment, setDetailComment] = useState<AuditCommentItem | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const schoolId = currentUser?.schoolId;
@@ -97,11 +79,11 @@ function CommentAuditPageContent() {
         setComments(result.data || []);
         setPagination(result.pagination || null);
       } else {
-        toast.error(result.error || "获取留言审核列表失败");
+        notify.error(result.error || "获取留言审核列表失败");
       }
     } catch (error) {
       console.error("获取留言审核列表失败:", error);
-      toast.error("获取留言审核列表失败");
+      notify.error("获取留言审核列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -130,12 +112,12 @@ function CommentAuditPageContent() {
     try {
       const result = await reviewComment(id, "RESTORE");
       if (!result.success) throw new Error(result.error || "恢复失败");
-      toast.success("留言已恢复显示");
+      notify.success("留言已恢复显示");
       refreshAfterAction();
       router.refresh();
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "恢复失败，请重试");
+      notify.error(error instanceof Error ? error.message : "恢复失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
@@ -148,55 +130,73 @@ function CommentAuditPageContent() {
     try {
       const result = await reviewComment(id, "HIDE");
       if (!result.success) throw new Error(result.error || "隐藏失败");
-      toast.success("留言已隐藏");
+      notify.success("留言已隐藏");
       refreshAfterAction();
       router.refresh();
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "隐藏失败，请重试");
+      notify.error(error instanceof Error ? error.message : "隐藏失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
     }
   };
 
-  const handleDelete = async (id: string): Promise<boolean> => {
+  const performDelete = async (id: string): Promise<boolean> => {
     if (processingId) return false;
-    if (!confirm("确定要彻底删除此留言吗？此操作不可恢复。")) return false;
     setProcessingId(id);
     try {
       const result = await hardDeleteComment(id);
       if (!result.success) throw new Error(result.error || "删除失败");
-      toast.success("留言已永久删除");
+      notify.success("留言已永久删除");
       refreshAfterAction();
       router.refresh();
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "删除失败，请重试");
+      notify.error(error instanceof Error ? error.message : "删除失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
     }
   };
 
-  const handleBulkDelete = async (ids: string[]): Promise<boolean> => {
+  const handleDelete = (id: string) =>
+    openConfirmAsync({
+      title: "彻底删除留言",
+      description: "确定要彻底删除此留言吗？此操作不可恢复。",
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: () => performDelete(id),
+    });
+
+  const performBulkDelete = async (ids: string[]): Promise<boolean> => {
     if (processingId || ids.length === 0) return false;
-    if (!confirm(`确定要彻底删除这 ${ids.length} 条留言吗？此操作不可恢复。`)) return false;
     setProcessingId("bulk");
     try {
       const result = await hardDeleteComments(ids);
       if (!result.success) throw new Error(result.error || "批量删除失败");
-      toast.success(`已永久删除 ${result.deleted ?? ids.length} 条留言`);
+      notify.success(`已永久删除 ${result.deleted ?? ids.length} 条留言`);
       setSelectedIds(new Set());
       refreshAfterAction();
       router.refresh();
       return true;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "批量删除失败，请重试");
+      notify.error(error instanceof Error ? error.message : "批量删除失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
     }
+  };
+
+  const handleBulkDelete = (ids: string[]) => {
+    if (ids.length === 0) return Promise.resolve(false);
+    return openConfirmAsync({
+      title: "批量彻底删除",
+      description: `确定要彻底删除这 ${ids.length} 条留言吗？此操作不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: () => performBulkDelete(ids),
+    });
   };
 
   const toggleExpand = (id: string) => {
@@ -338,7 +338,7 @@ function PendingList({
   onDelete,
   onViewDetail,
 }: {
-  comments: CommentForAudit[];
+  comments: AuditCommentItem[];
   expandedIds: Set<string>;
   processingId: string | null;
   canPermanentDelete: boolean;
@@ -346,7 +346,7 @@ function PendingList({
   onRestore: (id: string) => Promise<boolean>;
   onHide: (id: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
-  onViewDetail: (c: CommentForAudit) => void;
+  onViewDetail: (c: AuditCommentItem) => void;
 }) {
   return (
     <div className="divide-y divide-[#EDEFF1] border border-[#EDEFF1] rounded-lg bg-white">
@@ -438,13 +438,13 @@ function ProcessedTable({
   onBulkDelete,
   onViewDetail,
 }: {
-  comments: CommentForAudit[];
+  comments: AuditCommentItem[];
   processingId: string | null;
   selectedIds: Set<string>;
   onSelectedIdsChange: (ids: Set<string>) => void;
   onDelete: (id: string) => Promise<boolean>;
   onBulkDelete: (ids: string[]) => Promise<boolean>;
-  onViewDetail: (c: CommentForAudit) => void;
+  onViewDetail: (c: AuditCommentItem) => void;
 }) {
   const toggleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
@@ -565,22 +565,21 @@ function DetailModal({
   onRestore,
   onDelete,
 }: {
-  comment: CommentForAudit;
+  comment: AuditCommentItem;
   processingId: string | null;
   onClose: () => void;
   onRestore: (id: string) => Promise<boolean>;
   onDelete: (id: string) => Promise<boolean>;
 }) {
   return (
-    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50" onClick={onClose}>
-      <div className="modal-container max-w-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-[#EDEFF1] px-6 py-4">
-          <h3 className="text-lg font-semibold text-[#1A1A1B]">留言详情</h3>
-          <button type="button" onClick={onClose} className="rounded-lg p-2 text-[#7C7C7C] hover:bg-[#F6F7F8] hover:text-[#1A1A1B]" aria-label="关闭">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-        <div className="space-y-4 px-6 py-4">
+    <Modal isOpen onClose={onClose} containerClassName="max-w-lg">
+      <div className="modal-header flex items-center justify-between px-6 py-4">
+        <h3 className="text-lg font-semibold text-[#1A1A1B]">留言详情</h3>
+        <button type="button" onClick={onClose} className="rounded-lg p-2 text-[#7C7C7C] hover:bg-[#F6F7F8] hover:text-[#1A1A1B]" aria-label="关闭">
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+      <div className="modal-body space-y-4 px-6 py-4">
           <div>
             <p className="mb-1 text-xs font-medium text-[#7C7C7C]">留言内容</p>
             <div className={`rounded-lg border border-[#EDEFF1] bg-[#F6F7F8] px-4 py-3 text-sm whitespace-pre-line break-words ${comment.isHidden ? "italic text-[#7C7C7C]" : "text-[#1A1A1B]"}`}>
@@ -621,27 +620,40 @@ function DetailModal({
               {new Date(comment.createdAt).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
             </p>
           </div>
-        </div>
-        <div className="flex gap-3 px-6 py-4">
-          <button type="button" onClick={onClose} className="flex-1 rounded-lg border border-[#EDEFF1] bg-white px-4 py-2 text-sm font-medium text-[#7C7C7C] hover:bg-[#F6F7F8]">关闭</button>
-          <button
-            onClick={async () => { const ok = await onRestore(comment.id); if (ok) onClose(); }}
-            disabled={processingId === comment.id}
-            className="flex items-center justify-center gap-2 flex-1 rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-100 disabled:opacity-50"
-          >
-            {processingId === comment.id ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-green-600 border-t-transparent" /> : <CheckCircle2 className="h-4 w-4" />}
-            通过
-          </button>
-          <button
-            onClick={async () => { const ok = await onDelete(comment.id); if (ok) onClose(); }}
-            disabled={processingId === comment.id}
-            className="flex items-center justify-center gap-2 flex-1 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
-          >
-            {processingId === comment.id ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-red-600 border-t-transparent" /> : <Trash2 className="h-4 w-4" />}
-            彻底删除
-          </button>
-        </div>
       </div>
-    </div>
+      <div className="modal-footer flex gap-3 px-6 py-4">
+        <Button type="button" variant="secondary" onClick={onClose} className="flex-1">
+          关闭
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={async () => {
+            const ok = await onRestore(comment.id);
+            if (ok) onClose();
+          }}
+          disabled={processingId === comment.id}
+          loading={processingId === comment.id}
+          className="flex-1 border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+        >
+          {!processingId || processingId !== comment.id ? <CheckCircle2 className="h-4 w-4" /> : null}
+          通过
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          onClick={async () => {
+            const ok = await onDelete(comment.id);
+            if (ok) onClose();
+          }}
+          disabled={processingId === comment.id}
+          loading={processingId === comment.id}
+          className="flex-1 border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+        >
+          {!processingId || processingId !== comment.id ? <Trash2 className="h-4 w-4" /> : null}
+          彻底删除
+        </Button>
+      </div>
+    </Modal>
   );
 }

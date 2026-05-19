@@ -6,12 +6,13 @@
 "use client";
 
 import { Toaster } from "react-hot-toast";
+import { Z_INDEX } from "@/lib/ui/z-index";
 
 export function ToastProvider() {
   return (
     <Toaster
       position="top-center"
-      containerStyle={{ top: 80 }}
+      containerStyle={{ top: 80, zIndex: Z_INDEX.toast }}
       toastOptions={{
         duration: 3000,
         style: {

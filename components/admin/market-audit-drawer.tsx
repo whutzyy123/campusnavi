@@ -5,8 +5,8 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, History, User, Pencil, CheckCircle, RotateCcw, Shield, Info, FileDown, Loader2 } from "lucide-react";
 import Image from "next/image";
-import toast from "react-hot-toast";
-import { getAdminItemAuditTrail, generateMarketAuditReport, type AdminItemAuditTrailResult } from "@/lib/actions/market";
+import { notify } from "@/lib/ui/notify";
+import { getAdminItemAuditTrail, generateMarketAuditReport, type AdminItemAuditTrailResult } from "@/lib/market";
 import { cn, formatDateTime } from "@/lib/core/utils";
 
 /** 商品状态枚举 → 展示文案 */
@@ -203,12 +203,12 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        toast.success("报告已开始下载");
+        notify.success("报告已开始下载");
       } else {
-        toast.error(result.error ?? "导出失败");
+        notify.error(result.error ?? "导出失败");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "导出失败");
+      notify.error(e instanceof Error ? e.message : "导出失败");
     } finally {
       setIsExporting(false);
     }
@@ -223,7 +223,7 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
           initial={{ opacity: 0 }}
           animate={{ opacity: isClosing ? 0 : 1 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[200] bg-black/50"
+          className="fixed inset-0 z-map-modal-overlay bg-black/50"
           onClick={handleClose}
           role="presentation"
         />
@@ -232,7 +232,7 @@ export function MarketAuditDrawer({ itemId, isOpen, onClose }: MarketAuditDrawer
           animate={{ x: isClosing ? "100%" : 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
           onAnimationComplete={handleAnimationComplete}
-          className="fixed right-0 top-0 bottom-0 z-[210] w-full max-w-md flex flex-col bg-white shadow-2xl"
+          className="fixed right-0 top-0 bottom-0 z-map-modal-content w-full max-w-md flex flex-col bg-white shadow-2xl"
           onClick={(e) => e.stopPropagation()}
           role="dialog"
           aria-modal="true"

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
+import { cn } from "@/lib/core/utils";
 
 export interface AdminPageContainerProps {
   /** 面包屑。若 AdminLayout 已提供全局面包屑，可传 null 避免重复 */
@@ -15,6 +16,8 @@ export interface AdminPageContainerProps {
   footer?: React.ReactNode;
   /** 可选：变化时重置内容区滚动到顶部（如分页页码） */
   scrollKey?: string | number;
+  /** 可选：覆盖内容区 class（地图分栏页传 p-0 overflow-hidden） */
+  bodyClassName?: string;
   children: React.ReactNode;
 }
 
@@ -26,6 +29,7 @@ export function AdminPageContainer({
   headerExtra,
   footer,
   scrollKey,
+  bodyClassName,
   children,
 }: AdminPageContainerProps) {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -82,7 +86,10 @@ export function AdminPageContainer({
       {/* 内容区（可滚动） */}
       <div
         ref={bodyRef}
-        className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 pt-2 custom-scrollbar"
+        className={cn(
+          "flex-1 min-h-0 overflow-y-auto overflow-x-hidden p-6 pt-2 custom-scrollbar",
+          bodyClassName
+        )}
       >
         {children}
       </div>

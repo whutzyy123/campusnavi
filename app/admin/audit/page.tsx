@@ -8,7 +8,8 @@ import { Card } from "@/components/card";
 import { PageEmpty, PageLoading } from "@/components/ui/page-state";
 import { Badge } from "@/components/badge";
 import { AlertTriangle, Trash2, RotateCcw, ShoppingBag, MapPin } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import {
   getAuditReports,
   getAuditMarketItems,
@@ -81,10 +82,10 @@ export default function AuditPage() {
             }))
           );
         } else if (!result.success) {
-          toast.error(result.error || "获取举报列表失败");
+          notify.error(result.error || "获取举报列表失败");
         }
       } catch (e) {
-        toast.error("获取举报列表失败");
+        notify.error("获取举报列表失败");
       } finally {
         setIsLoadingPOI(false);
       }
@@ -111,10 +112,10 @@ export default function AuditPage() {
             }))
           );
         } else if (!result.success) {
-          toast.error(result.error || "获取集市举报列表失败");
+          notify.error(result.error || "获取集市举报列表失败");
         }
       } catch (e) {
-        toast.error("获取集市举报列表失败");
+        notify.error("获取集市举报列表失败");
       } finally {
         setIsLoadingMarket(false);
       }
@@ -128,10 +129,10 @@ export default function AuditPage() {
     try {
       const result = await resolveAudit(poiId, action);
       if (!result.success) throw new Error(result.error || "处理失败");
-      toast.success("处理成功");
+      notify.success("处理成功");
       setReportedPOIs((prev) => prev.filter((p) => p.id !== poiId));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "处理失败，请重试");
+      notify.error(e instanceof Error ? e.message : "处理失败，请重试");
     } finally {
       setProcessingId(null);
     }
@@ -143,10 +144,10 @@ export default function AuditPage() {
     try {
       const result = await resolveMarketAudit(itemId, action);
       if (!result.success) throw new Error(result.error || "处理失败");
-      toast.success("处理成功");
+      notify.success("处理成功");
       setMarketItems((prev) => prev.filter((m) => m.id !== itemId));
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "处理失败，请重试");
+      notify.error(e instanceof Error ? e.message : "处理失败，请重试");
     } finally {
       setProcessingMarketId(null);
     }
@@ -240,9 +241,13 @@ export default function AuditPage() {
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm(`确定要永久删除 POI "${poi.name}" 吗？此操作不可恢复。`)) {
-                                handleResolvePOI(poi.id, "delete");
-                              }
+                              openConfirm({
+                                title: "永久删除 POI",
+                                description: `确定要永久删除 POI "${poi.name}" 吗？此操作不可恢复。`,
+                                variant: "danger",
+                                confirmText: "删除",
+                                onConfirm: () => handleResolvePOI(poi.id, "delete"),
+                              });
                             }}
                             disabled={processingId === poi.id}
                             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
@@ -314,9 +319,13 @@ export default function AuditPage() {
                           </button>
                           <button
                             onClick={() => {
-                              if (confirm(`确定要删除商品「${item.title}」吗？此操作不可恢复，发布者将收到通知。`)) {
-                                handleResolveMarket(item.id, "delete");
-                              }
+                              openConfirm({
+                                title: "删除商品",
+                                description: `确定要删除商品「${item.title}」吗？此操作不可恢复，发布者将收到通知。`,
+                                variant: "danger",
+                                confirmText: "删除",
+                                onConfirm: () => handleResolveMarket(item.id, "delete"),
+                              });
                             }}
                             disabled={processingMarketId === item.id}
                             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"

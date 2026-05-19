@@ -2,19 +2,20 @@
 
 import Link from "next/link";
 import { LucideIcon } from "lucide-react";
+import { cn } from "@/lib/core/utils";
 
 export type StatCardVariant = "blue" | "green" | "amber" | "slate" | "emerald" | "orange";
 
 const variantStyles: Record<
   StatCardVariant,
-  { iconBg: string; iconColor: string }
+  { iconBg: string; iconColor: string; borderAccent: string }
 > = {
-  blue: { iconBg: "bg-blue-50", iconColor: "text-blue-600" },
-  green: { iconBg: "bg-green-50", iconColor: "text-green-600" },
-  amber: { iconBg: "bg-amber-50", iconColor: "text-amber-600" },
-  slate: { iconBg: "bg-slate-100", iconColor: "text-slate-600" },
-  emerald: { iconBg: "bg-emerald-50", iconColor: "text-emerald-600" },
-  orange: { iconBg: "bg-orange-50", iconColor: "text-orange-600" },
+  blue: { iconBg: "bg-blue-50", iconColor: "text-blue-600", borderAccent: "border-l-blue-500" },
+  green: { iconBg: "bg-green-50", iconColor: "text-green-600", borderAccent: "border-l-green-500" },
+  amber: { iconBg: "bg-amber-50", iconColor: "text-amber-600", borderAccent: "border-l-amber-500" },
+  slate: { iconBg: "bg-slate-100", iconColor: "text-slate-600", borderAccent: "border-l-slate-400" },
+  emerald: { iconBg: "bg-emerald-50", iconColor: "text-emerald-600", borderAccent: "border-l-emerald-500" },
+  orange: { iconBg: "bg-[#FFE5DD]", iconColor: "text-[#FF4500]", borderAccent: "border-l-[#FF4500]" },
 };
 
 interface StatCardProps {
@@ -23,18 +24,11 @@ interface StatCardProps {
   label: string;
   variant?: StatCardVariant;
   isLoading?: boolean;
-  /** 点击跳转链接，有则卡片可点击 */
   href?: string;
-  /** 紧急任务：显示脉冲效果和「点击立即处理」提示 */
   urgent?: boolean;
-  /** 副标签：如 "今日 +3"、"本周 12" */
   subLabel?: React.ReactNode;
 }
 
-/**
- * 统计卡片：白底、细边框、左侧主题图标、右侧大数字+标签
- * 支持 href 时整卡可点击跳转；urgent 时显示脉冲与行动提示
- */
 export function StatCard({
   icon: Icon,
   value,
@@ -45,12 +39,16 @@ export function StatCard({
   urgent = false,
   subLabel,
 }: StatCardProps) {
-  const { iconBg, iconColor } = variantStyles[variant];
+  const { iconBg, iconColor, borderAccent } = variantStyles[variant];
 
   const content = (
     <div className="flex items-center gap-4">
       <div
-        className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${iconBg} ${iconColor}`}
+        className={cn(
+          "flex h-12 w-12 shrink-0 items-center justify-center rounded-xl transition-transform group-hover:scale-105",
+          iconBg,
+          iconColor
+        )}
       >
         <Icon className="h-6 w-6" />
       </div>
@@ -59,18 +57,18 @@ export function StatCard({
           <div className="h-8 w-16 animate-pulse rounded bg-gray-200" />
         ) : (
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-gray-900 tabular-nums">
+            <span className="text-2xl font-bold text-[#1A1A1B] tabular-nums tracking-tight">
               {value}
             </span>
             {subLabel && (
-              <span className="text-xs text-gray-500">{subLabel}</span>
+              <span className="text-xs text-[#7C7C7C]">{subLabel}</span>
             )}
           </div>
         )}
         <div className="mt-0.5 flex flex-col gap-0.5">
-          <span className="text-sm font-medium text-gray-500">{label}</span>
+          <span className="text-sm font-medium text-[#7C7C7C]">{label}</span>
           {urgent && (
-            <span className="text-xs font-medium text-amber-600">
+            <span className="text-xs font-semibold text-[#FF4500]">
               点击立即处理
             </span>
           )}
@@ -79,13 +77,15 @@ export function StatCard({
     </div>
   );
 
-  const baseClass =
-    "rounded-lg border bg-white px-4 py-4 shadow-sm transition-shadow hover:shadow block " +
-    (urgent ? "border-amber-300" : "border-gray-200");
+  const baseClass = cn(
+    "group rounded-xl border border-[#EDEFF1] border-l-[3px] bg-white px-4 py-4 shadow-sm transition-all hover:shadow-md",
+    borderAccent,
+    urgent && "border-amber-300 border-l-amber-500"
+  );
 
   if (href) {
     return (
-      <Link href={href} className={`${baseClass} hover:border-gray-300`}>
+      <Link href={href} className={cn(baseClass, "hover:border-l-[4px] active:scale-[0.98]")}>
         {content}
       </Link>
     );

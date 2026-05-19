@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { SearchInput } from "@/components/shared/search-input";
 import { cn } from "@/lib/core/utils";
 
 export interface FilterOption {
@@ -37,18 +37,15 @@ export function AdminFilterBar({ search, filters, className }: AdminFilterBarPro
         className
       )}
     >
-      {search && (
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            value={search.value}
-            onChange={(e) => search.onChange(e.target.value)}
-            placeholder={search.placeholder ?? "搜索..."}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 pl-9 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
-          />
-        </div>
-      )}
+      {search ? (
+        <SearchInput
+          value={search.value}
+          onChange={search.onChange}
+          placeholder={search.placeholder ?? "搜索..."}
+          clearable
+          className="min-w-[200px] flex-1"
+        />
+      ) : null}
       {filters.map((f) => (
         <div key={f.label} className="flex items-center gap-2">
           <label className="text-sm text-gray-600">{f.label}：</label>

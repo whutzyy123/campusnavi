@@ -4,7 +4,8 @@ import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { AuthGuard } from "@/components/auth-guard";
-import { EmptyState } from "@/components/empty-state";
+import { StudentPageShell } from "@/components/shared/student-page-shell";
+import { PageEmpty, PageError, PageLoading } from "@/components/ui/page-state";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { SearchInput } from "@/components/shared/search-input";
@@ -12,7 +13,8 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { getSchoolLostFoundEvents } from "@/lib/actions/lost-found";
 import { useDebounce } from "@/hooks/use-debounce";
-import { Loader2, MapPin, ExternalLink, Info, User } from "lucide-react";
+import { MapPin, ExternalLink, Info, User } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn, formatRelativeTime } from "@/lib/core/utils";
 
 type LostFoundFilter = "all" | "mine" | "others";
@@ -63,6 +65,46 @@ function LostFoundContent() {
 
   const [items, setItems] = useState<LostFoundRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchLostFound = useCallback(async () => {
+    if (!activeSchool?.id) {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+      const result = await getSchoolLostFoundEvents(activeSchool.id);
+      if (result.success && result.data) {
+        const rows: LostFoundRow[] = result.data.map((e) => ({
+          id: e.id,
+          poiId: e.poiId,
+          description: e.description,
+          contactInfo: e.contactInfo,
+          status: e.status,
+          expiresAt: e.expiresAt,
+          createdAt: e.createdAt,
+          userId: e.userId,
+          userNickname: e.userNickname,
+          poi: e.poi,
+        }));
+        setItems(rows);
+      } else {
+        setItems([]);
+        setError(result.error ?? "加载失物招领失败");
+      }
+    } catch {
+      setItems([]);
+      setError("加载失物招领失败，请稍后重试");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [activeSchool?.id]);
+
+  useEffect(() => {
+    fetchLostFound();
+  }, [fetchLostFound]);
 
   const handleFilterChange = useCallback((filter: LostFoundFilter) => {
     setActiveFilter(filter);
@@ -92,38 +134,6 @@ function LostFoundContent() {
       router.replace(next, { scroll: false });
     }
   }, [debouncedSearch, pathname, router, searchParams]);
-
-  useEffect(() => {
-    const fetchData = async () => {
-      if (!activeSchool?.id) return;
-      setIsLoading(true);
-      try {
-        const result = await getSchoolLostFoundEvents(activeSchool.id);
-        if (result.success && result.data) {
-          const rows: LostFoundRow[] = result.data.map((e) => ({
-            id: e.id,
-            poiId: e.poiId,
-            description: e.description,
-            contactInfo: e.contactInfo,
-            status: e.status,
-            expiresAt: e.expiresAt,
-            createdAt: e.createdAt,
-            userId: e.userId,
-            userNickname: e.userNickname,
-            poi: e.poi,
-          }));
-          setItems(rows);
-        } else {
-          setItems([]);
-        }
-      } catch {
-        setItems([]);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchData();
-  }, [activeSchool?.id]);
 
   const { pagedItems, total, pageCount, currentPage } = useMemo(() => {
     const keyword = debouncedSearch.trim().toLowerCase();
@@ -157,62 +167,51 @@ function LostFoundContent() {
     };
   }, [items, debouncedSearch, page, pageSize, activeFilter, currentUser?.id]);
 
-  if (isLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-      </div>
-    );
+  if (isLoading && items.length === 0) {
+    return <PageLoading className="flex min-h-[40vh] items-center justify-center" />;
   }
 
   const isEmptyState = items.length === 0;
   const isNoResult = total === 0 && !isEmptyState;
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
-      <h1 className="mb-6 text-2xl font-bold text-[#1A1A1B]">失物招领</h1>
-
+    <>
+      {error ? (
+        <PageError description={error} onRetry={fetchLostFound} />
+      ) : (
+        <>
       <div className="mb-6 flex flex-wrap gap-2">
-        <button
+        <Button
+          type="button"
+          variant={activeFilter === "all" ? "primary" : "secondary"}
           onClick={() => handleFilterChange("all")}
-          className={cn(
-            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-            activeFilter === "all"
-              ? "bg-[#FF4500] text-white"
-              : "bg-white text-[#7C7C7C] border border-[#EDEFF1] hover:border-[#FF4500] hover:text-[#FF4500]"
-          )}
+          className={activeFilter !== "all" ? "border-[#EDEFF1] text-[#7C7C7C] hover:border-[#FF4500] hover:text-[#FF4500]" : undefined}
         >
           全部
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant={activeFilter === "mine" ? "primary" : "secondary"}
           onClick={() => handleFilterChange("mine")}
-          className={cn(
-            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-            activeFilter === "mine"
-              ? "bg-[#FF4500] text-white"
-              : "bg-white text-[#7C7C7C] border border-[#EDEFF1] hover:border-[#FF4500] hover:text-[#FF4500]"
-          )}
+          className={activeFilter !== "mine" ? "border-[#EDEFF1] text-[#7C7C7C] hover:border-[#FF4500] hover:text-[#FF4500]" : undefined}
         >
           <span className="text-base">📤</span>
           我发布的
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          variant={activeFilter === "others" ? "primary" : "secondary"}
           onClick={() => handleFilterChange("others")}
-          className={cn(
-            "flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-            activeFilter === "others"
-              ? "bg-[#FF4500] text-white"
-              : "bg-white text-[#7C7C7C] border border-[#EDEFF1] hover:border-[#FF4500] hover:text-[#FF4500]"
-          )}
+          className={activeFilter !== "others" ? "border-[#EDEFF1] text-[#7C7C7C] hover:border-[#FF4500] hover:text-[#FF4500]" : undefined}
         >
           <span className="text-base">👀</span>
           别人发布的
-        </button>
+        </Button>
       </div>
 
       {isEmptyState ? (
         <div className="rounded-lg border border-[#EDEFF1] bg-white p-6">
-          <EmptyState
+          <PageEmpty
             icon={Info}
             title="暂无失物招领记录"
             description="在 POI 详情中发布失物招领后，这里会展示相关记录。"
@@ -229,7 +228,7 @@ function LostFoundContent() {
             />
           </div>
           <div className="rounded-lg border border-[#EDEFF1] bg-white p-6">
-            <EmptyState
+            <PageEmpty
               icon={Info}
               title="没有找到匹配的搜索结果"
               description="请尝试更换关键词，或清空搜索框查看全部记录。"
@@ -349,21 +348,19 @@ function LostFoundContent() {
           )}
         </>
       )}
-    </div>
+        </>
+      )}
+    </>
   );
 }
 
 export default function LostFoundPage() {
   return (
     <AuthGuard requiredRole="STUDENT">
-      <Suspense
-        fallback={
-          <div className="flex min-h-[50vh] items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-          </div>
-        }
-      >
-        <LostFoundContent />
+      <Suspense fallback={<PageLoading className="flex min-h-[50vh] items-center justify-center" />}>
+        <StudentPageShell title="失物招领" maxWidth="4xl">
+          <LostFoundContent />
+        </StudentPageShell>
       </Suspense>
     </AuthGuard>
   );

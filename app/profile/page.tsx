@@ -7,13 +7,15 @@ import Image from "next/image";
 import { updateProfile, updateEmail, updatePassword } from "@/lib/actions/profile";
 import { deleteMyAccount } from "@/lib/actions/user";
 import { getMe } from "@/lib/auth/server-actions";
-import { getMarketThumbsUpRate } from "@/lib/actions/market";
+import { getMarketThumbsUpRate } from "@/lib/market";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { AuthGuard } from "@/components/auth-guard";
-import toast from "react-hot-toast";
-import { User, Mail, Lock, Save, Loader2, AlertTriangle, Clock, ShoppingBag } from "lucide-react";
+import { notify } from "@/lib/ui/notify";
+import { User, Mail, Lock, Save, AlertTriangle, Clock, ShoppingBag } from "lucide-react";
 import { ImageUpload } from "@/components/shared/image-upload";
+import { openConfirm } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 /** 个人信息 Tab：拉取好评率 */
@@ -57,7 +59,6 @@ function ProfilePageContent() {
     confirmPassword: "",
   });
   const [isSavingPassword, setIsSavingPassword] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // 加载用户信息
   useEffect(() => {
@@ -126,7 +127,7 @@ function ProfilePageContent() {
       const result = await updateProfile(formData);
 
       if (result.success) {
-        toast.success(result.message || "资料更新成功");
+        notify.success(result.message || "资料更新成功");
         if (result.user) {
           setUser({
             ...currentUser!,
@@ -143,11 +144,11 @@ function ProfilePageContent() {
           setLastProfileUpdateAt(meResult.user.lastProfileUpdateAt || null);
         }
       } else {
-        toast.error(result.message || "更新失败");
+        notify.error(result.message || "更新失败");
       }
     } catch (error) {
       console.error("更新资料失败:", error);
-      toast.error("更新失败，请重试");
+      notify.error("更新失败，请重试");
     } finally {
       setIsSavingProfile(false);
     }
@@ -166,7 +167,7 @@ function ProfilePageContent() {
       const result = await updateEmail(formData);
 
       if (result.success) {
-        toast.success(result.message || "邮箱换绑成功");
+        notify.success(result.message || "邮箱换绑成功");
         // 如果要求重新登录
         if (result.requiresReauth) {
           setTimeout(() => {
@@ -177,11 +178,11 @@ function ProfilePageContent() {
           setEmailForm({ newEmail: "", password: "" });
         }
       } else {
-        toast.error(result.message || "换绑失败");
+        notify.error(result.message || "换绑失败");
       }
     } catch (error) {
       console.error("换绑邮箱失败:", error);
-      toast.error("换绑失败，请重试");
+      notify.error("换绑失败，请重试");
     } finally {
       setIsSavingEmail(false);
     }
@@ -201,7 +202,7 @@ function ProfilePageContent() {
       const result = await updatePassword(formData);
 
       if (result.success) {
-        toast.success(result.message || "密码修改成功");
+        notify.success(result.message || "密码修改成功");
         // 清空表单
         setPasswordForm({
           oldPassword: "",
@@ -209,37 +210,44 @@ function ProfilePageContent() {
           confirmPassword: "",
         });
       } else {
-        toast.error(result.message || "修改失败");
+        notify.error(result.message || "修改失败");
       }
     } catch (error) {
       console.error("修改密码失败:", error);
-      toast.error("修改失败，请重试");
+      notify.error("修改失败，请重试");
     } finally {
       setIsSavingPassword(false);
     }
   };
 
   // 注销账号
-  const handleDeleteAccount = async () => {
-    const confirmed = window.confirm("确定要注销账号吗？此操作不可恢复。");
-    if (!confirmed) return;
-
-    setIsDeleting(true);
-    try {
-      const result = await deleteMyAccount();
-      if (result.success) {
-        toast.success(result.message || "账号已注销");
-        setUser(null);
-        router.push("/");
-      } else {
-        toast.error(result.message || "注销失败");
-      }
-    } catch (error) {
-      console.error("注销账号失败:", error);
-      toast.error("注销失败，请重试");
-    } finally {
-      setIsDeleting(false);
-    }
+  const handleDeleteAccount = () => {
+    openConfirm({
+      title: "注销账号",
+      description: "确定要注销账号吗？此操作不可恢复。",
+      variant: "danger",
+      confirmText: "确认注销",
+      onConfirm: async () => {
+        try {
+          const result = await deleteMyAccount();
+          if (result.success) {
+            notify.success(result.message || "账号已注销");
+            setUser(null);
+            router.push("/");
+            return;
+          }
+          notify.error(result.message || "注销失败");
+          throw new Error("delete_account_failed");
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_account_failed") {
+            throw error;
+          }
+          console.error("注销账号失败:", error);
+          notify.error("注销失败，请重试");
+          throw error;
+        }
+      },
+    });
   };
 
   return (
@@ -351,23 +359,15 @@ function ProfilePageContent() {
 
               {/* 保存按钮：固定底部，长表单时始终可见 */}
               <div className="flex flex-shrink-0 justify-end border-t border-[#EDEFF1] bg-white px-6 py-4">
-                <button
+                <Button
                   type="submit"
-                  disabled={isSavingProfile || !profileForm.nickname.trim()}
-                  className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-6 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  loading={isSavingProfile}
+                  disabled={!profileForm.nickname.trim()}
+                  className="px-6"
                 >
-                  {isSavingProfile ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      保存中...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4" />
-                      保存
-                    </>
-                  )}
-                </button>
+                  {!isSavingProfile ? <Save className="h-4 w-4" /> : null}
+                  {isSavingProfile ? "保存中..." : "保存"}
+                </Button>
               </div>
             </form>
             </div>
@@ -419,23 +419,15 @@ function ProfilePageContent() {
                   <p className="mt-1 text-xs text-[#7C7C7C]">换绑邮箱后需要重新登录</p>
                 </div>
                 <div className="flex justify-end">
-                  <button
+                  <Button
                     type="submit"
-                    disabled={isSavingEmail || !emailForm.newEmail || !emailForm.password}
-                    className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-6 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    loading={isSavingEmail}
+                    disabled={!emailForm.newEmail || !emailForm.password}
+                    className="px-6"
                   >
-                    {isSavingEmail ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <Mail className="h-4 w-4" />
-                        换绑邮箱
-                      </>
-                    )}
-                  </button>
+                    {!isSavingEmail ? <Mail className="h-4 w-4" /> : null}
+                    {isSavingEmail ? "处理中..." : "换绑邮箱"}
+                  </Button>
                 </div>
               </form>
             </div>
@@ -495,29 +487,20 @@ function ProfilePageContent() {
                     )}
                 </div>
                 <div className="flex justify-end">
-                  <button
+                  <Button
                     type="submit"
+                    loading={isSavingPassword}
                     disabled={
-                      isSavingPassword ||
                       !passwordForm.oldPassword ||
                       !passwordForm.newPassword ||
                       !passwordForm.confirmPassword ||
                       passwordForm.newPassword !== passwordForm.confirmPassword
                     }
-                    className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-6 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                    className="px-6"
                   >
-                    {isSavingPassword ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        处理中...
-                      </>
-                    ) : (
-                      <>
-                        <Lock className="h-4 w-4" />
-                        修改密码
-                      </>
-                    )}
-                  </button>
+                    {!isSavingPassword ? <Lock className="h-4 w-4" /> : null}
+                    {isSavingPassword ? "处理中..." : "修改密码"}
+                  </Button>
                 </div>
               </form>
             </div>
@@ -531,21 +514,9 @@ function ProfilePageContent() {
               <p className="mb-4 text-sm text-red-700">
                 一旦注销，您的所有数据（包括评论、收藏）将被永久删除，无法恢复。
               </p>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={isDeleting}
-                className="rounded-lg bg-red-600 px-6 py-2 text-sm font-medium text-white transition-opacity hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {isDeleting ? (
-                  <>
-                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                    处理中...
-                  </>
-                ) : (
-                  "确认注销"
-                )}
-              </button>
+              <Button type="button" variant="danger" onClick={handleDeleteAccount} className="px-6">
+                确认注销
+              </Button>
             </div>
           </div>
         </div>

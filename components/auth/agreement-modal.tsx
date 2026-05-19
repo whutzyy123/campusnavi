@@ -26,9 +26,8 @@ export function AgreementModal({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
+      elevation="elevated"
       containerClassName="max-w-2xl"
-      overlayClassName="z-[200]"
-      contentClassName="z-[210]"
     >
       <div className="modal-header px-6 py-4">
         <h2 className="text-lg font-semibold text-gray-900">{title}</h2>

@@ -1,22 +1,30 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { fetchAuthMeRole, redirectToLogin } from "@/lib/auth/middleware-admin-auth";
+import { extractRoleFromJWTCookie } from "@/lib/auth/middleware-jwt";
+import { redirectToLogin } from "@/lib/auth/middleware-admin-auth";
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isAdminPath = pathname.startsWith("/admin");
   const isSuperAdminPath = pathname.startsWith("/super-admin");
+  const isSquarePostPath = pathname === "/square/post" || pathname.startsWith("/square/post/");
 
-  if (isAdminPath || isSuperAdminPath) {
-    const sessionCookie = request.cookies.get("campus-survival-session");
-
-    if (!sessionCookie?.value) {
+  if (isSquarePostPath) {
+    try {
+      const role = await extractRoleFromJWTCookie(request);
+      if (!role) {
+        return redirectToLogin(request, pathname);
+      }
+    } catch {
       return redirectToLogin(request, pathname);
     }
+  }
 
+  if (isAdminPath || isSuperAdminPath) {
     try {
-      const role = await fetchAuthMeRole(request);
+      // 从 JWT Cookie 中提取角色（无 HTTP 调用）
+      const role = await extractRoleFromJWTCookie(request);
 
       if (!role) {
         return redirectToLogin(request, pathname);
@@ -44,5 +52,5 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/super-admin/:path*"],
+  matcher: ["/admin/:path*", "/super-admin/:path*", "/square/post"],
 };

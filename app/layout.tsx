@@ -3,6 +3,7 @@ import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { BottomTabBar } from "@/components/bottom-tab-bar";
 import { ToastProvider } from "@/components/toast-provider";
+import { ConfirmDialogProvider } from "@/components/ui/confirm-dialog";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
 export const metadata: Metadata = {
@@ -34,10 +35,10 @@ export default function RootLayout({
       <body className="flex flex-col h-screen h-screen-dvh overflow-hidden">
         <Navbar />
         <ToastProvider />
+        <ConfirmDialogProvider />
         <PageViewTracker />
         <main
-          className="min-h-0 flex-1 overflow-y-auto bg-gray-50"
-          style={{ paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px))" }}
+          className="min-h-0 flex-1 overflow-y-auto bg-gray-50 pb-[calc(4rem+env(safe-area-inset-bottom,0px))] md:pb-14"
         >
           {children}
         </main>

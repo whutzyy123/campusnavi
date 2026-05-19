@@ -70,15 +70,17 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "超级管理员创建成功",
-      user: {
-        id: superAdmin.id,
-        email: superAdmin.email,
-        nickname: superAdmin.nickname,
-        role: "SUPER_ADMIN",
-      },
-      credentials: {
-        email: "admin@system.local",
-        password: "123456",
+      data: {
+        user: {
+          id: superAdmin.id,
+          email: superAdmin.email,
+          nickname: superAdmin.nickname,
+          role: "SUPER_ADMIN",
+        },
+        credentials: {
+          email: "admin@system.local",
+          password: "123456",
+        },
       },
     });
   } catch (error) {

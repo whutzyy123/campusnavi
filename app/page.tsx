@@ -1,16 +1,19 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState, useRef } from "react";
-import { useSearchParams } from "next/navigation";
-import toast from "react-hot-toast";
+import { useSearchParams, useRouter } from "next/navigation";
+import { notify } from "@/lib/ui/notify";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { useSchoolStore, type School } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
-import { POIMap, type POIMapRef } from "@/components/poi-map";
+import { POIMap } from "@/components/poi-map";
+import type { POIMapRef } from "@/lib/poi-map";
 import { POIDrawer } from "@/components/poi-drawer";
 import { LostFoundDetailModal, type LostFoundEventWithRelations } from "@/components/lost-found-detail-modal";
 import { motion } from "framer-motion";
-import { LocateFixed, Route, Eye, X } from "lucide-react";
+import { LocateFixed, Route, Eye, X, MapPin } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import type { POIWithStatus } from "@/lib/geo/poi-utils";
 import { getPOIsBySchool } from "@/lib/actions/poi";
 import { getSchoolById, getSchoolsList, detectSchoolByLocation } from "@/lib/school/actions";
@@ -43,6 +46,7 @@ export default function Home() {
 
 function HomeContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   useSyncMarketUrl();
   const [pois, setPois] = useState<POIWithStatus[]>([]);
   useMarketMapLinkage(pois);
@@ -58,6 +62,7 @@ function HomeContent() {
     selectParentPOI,
     focusCampusTrigger,
     setHighlightPoi,
+    setPickedPOI,
   } = useSchoolStore();
   const { openNavigationPanel, routeInfo } = useNavigationStore();
   const { currentUser } = useAuthStore();
@@ -78,6 +83,10 @@ function HomeContent() {
   const [showSchoolInspectModal, setShowSchoolInspectModal] = useState(false);
   const [selectedLostFoundItem, setSelectedLostFoundItem] = useState<LostFoundEventWithRelations | null>(null);
   const [lostFoundListRefreshTrigger, setLostFoundListRefreshTrigger] = useState(0);
+
+  // 选点模式
+  const isPickPoiMode = searchParams.get("pickPoi") === "1";
+  const [confirmPoi, setConfirmPoi] = useState<POIWithStatus | null>(null);
 
   // 确定当前使用的学校
   // 优先级：超级管理员视察 > 手动选择的 activeSchool
@@ -138,12 +147,16 @@ function HomeContent() {
     fetchPOIs();
   }, [currentSchool]);
 
-  // 地图点击子 POI 时打开抽屉
+  // 地图点击子 POI 时打开抽屉（选点模式下走确认弹窗）
   useEffect(() => {
     if (selectedSubPOI) {
-      setShowPOIDrawer(true);
+      if (isPickPoiMode) {
+        setConfirmPoi(selectedSubPOI);
+      } else {
+        setShowPOIDrawer(true);
+      }
     }
-  }, [selectedSubPOI]);
+  }, [selectedSubPOI, isPickPoiMode]);
 
   // 校区切换时关闭 POI 抽屉
   useEffect(() => {
@@ -181,6 +194,10 @@ function HomeContent() {
   // 处理 POI 点击（根 POI，view 为打开前的地图视图，用于关闭时恢复）
   const handlePOIClick = useCallback(
     (poi: POIWithStatus, view?: { center: [number, number]; zoom: number } | null) => {
+      if (isPickPoiMode) {
+        setConfirmPoi(poi);
+        return;
+      }
       analytics.map.markerClick({ poi_id: poi.id, poi_name: poi.name, is_sub_poi: false });
       setSelectedPOI(poi);
       setShowPOIDrawer(true);
@@ -188,7 +205,7 @@ function HomeContent() {
         selectParentPOI(poi, view ?? null);
       }
     },
-    [selectParentPOI]
+    [selectParentPOI, isPickPoiMode]
   );
 
   // 向 Navbar 提供 POI 搜索数据（首页地图视图）
@@ -286,7 +303,7 @@ function HomeContent() {
                 setActiveSchool(result.data);
               } else {
                 analytics.map.schoolDetectFail();
-                toast.error("您当前不在支持的校区内");
+                notify.error("您当前不在支持的校区内");
               }
             } catch (error) {
               console.error("检测学校失败:", error);
@@ -301,40 +318,42 @@ function HomeContent() {
       />
 
       {/* 导航控制面板 */}
-      <NavigationPanel />
+      {!isPickPoiMode && <NavigationPanel />}
 
       {/* POI 分类筛选面板 */}
-      <POIFilterPanel schoolId={currentSchool?.id ?? null} />
+      {!isPickPoiMode && <POIFilterPanel schoolId={currentSchool?.id ?? null} />}
 
       {/* 生存集市：贴地图的叠加抽屉 */}
-      <MarketOverlayDrawer />
+      {!isPickPoiMode && <MarketOverlayDrawer />}
 
       {/* 集市商品详情 Modal（选中时展示，z-[210]，含「在地图中查看」→ Focus Mode） */}
-      <MarketItemDetailModalController />
+      {!isPickPoiMode && <MarketItemDetailModalController />}
 
       {/* 集市 Focus Mode 浮动条（在地图中查看时显示） */}
-      <MarketFocusBar />
+      {!isPickPoiMode && <MarketFocusBar />}
 
       {/* POI 详情抽屉 */}
-      <POIDrawer
-        poi={selectedPOI}
-        schoolId={currentSchool?.id || ""}
-        isOpen={showPOIDrawer}
-        onClose={() => {
-          setShowPOIDrawer(false);
-          setSelectedPOI(null);
-          clearSelection();
-        }}
-        onStatusUpdate={handlePOIStatusUpdate}
-        userLocation={userLocation || undefined}
-        highlightCommentId={urlCommentId || undefined}
-        highlightLostFoundId={urlLostFoundId || undefined}
-        onSelectLostFoundItem={setSelectedLostFoundItem}
-        lostFoundListRefreshTrigger={lostFoundListRefreshTrigger}
-      />
+      {!isPickPoiMode && (
+        <POIDrawer
+          poi={selectedPOI}
+          schoolId={currentSchool?.id || ""}
+          isOpen={showPOIDrawer}
+          onClose={() => {
+            setShowPOIDrawer(false);
+            setSelectedPOI(null);
+            clearSelection();
+          }}
+          onStatusUpdate={handlePOIStatusUpdate}
+          userLocation={userLocation || undefined}
+          highlightCommentId={urlCommentId || undefined}
+          highlightLostFoundId={urlLostFoundId || undefined}
+          onSelectLostFoundItem={setSelectedLostFoundItem}
+          lostFoundListRefreshTrigger={lostFoundListRefreshTrigger}
+        />
+      )}
 
       {/* 失物招领详情弹窗 - Portal 渲染，覆盖抽屉 */}
-      {selectedLostFoundItem && (
+      {!isPickPoiMode && selectedLostFoundItem && (
         <LostFoundDetailModal
           item={selectedLostFoundItem}
           isOpen={!!selectedLostFoundItem}
@@ -344,12 +363,14 @@ function HomeContent() {
         />
       )}
 
-      {/* 右下角地图操作按钮：routeInfo 存在时移动端上移避免与 NavInfoCard 重叠，含安全区 */}
+      {/* 右下角地图操作按钮：避开底部导航栏（h-16=64px）+ 安全区 */}
       <motion.div
-        className="fixed z-navbar-dropdown flex flex-col gap-3"
+        className="fixed z-map-control flex flex-col gap-3"
         style={{
           right: "calc(1rem + env(safe-area-inset-right, 0px))",
-          bottom: isMobile ? "calc(1.5rem + env(safe-area-inset-bottom, 0px))" : "1.5rem",
+          bottom: isMobile
+            ? "calc(5rem + env(safe-area-inset-bottom, 0px))"
+            : "calc(5rem + env(safe-area-inset-bottom, 0px))",
         }}
         animate={{
           y: isMobile && routeInfo ? -100 : 0,
@@ -372,19 +393,81 @@ function HomeContent() {
             />
           )}
         </button>
-        {/* 导航按钮（主按钮，更突出） */}
-        <button
-          onClick={openNavigationPanel}
-          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#FF4500] text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
-          title="路线规划"
-          aria-label="路线规划"
-        >
-          <Route className="h-6 w-6" />
-        </button>
+        {/* 导航按钮（选点模式下隐藏） */}
+        {!isPickPoiMode && (
+          <Button
+            type="button"
+            onClick={openNavigationPanel}
+            className="h-14 w-14 rounded-full p-0 shadow-lg active:scale-95"
+            title="路线规划"
+            aria-label="路线规划"
+          >
+            <Route className="h-6 w-6" />
+          </Button>
+        )}
       </motion.div>
 
       {/* 导航信息卡片 */}
-      <NavInfoCard />
+      {!isPickPoiMode && <NavInfoCard />}
+
+      {/* 选点模式提示条 */}
+      {isPickPoiMode && (
+        <div className="absolute left-1/2 top-4 z-map-banner -translate-x-1/2 rounded-lg bg-[#FF4500]/95 backdrop-blur-sm px-4 py-2 text-sm text-white shadow-md">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4" />
+            <span className="font-medium">点击地图上的地点进行选择</span>
+          </div>
+        </div>
+      )}
+
+      {/* 选点确认弹窗 */}
+      <Modal
+        isOpen={!!confirmPoi}
+        onClose={() => setConfirmPoi(null)}
+        elevation="elevated"
+        containerClassName="max-w-sm"
+      >
+        <div className="modal-body p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#FFE5DD]">
+              <MapPin className="h-5 w-5 text-[#FF4500]" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-[#1A1A1B]">确认选择地点</p>
+              <p className="text-sm text-[#7C7C7C]">将关联此地点到帖子中</p>
+            </div>
+          </div>
+          {confirmPoi && (
+            <div className="rounded-xl bg-[#F6F7F8] px-4 py-3 mb-5">
+              <p className="text-sm font-medium text-[#1A1A1B]">{confirmPoi.name}</p>
+              {confirmPoi.alias && (
+                <p className="text-xs text-[#B0B0B0] mt-0.5">{confirmPoi.alias}</p>
+              )}
+            </div>
+          )}
+          <div className="flex gap-3">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setConfirmPoi(null)}
+              className="flex-1 rounded-xl py-2.5 bg-[#F6F7F8] text-[#7C7C7C] border-[#EDEFF1] hover:bg-[#EDEFF1]"
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!confirmPoi) return;
+                setPickedPOI({ id: confirmPoi.id, name: confirmPoi.name });
+                router.push("/square/post");
+              }}
+              className="flex-1 rounded-xl py-2.5 shadow-sm active:scale-[0.97]"
+            >
+              确认
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* 超级管理员视察状态提示 */}
       {inspectedSchool && currentUser?.role === "SUPER_ADMIN" && (
@@ -407,51 +490,55 @@ function HomeContent() {
       )}
 
       {/* 校区选择模态框（超级管理员） */}
-      {showSchoolInspectModal && (
-        <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-          <div className="modal-container max-w-md">
-            <div className="modal-header flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900">选择视察校区</h3>
-                <p className="text-sm text-gray-500">选择一个学校进行查看</p>
-              </div>
-              <button
-                onClick={() => setShowSchoolInspectModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="modal-body p-4">
-              {schools.length === 0 ? (
-                <div className="py-8 text-center text-sm text-gray-500">
-                  暂无可用学校
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {schools.map((school) => (
-                    <button
-                      key={school.id}
-                      onClick={() => handleInspectSchool(school)}
-                      className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-left transition-colors hover:border-[#FF4500]/40 hover:bg-[#FFE5DD]"
-                    >
-                      <div className="font-medium text-gray-900">{school.name}</div>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
-                        <code className="rounded bg-gray-100 px-2 py-0.5 font-mono">
-                          {school.schoolCode}
-                        </code>
-                        <span>•</span>
-                        <span>点击查看</span>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+      <Modal
+        isOpen={showSchoolInspectModal}
+        onClose={() => setShowSchoolInspectModal(false)}
+        elevation="elevated"
+        containerClassName="max-w-md"
+      >
+        <div className="modal-header flex items-center justify-between px-6 py-4">
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">选择视察校区</h3>
+            <p className="text-sm text-gray-500">选择一个学校进行查看</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSchoolInspectModal(false)}
+            className="text-gray-400 hover:text-gray-600"
+            aria-label="关闭"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
-      )}
+
+        <div className="modal-body p-4">
+          {schools.length === 0 ? (
+            <div className="py-8 text-center text-sm text-gray-500">
+              暂无可用学校
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {schools.map((school) => (
+                <button
+                  key={school.id}
+                  type="button"
+                  onClick={() => handleInspectSchool(school)}
+                  className="w-full rounded-lg border border-gray-200 bg-white px-4 py-3 text-left transition-colors hover:border-[#FF4500]/40 hover:bg-[#FFE5DD]"
+                >
+                  <div className="font-medium text-gray-900">{school.name}</div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-gray-500">
+                    <code className="rounded bg-gray-100 px-2 py-0.5 font-mono">
+                      {school.schoolCode}
+                    </code>
+                    <span>•</span>
+                    <span>点击查看</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -6,8 +6,10 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { Card } from "@/components/card";
 import { EmptyState } from "@/components/empty-state";
 import { MapPin, Plus, Trash2, Edit, MoreVertical, Filter, X, ChevronRight, ChevronDown } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { PageError, PageLoading } from "@/components/ui/page-state";
 import { POIEditDialog } from "@/components/poi-edit-dialog";
 import { getPOIsBySchool, deletePOI } from "@/lib/actions/poi";
 import { getSchoolCategoriesForAdmin } from "@/lib/actions/category";
@@ -120,7 +122,6 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
     } catch (err) {
       console.error("获取 POI 列表失败:", err);
       setError(err instanceof Error ? err.message : "获取 POI 列表失败");
-      toast.error(err instanceof Error ? err.message : "获取 POI 列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -215,66 +216,72 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
   const filteredTree = hierarchical && embedded ? buildTree(filteredPOIs) : null;
 
   // 批量删除
-  const handleBatchDelete = async () => {
+  const handleBatchDelete = () => {
     if (selectedPOIs.size === 0) {
-      toast.error("请先选择要删除的 POI");
+      notify.error("请先选择要删除的 POI");
       return;
     }
 
-    if (!confirm(`确定要删除选中的 ${selectedPOIs.size} 个 POI 吗？此操作不可逆。`)) {
-      return;
-    }
-
-    try {
-      const deletePromises = Array.from(selectedPOIs).map(async (id) => {
-        const result = await deletePOI(id);
-        if (!result.success) {
-          throw new Error(result.error || "删除失败");
+    openConfirm({
+      title: "批量删除 POI",
+      description: `确定要删除选中的 ${selectedPOIs.size} 个 POI 吗？此操作不可逆。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        try {
+          const deletePromises = Array.from(selectedPOIs).map(async (id) => {
+            const result = await deletePOI(id);
+            if (!result.success) {
+              throw new Error(result.error || "删除失败");
+            }
+            return result;
+          });
+          await Promise.all(deletePromises);
+          notify.success(`成功删除 ${selectedPOIs.size} 个 POI`);
+          setSelectedPOIs(new Set());
+          await fetchPOIs();
+        } catch (error) {
+          notify.error(error instanceof Error ? error.message : "批量删除失败");
+          throw error;
         }
-        return result;
-      });
-
-      await Promise.all(deletePromises);
-      toast.success(`已删除 ${selectedPOIs.size} 个 POI`);
-      setSelectedPOIs(new Set());
-      await fetchPOIs();
-    } catch (error) {
-      console.error("批量删除失败:", error);
-      toast.error(error instanceof Error ? error.message : "批量删除失败");
-    }
+      },
+    });
   };
 
   // 删除 POI（如果提供了回调函数，使用回调；否则内部处理）
-  const handleDelete = async (poiId: string) => {
-    if (!confirm("确定要删除这个 POI 吗？此操作不可逆。")) {
-      return;
-    }
-
-    if (onDeletePOI) {
-      // 使用外部提供的删除函数
-      onDeletePOI(poiId);
-      setActionMenuOpen(null);
-      // 延迟刷新，等待外部删除完成
-      setTimeout(() => {
-        fetchPOIs();
-      }, 500);
-    } else {
-      // 内部处理删除
-      try {
-        const result = await deletePOI(poiId);
-
-        if (!result.success) {
-          throw new Error(result.error || "删除失败");
+  const handleDelete = (poiId: string) => {
+    openConfirm({
+      title: "删除 POI",
+      description: "确定要删除这个 POI 吗？此操作不可逆。",
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        if (onDeletePOI) {
+          onDeletePOI(poiId);
+          setActionMenuOpen(null);
+          setTimeout(() => {
+            fetchPOIs();
+          }, 500);
+          return;
         }
 
-        toast.success("POI 删除成功");
-        setActionMenuOpen(null);
-        await fetchPOIs(); // 刷新列表
-      } catch (error) {
-        console.error("删除 POI 失败:", error);
-        toast.error(error instanceof Error ? error.message : "删除失败");
-      }
-    }
+        try {
+          const result = await deletePOI(poiId);
+
+          if (!result.success) {
+            throw new Error(result.error || "删除失败");
+          }
+
+          notify.success("POI 删除成功");
+          setActionMenuOpen(null);
+          await fetchPOIs();
+        } catch (error) {
+          console.error("删除 POI 失败:", error);
+          notify.error(error instanceof Error ? error.message : "删除失败");
+          throw error;
+        }
+      },
+    });
   };
 
   const listContent = (
@@ -345,19 +352,13 @@ export function POIManagerTable({ schoolId, onAddPOI, onAddSubPOI, onEditPOI, on
           )}
         </div>
       {isLoading ? (
-        <div className={`flex items-center justify-center py-12 ${embedded ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#FF4500] border-t-transparent"></div>
-        </div>
+        <PageLoading className={`flex justify-center py-12 ${embedded ? "min-h-0 flex-1 overflow-y-auto" : ""}`} />
       ) : error ? (
-        <div className={`py-12 text-center ${embedded ? "min-h-0 flex-1 overflow-y-auto" : ""}`}>
-          <p className="text-red-600">{error}</p>
-          <button
-            onClick={fetchPOIs}
-            className="mt-4 rounded-lg bg-[#FF4500] px-4 py-2 text-sm text-white hover:opacity-90"
-          >
-            重试
-          </button>
-        </div>
+        <PageError
+          description={error}
+          onRetry={fetchPOIs}
+          className={embedded ? "min-h-0 flex-1 overflow-y-auto py-8" : undefined}
+        />
       ) : pois.length === 0 ? (
         <div className={embedded ? "min-h-0 flex-1 overflow-y-auto" : ""}>
           <EmptyState

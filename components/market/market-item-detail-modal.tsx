@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
 import Image from "next/image";
 import {
   X,
@@ -13,7 +12,6 @@ import {
   Pencil,
   Trash2,
   Eye,
-  LockKeyhole,
   RotateCcw,
   CheckCircle,
   Send,
@@ -22,7 +20,9 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import { getIntentions, type MarketIntentionWithUser, type UserReputation } from "@/lib/actions/market";
+import { getIntentions, type MarketIntentionWithUser, type UserReputation } from "@/lib/market";
+import { openConfirm } from "@/components/ui/confirm-dialog";
+import { Modal } from "@/components/ui/modal";
 
 export interface MarketItemDetailData {
   id: string;
@@ -71,7 +71,6 @@ interface MarketItemDetailModalProps {
   /** market=集市页/抽屉, profile=中控台, map=地图覆盖（z-[210]，隐藏「在地图中查看」） */
   variant: "market" | "profile" | "map";
   /** Profile: lifecycle actions */
-  onLock?: (id: string) => void;
   onUnlock?: (id: string) => void;
   /** 选定买家并锁定（卖家从意向列表中选择） */
   onSelectBuyerAndLock?: (itemId: string, buyerId: string) => Promise<{ success: boolean; error?: string }>;
@@ -101,7 +100,6 @@ export function MarketItemDetailModal({
   item,
   currentUser,
   variant,
-  onLock,
   onUnlock,
   onConfirm,
   onRate,
@@ -209,20 +207,27 @@ export function MarketItemDetailModal({
   /** 卖家联系方式：卖家本人、已提交意向者、已选定买家可见 */
   const showSellerContact = isSeller || hasSubmittedIntention || isBuyer;
 
+  const isMapCentric = variant === "map";
+
   const handleDelete = () => {
-    if (onDelete && confirm("确定要删除该商品吗？")) {
-      onDelete(item.id);
-    }
+    if (!onDelete) return;
+    openConfirm({
+      title: "删除商品",
+      description: "确定要删除该商品吗？",
+      variant: "danger",
+      confirmText: "删除",
+      elevation: isMapCentric ? "elevated" : "default",
+      onConfirm: () => onDelete(item.id),
+    });
   };
 
-  const isMapCentric = variant === "map";
-  const overlayZ = isMapCentric ? "z-[200]" : "z-modal-overlay";
-  const contentZ = isMapCentric ? "z-[210]" : "z-modal-content";
-
-  const content = (
-    <div className={`fixed inset-0 ${overlayZ} modal-overlay bg-black/50`}>
-      <div className={`modal-container ${contentZ}`}>
-        <div className="modal-header flex items-center justify-between px-4 py-3">
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      elevation={isMapCentric ? "elevated" : "default"}
+    >
+      <div className="modal-header flex items-center justify-between px-4 py-3">
           <h2 className="text-lg font-semibold text-[#1A1A1B]">商品详情</h2>
           <button
             onClick={onClose}
@@ -717,9 +722,6 @@ export function MarketItemDetailModal({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

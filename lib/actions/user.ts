@@ -10,7 +10,7 @@ import { removeAuthCookie } from "@/lib/auth/server-actions";
 import { hashPassword } from "@/lib/auth/utils";
 import { prisma } from "@/lib/core/prisma";
 import { getPaginationParams, getPaginationMeta } from "@/lib/core/utils";
-import { getUserReputation as getUserReputationFromMarket } from "@/lib/actions/market";
+import { getUserReputation as getUserReputationFromMarket } from "@/lib/market";
 import { appRoleToDbRole, dbRoleToAppRole, type AppRole } from "@/lib/auth/role";
 
 /** 角色数字到可读标签映射 */
@@ -620,7 +620,7 @@ export async function getPublicProfile(
       return { success: false, error: "用户 ID 不能为空" };
     }
 
-    const { getMarketThumbsUpRate } = await import("@/lib/actions/market");
+    const { getMarketThumbsUpRate } = await import("@/lib/market");
 
     const [user, thumbsUpResult] = await Promise.all([
       prisma.user.findUnique({

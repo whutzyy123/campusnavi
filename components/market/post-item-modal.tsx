@@ -3,14 +3,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ImageUpload } from "@/components/shared/image-upload";
-import { createMarketItem, updateMarketItem } from "@/lib/actions/market";
+import { createMarketItem, updateMarketItem } from "@/lib/market";
 import { uploadMarketImage } from "@/lib/actions/upload";
 import { POICombobox } from "@/components/market/poi-combobox";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { X, Loader2 } from "lucide-react";
 import type { MarketItemDetailData } from "@/components/market/market-item-detail-modal";
 import { Modal } from "@/components/ui/modal";
 import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 
 const MAX_IMAGES = 9;
 
@@ -127,22 +128,22 @@ export function PostItemModal({
 
     if (!selectedPOI?.id) {
       setPoiError("请从下拉列表中选择一个有效的地点");
-      toast.error("请选择地点");
+      notify.error("请选择地点");
       return;
     }
 
     if (!title.trim() || !description.trim()) {
-      toast.error("请填写标题和描述");
+      notify.error("请填写标题和描述");
       return;
     }
 
     if (needsPrice && (!price || Number(price) < 0)) {
-      toast.error("二手交易需填写有效价格");
+      notify.error("二手交易需填写有效价格");
       return;
     }
 
     setIsSubmitting(true);
-    const toastId = toast.loading(isEditMode ? "保存中..." : "发布中...");
+    const toastId = notify.loading(isEditMode ? "保存中..." : "发布中...");
 
     try {
       if (isEditMode && initialData) {
@@ -157,12 +158,12 @@ export function PostItemModal({
         });
 
         if (result.success) {
-          toast.success("保存成功", { id: toastId });
+          notify.success("保存成功", { id: toastId });
           onClose();
           onSuccess();
           router.refresh();
         } else {
-          toast.error(result.error ?? "保存失败", { id: toastId });
+          notify.error(result.error ?? "保存失败", { id: toastId });
         }
       } else {
         const result = await createMarketItem({
@@ -177,16 +178,16 @@ export function PostItemModal({
         });
 
         if (result.success) {
-          toast.success("发布成功！商品将保留 7 天", { id: toastId });
+          notify.success("发布成功！商品将保留 7 天", { id: toastId });
           onClose();
           onSuccess();
           router.refresh();
         } else {
-          toast.error(result.error ?? "发布失败", { id: toastId });
+          notify.error(result.error ?? "发布失败", { id: toastId });
         }
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : isEditMode ? "保存失败" : "发布失败", { id: toastId });
+      notify.error(err instanceof Error ? err.message : isEditMode ? "保存失败" : "发布失败", { id: toastId });
     } finally {
       setIsSubmitting(false);
     }
@@ -217,12 +218,11 @@ export function PostItemModal({
           )}
 
           <FormField label="物品名称" required>
-            <input
+            <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="简要描述物品"
               maxLength={100}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
           </FormField>
 
@@ -291,14 +291,13 @@ export function PostItemModal({
 
           {needsPrice && (
             <FormField label="价格 (元)" required>
-              <input
+              <Input
                 type="number"
                 step="0.01"
                 min="0"
                 value={price}
                 onChange={(e) => setPrice(e.target.value)}
                 placeholder="0.00"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
               />
             </FormField>
           )}
@@ -320,12 +319,11 @@ export function PostItemModal({
           </FormField>
 
           <FormField label="联系方式（可选）">
-            <input
+            <Input
               value={contact}
               onChange={(e) => setContact(e.target.value)}
               placeholder="手机/微信/QQ"
               maxLength={100}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
             />
           </FormField>
 

@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { EmptyState } from "@/components/empty-state";
 import { Modal } from "@/components/ui/modal";
+import { PageLoading } from "@/components/ui/page-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   createTransactionType,
@@ -15,7 +17,7 @@ import {
   deleteMarketCategory,
   toggleTypeCategory,
   getAdminMarketCategoriesConfig,
-} from "@/lib/actions/market";
+} from "@/lib/market";
 import {
   ShoppingBag,
   Plus,
@@ -27,7 +29,8 @@ import {
   Link2,
 } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 
 interface TransactionTypeItem {
   id: number;
@@ -93,11 +96,11 @@ export default function SuperAdminMarketCategoriesPage() {
           setSelectedTypeId(result.data.transactionTypes[0].id);
         }
       } else {
-        toast.error(result.error || "获取数据失败");
+        notify.error(result.error || "获取数据失败");
       }
     } catch (error) {
       console.error("获取集市配置失败:", error);
-      toast.error("获取数据失败");
+      notify.error("获取数据失败");
     } finally {
       setIsLoading(false);
     }
@@ -127,7 +130,7 @@ export default function SuperAdminMarketCategoriesPage() {
   const handleCategorySubmit = async () => {
     const trimmedName = catModalName.trim();
     if (!trimmedName) {
-      toast.error("请输入分类名称");
+      notify.error("请输入分类名称");
       return;
     }
     setCatModalSubmitting(true);
@@ -138,11 +141,11 @@ export default function SuperAdminMarketCategoriesPage() {
           order: catModalOrder,
         });
         if (result.success) {
-          toast.success("更新成功");
+          notify.success("更新成功");
           setCatModalOpen(false);
           fetchData();
         } else {
-          toast.error(result.error ?? "更新失败");
+          notify.error(result.error ?? "更新失败");
         }
       } else {
         const result = await createMarketCategory({
@@ -150,36 +153,46 @@ export default function SuperAdminMarketCategoriesPage() {
           order: catModalOrder,
         });
         if (result.success) {
-          toast.success("创建成功");
+          notify.success("创建成功");
           setCatModalOpen(false);
           fetchData();
         } else {
-          toast.error(result.error ?? "创建失败");
+          notify.error(result.error ?? "创建失败");
         }
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setCatModalSubmitting(false);
     }
   };
 
-  const handleDeleteCategory = async (id: string, name: string) => {
-    if (!confirm(`确定要删除分类「${name}」吗？此操作不可恢复。`)) return;
-    setDeletingCatId(id);
-    try {
-      const result = await deleteMarketCategory(id);
-      if (result.success) {
-        toast.success("删除成功");
-        fetchData();
-      } else {
-        toast.error(result.error ?? "删除失败");
-      }
-    } catch {
-      toast.error("删除失败，请重试");
-    } finally {
-      setDeletingCatId(null);
-    }
+  const handleDeleteCategory = (id: string, name: string) => {
+    openConfirm({
+      title: "删除分类",
+      description: `确定要删除分类「${name}」吗？此操作不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingCatId(id);
+        try {
+          const result = await deleteMarketCategory(id);
+          if (result.success) {
+            notify.success("删除成功");
+            fetchData();
+          } else {
+            notify.error(result.error ?? "删除失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          notify.error("删除失败，请重试");
+          throw error;
+        } finally {
+          setDeletingCatId(null);
+        }
+      },
+    });
   };
 
   // --- 交易类型增删改 ---
@@ -207,7 +220,7 @@ export default function SuperAdminMarketCategoriesPage() {
     const trimmedName = typeModalName.trim();
     const trimmedCode = typeModalCode.trim().toUpperCase();
     if (!trimmedName || !trimmedCode) {
-      toast.error("请输入名称和编码");
+      notify.error("请输入名称和编码");
       return;
     }
     setTypeModalSubmitting(true);
@@ -220,11 +233,11 @@ export default function SuperAdminMarketCategoriesPage() {
           isActive: typeModalIsActive,
         });
         if (result.success) {
-          toast.success("更新成功");
+          notify.success("更新成功");
           setTypeModalOpen(false);
           fetchData();
         } else {
-          toast.error(result.error ?? "更新失败");
+          notify.error(result.error ?? "更新失败");
         }
       } else {
         const result = await createTransactionType({
@@ -233,40 +246,50 @@ export default function SuperAdminMarketCategoriesPage() {
           order: typeModalOrder,
         });
         if (result.success) {
-          toast.success("创建成功");
+          notify.success("创建成功");
           setTypeModalOpen(false);
           fetchData();
         } else {
-          toast.error(result.error ?? "创建失败");
+          notify.error(result.error ?? "创建失败");
         }
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setTypeModalSubmitting(false);
     }
   };
 
-  const handleDeleteType = async (id: number, name: string) => {
-    if (!confirm(`确定要删除交易类型「${name}」吗？此操作不可恢复。`)) return;
-    setDeletingTypeId(id);
-    try {
-      const result = await deleteTransactionType(id);
-      if (result.success) {
-        toast.success("删除成功");
-        if (selectedTypeId === id) {
-          const next = transactionTypes.find((t) => t.id !== id);
-          setSelectedTypeId(next?.id ?? null);
+  const handleDeleteType = (id: number, name: string) => {
+    openConfirm({
+      title: "删除交易类型",
+      description: `确定要删除交易类型「${name}」吗？此操作不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingTypeId(id);
+        try {
+          const result = await deleteTransactionType(id);
+          if (result.success) {
+            notify.success("删除成功");
+            if (selectedTypeId === id) {
+              const next = transactionTypes.find((t) => t.id !== id);
+              setSelectedTypeId(next?.id ?? null);
+            }
+            fetchData();
+          } else {
+            notify.error(result.error ?? "删除失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          notify.error("删除失败，请重试");
+          throw error;
+        } finally {
+          setDeletingTypeId(null);
         }
-        fetchData();
-      } else {
-        toast.error(result.error ?? "删除失败");
-      }
-    } catch {
-      toast.error("删除失败，请重试");
-    } finally {
-      setDeletingTypeId(null);
-    }
+      },
+    });
   };
 
   // --- 类型与分类关联 ---
@@ -276,13 +299,13 @@ export default function SuperAdminMarketCategoriesPage() {
     try {
       const result = await toggleTypeCategory(typeId, categoryId);
       if (result.success) {
-        toast.success(result.data?.linked ? "已关联" : "已取消关联");
+        notify.success(result.data?.linked ? "已关联" : "已取消关联");
         fetchData();
       } else {
-        toast.error(result.error ?? "操作失败");
+        notify.error(result.error ?? "操作失败");
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setToggling(null);
     }
@@ -294,16 +317,13 @@ export default function SuperAdminMarketCategoriesPage() {
   return (
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
-        <div className="p-4 md:p-6 space-y-6">
-          <div>
-            <h1 className="text-xl font-semibold text-[#1A1A1B]">生存集市配置</h1>
-            <p className="mt-1 text-sm text-[#7C7C7C]">
-              管理交易类型、物品分类池及类型与分类的关联关系。
-            </p>
-          </div>
-
-          <Tabs defaultValue="types" className="w-full">
-            <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <>
+          <AdminPageContainer
+            title="生存集市配置"
+            description="管理交易类型、物品分类池及类型与分类的关联关系。"
+          >
+            <Tabs defaultValue="types" className="w-full">
+              <TabsList className="grid w-full max-w-2xl grid-cols-3">
               <TabsTrigger value="types" className="flex items-center gap-2">
                 <Tags className="h-4 w-4" />
                 交易类型配置
@@ -333,9 +353,7 @@ export default function SuperAdminMarketCategoriesPage() {
                 </div>
                 <div className="min-h-[200px]">
                   {isLoading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-6 w-6 animate-spin text-[#FF4500]" />
-                    </div>
+                    <PageLoading className="flex justify-center py-12" />
                   ) : transactionTypes.length === 0 ? (
                     <EmptyState
                       icon={Tags}
@@ -412,9 +430,7 @@ export default function SuperAdminMarketCategoriesPage() {
                 </div>
                 <div className="min-h-[200px]">
                   {isLoading ? (
-                    <div className="flex justify-center py-12">
-                      <Loader2 className="h-6 w-6 animate-spin text-[#FF4500]" />
-                    </div>
+                    <PageLoading className="flex justify-center py-12" />
                   ) : categories.length === 0 ? (
                     <EmptyState
                       icon={ShoppingBag}
@@ -561,7 +577,7 @@ export default function SuperAdminMarketCategoriesPage() {
               </section>
             </TabsContent>
           </Tabs>
-        </div>
+          </AdminPageContainer>
 
         {/* 物品分类 新建/编辑 弹窗 */}
         <Modal
@@ -705,6 +721,7 @@ export default function SuperAdminMarketCategoriesPage() {
             </button>
           </div>
         </Modal>
+        </>
       </AdminLayout>
     </AuthGuard>
   );

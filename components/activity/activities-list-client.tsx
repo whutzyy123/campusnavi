@@ -4,7 +4,7 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { ActivityWithPOI } from "@/types/activity";
 import { ActivityCard } from "./activity-card";
-import { ActivitySearchBar } from "./activity-search-bar";
+import { SearchInput } from "@/components/shared/search-input";
 import { ActivityDetailModal } from "@/components/activity-detail-modal";
 import { EmptyState } from "@/components/empty-state";
 import { SearchX } from "lucide-react";
@@ -53,10 +53,12 @@ export function ActivitiesListClient({ activities }: ActivitiesListClientProps) 
 
   return (
     <div className="space-y-4">
-      <ActivitySearchBar
+      <SearchInput
         value={searchQuery}
         onChange={setSearchQuery}
         placeholder="搜索活动标题..."
+        clearable
+        variant="soft"
       />
 
       {showNoResults ? (

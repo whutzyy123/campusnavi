@@ -47,12 +47,14 @@ export function NavInfoCard() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 100, opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className={`fixed left-0 right-0 z-50 md:left-1/2 md:right-auto md:w-full md:max-w-md md:-translate-x-1/2 md:px-4 ${
-            isMobile ? "bottom-0" : "bottom-6"
+          className={`fixed left-0 right-0 z-map-control md:left-1/2 md:right-auto md:w-full md:max-w-md md:-translate-x-1/2 md:px-4 ${
+            isMobile ? "" : "bottom-6"
           }`}
           style={
             isMobile
-              ? { paddingBottom: "env(safe-area-inset-bottom, 1rem)" }
+              ? {
+                  bottom: "calc(4rem + env(safe-area-inset-bottom, 0px))",
+                }
               : undefined
           }
         >

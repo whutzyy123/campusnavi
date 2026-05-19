@@ -6,13 +6,15 @@ import { useSchoolStore } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { POIManagerTable } from "@/components/poi-manager-table";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { createPOI, deletePOI, getPOIsBySchool } from "@/lib/actions/poi";
 import { getSchoolById, getCampuses } from "@/lib/school/actions";
 import { getSchoolCategoriesForAdmin } from "@/lib/actions/category";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { X, MapPin, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 /**
  * 管理员 POI 录入页面
@@ -136,12 +138,12 @@ export default function POIManagementPage() {
           });
         } else {
           setCategoryGroups({ regular: [], convenience: [] });
-          if (result.error) toast.error(result.error);
+          if (result.error) notify.error(result.error);
         }
       } catch (error) {
         setCategoryGroups({ regular: [], convenience: [] });
         console.error("获取分类列表失败:", error);
-        toast.error("获取分类列表失败");
+        notify.error("获取分类列表失败");
       } finally {
         setIsLoadingCategories(false);
       }
@@ -224,7 +226,7 @@ export default function POIManagementPage() {
       setSelectedSchool(activeSchool?.id || "");
       setShowForm(true);
       setIsPickingLocation(false);
-      toast.success("已选择位置，请填写 POI 信息");
+      notify.success("已选择位置，请填写 POI 信息");
     };
 
     container.addEventListener("click", handleDomClick);
@@ -474,13 +476,13 @@ export default function POIManagementPage() {
       });
 
       if (!result.success) {
-        toast.error(result.error || "POI 创建失败");
+        notify.error(result.error || "POI 创建失败");
         setSaveMessage({ type: "error", text: result.error || "POI 创建失败，请重试" });
         return;
       }
 
       setSaveMessage({ type: "success", text: "POI 创建成功！" });
-      toast.success("POI 创建成功！");
+      notify.success("POI 创建成功！");
       setTimeout(() => {
         // 清除预览标记并重置到列表视图
         if (previewMarkerRef.current && mapInstanceRef.current) {
@@ -503,7 +505,7 @@ export default function POIManagementPage() {
       }, 1500);
     } catch (err) {
       const message = err instanceof Error ? err.message : "保存失败，请重试";
-      toast.error(message);
+      notify.error(message);
       setSaveMessage({ type: "error", text: message });
     } finally {
       setIsSaving(false);
@@ -569,13 +571,13 @@ export default function POIManagementPage() {
   // 处理新增 POI：进入选点模式（支持缩放平移，点击即确定）
   const handleAddPOI = () => {
     if (!activeSchool) {
-      toast.error("请先选择学校");
+      notify.error("请先选择学校");
       return;
     }
     setParentPOI(null);
     setFormData((prev) => ({ ...prev, parentId: null }));
     setIsPickingLocation(true);
-    toast.success("请在地图上点击目标位置（支持缩放平移寻找）");
+    notify.success("请在地图上点击目标位置（支持缩放平移寻找）");
   };
 
   // 处理新增二级点：预填 parentId，进入选点模式，地图定位到父 POI
@@ -588,7 +590,7 @@ export default function POIManagementPage() {
       mapInstanceRef.current.panTo([poi.lng, poi.lat], false, 300);
       mapInstanceRef.current.setZoom(17);
     }
-    toast.success(`正在为「${poi.name}」添加二级点，请在地图上点击位置`);
+    notify.success(`正在为「${poi.name}」添加二级点，请在地图上点击位置`);
   };
 
   // 处理保存成功后的刷新
@@ -600,25 +602,22 @@ export default function POIManagementPage() {
   return (
     <AuthGuard requiredRole="ADMIN" requireSchoolId={true}>
       <AdminLayout>
+        <AdminPageContainer
+          title="POI 管理"
+          description="在校区地图上录入与管理 POI"
+          bodyClassName="flex-1 min-h-0 overflow-hidden p-0 pt-0"
+          headerActions={
+            !showForm ? (
+              <Button type="button" onClick={handleAddPOI}>
+                <Plus className="h-4 w-4" />
+                新增 POI
+              </Button>
+            ) : undefined
+          }
+        >
         <div className="flex h-full min-h-0 overflow-hidden">
           {/* 左侧面板：列表 / 新增表单 */}
           <div className="flex w-96 flex-shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
-            {/* 固定头部：标题 + 新增按钮 */}
-            <div className="shrink-0 border-b border-gray-200 p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold text-gray-900">POI 列表</h2>
-                {!showForm && (
-                  <button
-                    onClick={handleAddPOI}
-                    className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF5500]"
-                  >
-                    <Plus className="h-4 w-4" />
-                    新增 POI
-                  </button>
-                )}
-              </div>
-            </div>
-
             {/* 内容区：表单可滚动；列表为固定筛选 + 可滚动卡片 */}
             {showForm ? (
               <div className="min-h-0 flex-1 overflow-y-auto p-4">
@@ -722,30 +721,33 @@ export default function POIManagementPage() {
                   </div>
 
                   <div className="flex gap-3">
-                    <button
+                    <Button
+                      type="button"
+                      variant="secondary"
                       onClick={() => {
                         setShowForm(false);
                         setParentPOI(null);
                         setFormData((prev) => ({ ...prev, parentId: null }));
                       }}
-                      className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+                      className="flex-1"
                     >
                       取消
-                    </button>
-                    <button
-                      onClick={handleSave}
+                    </Button>
+                    <Button
+                      type="button"
+                      loading={isSaving}
                       disabled={
-                        isSaving ||
                         !formData.name.trim() ||
                         !selectedSchool ||
                         !formData.categoryId ||
                         isLoadingCategories ||
                         (categoryGroups.regular.length + categoryGroups.convenience.length) === 0
                       }
-                      className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-[#FF5500] disabled:cursor-not-allowed disabled:opacity-50"
+                      onClick={handleSave}
+                      className="flex-1"
                     >
                       {isSaving ? "保存中..." : "保存"}
-                    </button>
+                    </Button>
                   </div>
 
                   {saveMessage && (
@@ -780,13 +782,13 @@ export default function POIManagementPage() {
                     try {
                       const result = await deletePOI(poiId);
                       if (result.success) {
-                        toast.success("POI 删除成功");
+                        notify.success("POI 删除成功");
                         handlePOISaved();
                       } else {
                         throw new Error(result.error || "删除失败");
                       }
                     } catch (err) {
-                      toast.error(err instanceof Error ? err.message : "删除失败");
+                      notify.error(err instanceof Error ? err.message : "删除失败");
                     }
                   }}
                 />
@@ -847,6 +849,7 @@ export default function POIManagementPage() {
             )}
           </div>
         </div>
+        </AdminPageContainer>
 
       </AdminLayout>
     </AuthGuard>

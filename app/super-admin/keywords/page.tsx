@@ -10,8 +10,9 @@ import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { AdminFilterBar } from "@/components/admin/admin-filter-bar";
 import { EmptyState } from "@/components/empty-state";
 import { useAuthStore } from "@/store/use-auth-store";
-import { Plus, Trash2, X, Upload, FileText, Loader2, Tags } from "lucide-react";
-import toast from "react-hot-toast";
+import { Plus, Trash2, X, Upload, FileText, Tags } from "lucide-react";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import {
   Table,
   TableBody,
@@ -21,6 +22,8 @@ import {
   TableRow,
 } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 import {
   getKeywords,
   createKeyword,
@@ -81,11 +84,11 @@ function KeywordsManagementPageContent() {
         setKeywords(result.data);
         setPagination(result.pagination || null);
       } else if (!result.success) {
-        toast.error(result.error || "获取屏蔽词列表失败");
+        notify.error(result.error || "获取屏蔽词列表失败");
       }
     } catch (error) {
       console.error("获取屏蔽词列表失败:", error);
-      toast.error("获取屏蔽词列表失败");
+      notify.error("获取屏蔽词列表失败");
     } finally {
       setLoading(false);
     }
@@ -121,11 +124,11 @@ function KeywordsManagementPageContent() {
   const handleBulkImport = async () => {
     const words = parseWordsFromText(bulkText);
     if (words.length === 0) {
-      toast.error("请输入或上传要导入的词汇");
+      notify.error("请输入或上传要导入的词汇");
       return;
     }
     if (!currentUser) {
-      toast.error("请先登录");
+      notify.error("请先登录");
       return;
     }
 
@@ -135,15 +138,15 @@ function KeywordsManagementPageContent() {
       const result = await bulkCreateKeywords(words);
       if (result.success && result.data) {
         setLastImportResult(result.data);
-        toast.success(`批量导入成功，新增 ${result.data.added} 个，跳过 ${result.data.skipped} 个`);
+        notify.success(`批量导入成功，新增 ${result.data.added} 个，跳过 ${result.data.skipped} 个`);
         setBulkText("");
         await fetchKeywords();
       } else if (!result.success) {
-        toast.error(result.error || "批量导入失败");
+        notify.error(result.error || "批量导入失败");
       }
     } catch (error) {
       console.error("批量导入失败:", error);
-      toast.error("批量导入失败");
+      notify.error("批量导入失败");
     } finally {
       setBulkImporting(false);
     }
@@ -156,7 +159,7 @@ function KeywordsManagementPageContent() {
 
     const ext = file.name.toLowerCase().split(".").pop();
     if (ext !== "txt" && ext !== "csv") {
-      toast.error("仅支持 .txt 或 .csv 文件");
+      notify.error("仅支持 .txt 或 .csv 文件");
       return;
     }
 
@@ -164,7 +167,7 @@ function KeywordsManagementPageContent() {
     reader.onload = () => {
       const text = reader.result as string;
       setBulkText((prev) => (prev ? `${prev}\n${text}` : text));
-      toast.success(`已加载 ${file.name}，共 ${parseWordsFromText(text).length} 个词汇`);
+      notify.success(`已加载 ${file.name}，共 ${parseWordsFromText(text).length} 个词汇`);
     };
     reader.readAsText(file, "UTF-8");
     e.target.value = "";
@@ -173,12 +176,12 @@ function KeywordsManagementPageContent() {
   // 添加屏蔽词
   const handleAddKeyword = async () => {
     if (!newKeyword.trim()) {
-      toast.error("请输入屏蔽词");
+      notify.error("请输入屏蔽词");
       return;
     }
 
     if (!currentUser) {
-      toast.error("请先登录");
+      notify.error("请先登录");
       return;
     }
 
@@ -186,41 +189,47 @@ function KeywordsManagementPageContent() {
     try {
       const result = await createKeyword(newKeyword.trim());
       if (result.success) {
-        toast.success("屏蔽词添加成功");
+        notify.success("屏蔽词添加成功");
         setNewKeyword("");
         await fetchKeywords();
       } else if (!result.success) {
-        toast.error(result.error || "添加屏蔽词失败");
+        notify.error(result.error || "添加屏蔽词失败");
       }
     } catch (error) {
       console.error("添加屏蔽词失败:", error);
-      toast.error("添加屏蔽词失败");
+      notify.error("添加屏蔽词失败");
     } finally {
       setIsAdding(false);
     }
   };
 
-  // 删除屏蔽词
-  const handleDeleteKeyword = async (id: string) => {
-    if (!confirm("确定要删除这个屏蔽词吗？")) {
-      return;
-    }
-
-    setDeletingId(id);
-    try {
-      const result = await deleteKeyword(id);
-      if (result.success) {
-        toast.success("屏蔽词删除成功");
-        await fetchKeywords();
-      } else if (!result.success) {
-        toast.error(result.error || "删除屏蔽词失败");
-      }
-    } catch (error) {
-      console.error("删除屏蔽词失败:", error);
-      toast.error("删除屏蔽词失败");
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDeleteKeyword = (id: string) => {
+    openConfirm({
+      title: "删除屏蔽词",
+      description: "确定要删除这个屏蔽词吗？",
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingId(id);
+        try {
+          const result = await deleteKeyword(id);
+          if (result.success) {
+            notify.success("屏蔽词删除成功");
+            await fetchKeywords();
+          } else if (!result.success) {
+            notify.error(result.error || "删除屏蔽词失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          console.error("删除屏蔽词失败:", error);
+          notify.error("删除屏蔽词失败");
+          throw error;
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   return (
@@ -255,34 +264,27 @@ function KeywordsManagementPageContent() {
                 placeholder="输入要添加的屏蔽词"
                 className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-[#FF4500] focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20"
               />
-              <button
+              <Button
+                type="button"
+                loading={isAdding}
+                disabled={!newKeyword.trim()}
                 onClick={handleAddKeyword}
-                disabled={isAdding || !newKeyword.trim()}
-                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {isAdding ? (
-                  <>
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                    添加中...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-4 w-4" />
-                    添加
-                  </>
-                )}
-              </button>
-              <button
+                {!isAdding ? <Plus className="h-4 w-4" /> : null}
+                {isAdding ? "添加中..." : "添加"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
                 onClick={() => {
                   setShowBulkModal(true);
                   setLastImportResult(null);
                   setBulkText("");
                 }}
-                className="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
                 <Upload className="h-4 w-4" />
                 批量导入
-              </button>
+              </Button>
             </div>
 
             <div className="mb-4">
@@ -367,28 +369,26 @@ function KeywordsManagementPageContent() {
           </AdminPageContainer>
 
         {/* 批量导入弹窗 */}
-        {showBulkModal && (
-          <div
-            className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50"
-            onClick={() => !bulkImporting && setShowBulkModal(false)}
-          >
-            <div
-              className="modal-container max-w-lg"
-              onClick={(e) => e.stopPropagation()}
+        <Modal
+          isOpen={showBulkModal}
+          onClose={() => setShowBulkModal(false)}
+          closeOnOverlayClick={!bulkImporting}
+          closeOnEscape={!bulkImporting}
+          containerClassName="max-w-lg"
+        >
+          <div className="modal-header flex items-center justify-between px-6 py-4">
+            <h3 className="text-lg font-semibold text-gray-900">批量导入屏蔽词</h3>
+            <button
+              type="button"
+              onClick={() => !bulkImporting && setShowBulkModal(false)}
+              className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+              aria-label="关闭"
             >
-              <div className="modal-header flex items-center justify-between border-b border-gray-200 px-6 py-4">
-                <h3 className="text-lg font-semibold text-gray-900">批量导入屏蔽词</h3>
-                <button
-                  type="button"
-                  onClick={() => !bulkImporting && setShowBulkModal(false)}
-                  className="rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  aria-label="关闭"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
+              <X className="h-5 w-5" />
+            </button>
+          </div>
 
-              <div className="modal-body space-y-4 px-6 py-4 scrollbar-gutter-stable">
+          <div className="modal-body space-y-4 px-6 py-4 scrollbar-gutter-stable">
                 <p className="text-sm text-gray-600">
                   支持逗号、换行或空格分隔，或上传 .txt / .csv 文件
                 </p>
@@ -421,36 +421,26 @@ function KeywordsManagementPageContent() {
                 )}
               </div>
 
-              <div className="modal-footer flex justify-end gap-3 border-t border-gray-200 px-6 py-4">
-                <button
-                  type="button"
-                  onClick={() => !bulkImporting && setShowBulkModal(false)}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  取消
-                </button>
-                <button
-                  type="button"
-                  onClick={handleBulkImport}
-                  disabled={bulkImporting || parseWordsFromText(bulkText).length === 0}
-                  className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {bulkImporting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      导入中...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      导入
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+          <div className="modal-footer flex justify-end gap-3 px-6 py-4">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={bulkImporting}
+              onClick={() => setShowBulkModal(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              loading={bulkImporting}
+              disabled={parseWordsFromText(bulkText).length === 0}
+              onClick={handleBulkImport}
+            >
+              {!bulkImporting ? <Upload className="h-4 w-4" /> : null}
+              {bulkImporting ? "导入中..." : "导入"}
+            </Button>
           </div>
-        )}
+        </Modal>
         </>
       </AdminLayout>
     </AuthGuard>

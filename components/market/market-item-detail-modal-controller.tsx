@@ -1,14 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import {
   getMarketItemDetail,
   reportMarketItem,
   submitIntention,
   selectBuyerAndLock,
   deleteMarketItem,
-} from "@/lib/actions/market";
+} from "@/lib/market";
 import { useMarketStore } from "@/store/use-market-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -56,11 +56,11 @@ export function MarketItemDetailModalController() {
           setDetailItem(d);
         }
       } else {
-        toast.error(result.error ?? "商品不存在或已下架");
+        notify.error(result.error ?? "商品不存在或已下架");
         selectItem(null);
       }
     } catch {
-      toast.error("加载失败");
+      notify.error("加载失败");
       selectItem(null);
     }
   }, [selectItem]);
@@ -83,13 +83,13 @@ export function MarketItemDetailModalController() {
     try {
       const result = await submitIntention(itemId, contactInfo);
       if (result.success) {
-        toast.success("已提交意向，请联系卖家");
+        notify.success("已提交意向，请联系卖家");
         return { success: true };
       }
-      toast.error(result.error ?? "操作失败");
+      notify.error(result.error ?? "操作失败");
       return { success: false, error: result.error };
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
       return { success: false, error: "操作失败" };
     } finally {
       setSubmittingIntentionId(null);
@@ -113,14 +113,14 @@ export function MarketItemDetailModalController() {
     try {
       const result = await selectBuyerAndLock(itemId, buyerId);
       if (result.success) {
-        toast.success("已选定并锁定");
+        notify.success("已选定并锁定");
         await handleIntentionSubmitted();
         return { success: true };
       }
-      toast.error(result.error ?? "操作失败");
+      notify.error(result.error ?? "操作失败");
       return { success: false, error: result.error };
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
       return { success: false, error: "操作失败" };
     } finally {
       setSelectingBuyerId(null);
@@ -131,28 +131,29 @@ export function MarketItemDetailModalController() {
     if (!detailItem) return;
     const result = await reportMarketItem(detailItem.id);
     if (result.success) {
-      toast.success("举报已提交");
+      notify.success("举报已提交");
       handleClose();
     } else {
-      toast.error(result.error ?? "举报失败");
+      notify.error(result.error ?? "举报失败");
     }
   };
 
-  const handleDelete = async () => {
-    if (!detailItem) return;
-    if (!confirm("确定要删除该商品吗？")) return;
-    setDeletingItemId(detailItem.id);
+  const handleDelete = async (id: string) => {
+    setDeletingItemId(id);
     try {
-      const result = await deleteMarketItem(detailItem.id);
+      const result = await deleteMarketItem(id);
       if (result.success) {
-        toast.success("已删除");
+        notify.success("已删除");
         handleClose();
         triggerRefresh();
       } else {
-        toast.error(result.error ?? "删除失败");
+        notify.error(result.error ?? "删除失败");
+        throw new Error("delete_failed");
       }
-    } catch {
-      toast.error("删除失败，请重试");
+    } catch (error) {
+      if (error instanceof Error && error.message === "delete_failed") throw error;
+      notify.error("删除失败，请重试");
+      throw error;
     } finally {
       setDeletingItemId(null);
     }
@@ -193,6 +194,7 @@ export function MarketItemDetailModalController() {
         deletingItemId={deletingItemId}
         onViewOnMap={handleViewOnMap}
         onViewUserProfile={setProfileModalUserId}
+        onDelete={handleDelete}
       />
       <UserProfileModal
         userId={profileModalUserId}

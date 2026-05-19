@@ -18,9 +18,12 @@ import {
   getSchoolCommentDetail,
   reviewComment,
   hardDeleteComment,
+  type SchoolCommentItem,
+  type SchoolCommentDetailItem,
 } from "@/lib/actions/comment";
 import { useDebounce } from "@/hooks/use-debounce";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirmAsync } from "@/components/ui/confirm-dialog";
 import Image from "next/image";
 import Link from "next/link";
 import {
@@ -35,38 +38,6 @@ import {
 } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
 import { AdminPageContainer } from "@/components/admin/admin-page-container";
-
-interface SchoolCommentItem {
-  id: string;
-  content: string;
-  createdAt: string;
-  isHidden: boolean;
-  isReviewed: boolean;
-  reportCount: number;
-  likeCount: number;
-  parentId: string | null;
-  user: {
-    id: string;
-    nickname: string | null;
-    avatar: string | null;
-    email: string | null;
-  };
-  poi: {
-    id: string;
-    name: string;
-    category: string | null;
-  };
-}
-
-interface SchoolCommentDetailItem extends SchoolCommentItem {
-  parent?: {
-    id: string;
-    content: string;
-    createdAt: string;
-    isHidden: boolean;
-    user: { id: string; nickname: string | null; avatar: string | null; email: string | null };
-  } | null;
-}
 
 const STATUS_OPTIONS = [
   { value: "", label: "全部" },
@@ -135,11 +106,11 @@ function SchoolCommentsPageContent() {
         setComments(result.data || []);
         setPagination(result.pagination || null);
       } else {
-        toast.error(result.error || "获取留言列表失败");
+        notify.error(result.error || "获取留言列表失败");
       }
     } catch (error) {
       console.error("获取留言列表失败:", error);
-      toast.error("获取留言列表失败");
+      notify.error("获取留言列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -157,10 +128,10 @@ function SchoolCommentsPageContent() {
       if (result.success && result.data) {
         setDetailComment(result.data);
       } else {
-        toast.error(result.error || "获取留言详情失败");
+        notify.error(result.error || "获取留言详情失败");
       }
     } catch (e) {
-      toast.error("获取留言详情失败");
+      notify.error("获取留言详情失败");
     } finally {
       setDetailLoading(false);
     }
@@ -177,14 +148,14 @@ function SchoolCommentsPageContent() {
     try {
       const result = await reviewComment(id, "HIDE");
       if (!result.success) throw new Error(result.error || "隐藏失败");
-      toast.success("留言已隐藏");
+      notify.success("留言已隐藏");
       refreshAfterAction();
       if (detailComment?.id === id) {
         setDetailComment((prev) => (prev ? { ...prev, isHidden: true } : null));
       }
       return true;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "隐藏失败，请重试");
+      notify.error(e instanceof Error ? e.message : "隐藏失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
@@ -197,38 +168,49 @@ function SchoolCommentsPageContent() {
     try {
       const result = await reviewComment(id, "RESTORE");
       if (!result.success) throw new Error(result.error || "恢复失败");
-      toast.success("留言已恢复显示");
+      notify.success("留言已恢复显示");
       refreshAfterAction();
       if (detailComment?.id === id) {
         setDetailComment((prev) => (prev ? { ...prev, isHidden: false } : null));
       }
       return true;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "恢复失败，请重试");
+      notify.error(e instanceof Error ? e.message : "恢复失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
     }
   }, [processingId, detailComment?.id, refreshAfterAction]);
 
-  const handleDelete = useCallback(async (id: string): Promise<boolean> => {
+  const performDelete = useCallback(async (id: string): Promise<boolean> => {
     if (processingId) return false;
-    if (!confirm("确定要彻底删除此留言吗？此操作不可恢复。")) return false;
     setProcessingId(id);
     try {
       const result = await hardDeleteComment(id);
       if (!result.success) throw new Error(result.error || "删除失败");
-      toast.success("留言已永久删除");
+      notify.success("留言已永久删除");
       if (detailComment?.id === id) setDetailComment(null);
       refreshAfterAction();
       return true;
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "删除失败，请重试");
+      notify.error(e instanceof Error ? e.message : "删除失败，请重试");
       return false;
     } finally {
       setProcessingId(null);
     }
   }, [processingId, detailComment?.id, refreshAfterAction]);
+
+  const handleDelete = useCallback(
+    (id: string) =>
+      openConfirmAsync({
+        title: "彻底删除留言",
+        description: "确定要彻底删除此留言吗？此操作不可恢复。",
+        variant: "danger",
+        confirmText: "删除",
+        onConfirm: () => performDelete(id),
+      }),
+    [performDelete]
+  );
 
   const updateParams = (updates: Record<string, string>) => {
     const params = new URLSearchParams(searchParams.toString());

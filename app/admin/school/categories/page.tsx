@@ -8,7 +8,8 @@ import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
 import { EmptyState } from "@/components/empty-state";
 import { Tags, Plus, Trash2, AlertCircle, EyeOff, Edit2, RotateCcw } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   getSchoolCategoriesForAdmin,
@@ -93,11 +94,11 @@ function CategoryManagementPageContent() {
           setCategories(list);
           setPagination(result.pagination || null);
         } else {
-          toast.error(result.error || "获取分类列表失败");
+          notify.error(result.error || "获取分类列表失败");
         }
       } catch (error) {
         console.error("获取分类列表失败:", error);
-        toast.error("获取分类列表失败");
+        notify.error("获取分类列表失败");
       } finally {
         setIsLoading(false);
       }
@@ -109,7 +110,7 @@ function CategoryManagementPageContent() {
   // 创建新分类（始终创建校内分类，schoolId 由后端从 Cookie 注入）
   const handleCreate = async () => {
     if (!newCategoryName.trim() || !schoolId) {
-      toast.error("请输入分类名称");
+      notify.error("请输入分类名称");
       return;
     }
 
@@ -123,59 +124,64 @@ function CategoryManagementPageContent() {
         throw new Error(result.error || "创建失败");
       }
 
-      toast.success("分类创建成功");
+      notify.success("分类创建成功");
       setNewCategoryName("");
       await refreshCategories();
     } catch (error) {
       console.error("创建分类失败:", error);
-      toast.error(error instanceof Error ? error.message : "创建失败，请重试");
+      notify.error(error instanceof Error ? error.message : "创建失败，请重试");
     } finally {
       setIsCreating(false);
     }
   };
 
   // 删除分类（系统分类隐藏，校内分类物理删除）
-  const handleDelete = async (
+  const handleDelete = (
     id: string,
     name: string,
     isGlobal: boolean,
     poiCount: number
   ) => {
     if (!isGlobal && poiCount > 0) {
-      toast.error("删除前请先将关联的 POI 重新分配其他分类");
+      notify.error("删除前请先将关联的 POI 重新分配其他分类");
       return;
     }
     if (isGlobal && poiCount > 0) {
-      toast.error("隐藏前请先处理关联的 POI");
+      notify.error("隐藏前请先处理关联的 POI");
       return;
     }
 
-    const message = isGlobal
+    const description = isGlobal
       ? `确定要在当前学校隐藏全局分类"${name}"吗？`
       : `确定要删除分类"${name}"吗？此操作不可恢复。`;
 
-    if (!confirm(message)) {
-      return;
-    }
-
-    setDeletingId(id);
-    try {
-      if (isGlobal) {
-        const result = await updateCategoryOverride(id, { isHidden: true });
-        if (!result.success) throw new Error(result.error || "操作失败");
-        toast.success(result.message || "操作成功");
-      } else {
-        const result = await deleteCategory(id);
-        if (!result.success) throw new Error(result.error || "操作失败");
-        toast.success(result.message || "操作成功");
-      }
-      await refreshCategories();
-    } catch (error) {
-      console.error("操作失败:", error);
-      toast.error(error instanceof Error ? error.message : "操作失败，请重试");
-    } finally {
-      setDeletingId(null);
-    }
+    openConfirm({
+      title: isGlobal ? "隐藏分类" : "删除分类",
+      description,
+      variant: isGlobal ? "default" : "danger",
+      confirmText: isGlobal ? "隐藏" : "删除",
+      onConfirm: async () => {
+        setDeletingId(id);
+        try {
+          if (isGlobal) {
+            const result = await updateCategoryOverride(id, { isHidden: true });
+            if (!result.success) throw new Error(result.error || "操作失败");
+            notify.success(result.message || "操作成功");
+          } else {
+            const result = await deleteCategory(id);
+            if (!result.success) throw new Error(result.error || "操作失败");
+            notify.success("分类已删除");
+          }
+          await refreshCategories();
+        } catch (error) {
+          console.error("删除分类失败:", error);
+          notify.error(error instanceof Error ? error.message : "操作失败，请重试");
+          throw error;
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   // 隐藏全局分类
@@ -184,11 +190,11 @@ function CategoryManagementPageContent() {
     try {
       const result = await updateCategoryOverride(id, { isHidden: true });
       if (!result.success) throw new Error(result.error || "隐藏失败");
-      toast.success(result.message || "全局分类已在该学校隐藏");
+      notify.success(result.message || "全局分类已在该学校隐藏");
       await refreshCategories();
     } catch (error) {
       console.error("隐藏分类失败:", error);
-      toast.error(error instanceof Error ? error.message : "隐藏失败，请重试");
+      notify.error(error instanceof Error ? error.message : "隐藏失败，请重试");
     } finally {
       setDeletingId(null);
     }
@@ -206,13 +212,13 @@ function CategoryManagementPageContent() {
     try {
       const result = await updateCategory(id, { name: customName.trim() });
       if (!result.success) throw new Error(result.error || "保存失败");
-      toast.success("分类名称已更新");
+      notify.success("分类名称已更新");
       setEditingId(null);
       setCustomName("");
       await refreshCategories();
     } catch (error) {
       console.error("保存失败:", error);
-      toast.error(error instanceof Error ? error.message : "保存失败，请重试");
+      notify.error(error instanceof Error ? error.message : "保存失败，请重试");
     } finally {
       setEditingId(null);
     }
@@ -223,11 +229,11 @@ function CategoryManagementPageContent() {
     try {
       const result = await removeCategoryOverrideAction(id);
       if (!result.success) throw new Error(result.error || "恢复失败");
-      toast.success(result.message || "已恢复为默认显示");
+      notify.success(result.message || "已恢复为默认显示");
       await refreshCategories();
     } catch (error) {
       console.error("恢复失败:", error);
-      toast.error(error instanceof Error ? error.message : "恢复失败，请重试");
+      notify.error(error instanceof Error ? error.message : "恢复失败，请重试");
     }
   };
 

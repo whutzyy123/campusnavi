@@ -1,4 +1,46 @@
 {
-  "extends": "next/core-web-vitals"
+  "extends": "next/core-web-vitals",
+  "overrides": [
+    {
+      "files": ["app/**/*.tsx"],
+      "rules": {
+        "no-restricted-imports": [
+          "warn",
+          {
+            "paths": [
+              {
+                "name": "react-dom",
+                "importNames": ["createPortal"],
+                "message": "页面请使用 Modal/Drawer 组件，勿直接 createPortal"
+              },
+              {
+                "name": "react-hot-toast",
+                "message": "请使用 @/lib/ui/notify"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["components/**/*.tsx", "lib/**/*.ts"],
+      "excludedFiles": [
+        "components/toast-provider.tsx",
+        "lib/ui/notify.ts"
+      ],
+      "rules": {
+        "no-restricted-imports": [
+          "warn",
+          {
+            "paths": [
+              {
+                "name": "react-hot-toast",
+                "message": "请使用 @/lib/ui/notify"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }
-

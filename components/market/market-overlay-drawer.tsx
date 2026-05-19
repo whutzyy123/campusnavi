@@ -2,18 +2,26 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Drawer } from "vaul";
+import {
+  DrawerRoot,
+  DrawerPortal,
+  DrawerOverlay,
+  DrawerContent,
+  DrawerHandle,
+  DrawerBody,
+  DEFAULT_DRAWER_SNAP,
+} from "@/components/ui/drawer";
 import Image from "next/image";
 import { X, Plus, Loader2, MapPin, Package } from "lucide-react";
 import { useMarketStore } from "@/store/use-market-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useAuthStore } from "@/store/use-auth-store";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   getPublicMarketItems,
   getMarketCategories,
-} from "@/lib/actions/market";
+} from "@/lib/market";
 import { getPOIsBySchool } from "@/lib/actions/poi";
 import { PostItemModal } from "@/components/market/post-item-modal";
 import { formatRelativeTime } from "@/lib/core/utils";
@@ -300,7 +308,7 @@ export function MarketOverlayDrawer() {
   const [filterTypeId, setFilterTypeId] = useState<number | "">("");
   const [filterCategoryId, setFilterCategoryId] = useState<string>("");
   const [filterPoiId, setFilterPoiId] = useState<string>("");
-  const [snap, setSnap] = useState<number | string | null>(0.35);
+  const [snap, setSnap] = useState<number | string | null>(DEFAULT_DRAWER_SNAP);
   const [visibleCount, setVisibleCount] = useState(20);
 
   // 与首页一致：超级管理员视察 > 手动选择的 activeSchool
@@ -316,7 +324,7 @@ export function MarketOverlayDrawer() {
 
   useEffect(() => {
     if (isOpen && !isDesktop) {
-      setSnap(0.35);
+      setSnap(DEFAULT_DRAWER_SNAP);
     }
   }, [isOpen, isDesktop]);
 
@@ -352,7 +360,7 @@ export function MarketOverlayDrawer() {
       if (!result.success) {
         console.error("[MarketOverlayDrawer] Fetch error:", result.error);
         setItems([]);
-        toast.error(result.error ?? "加载商品失败");
+        notify.error(result.error ?? "加载商品失败");
         return;
       }
       if (Array.isArray(result.data)) {
@@ -363,7 +371,7 @@ export function MarketOverlayDrawer() {
     } catch (e) {
       console.error("[MarketOverlayDrawer] 获取商品列表失败:", e);
       setItems([]);
-      toast.error("加载商品失败，请稍后重试");
+      notify.error("加载商品失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -459,7 +467,7 @@ export function MarketOverlayDrawer() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="fixed below-nav right-0 bottom-0 left-0 z-[45] bg-black/40"
+              className="fixed below-nav right-0 bottom-0 left-0 z-drawer-overlay bg-black/40"
               onClick={closeMarket}
               aria-hidden
             />
@@ -468,7 +476,7 @@ export function MarketOverlayDrawer() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed right-0 below-nav z-[50] flex h-below-nav w-full max-w-[400px] flex-col bg-white/95 shadow-2xl supports-[backdrop-filter]:bg-white/90 backdrop-blur-md"
+              className="fixed right-0 below-nav z-drawer-content flex h-below-nav w-full max-w-[400px] flex-col bg-white/95 shadow-2xl supports-[backdrop-filter]:bg-white/90 backdrop-blur-md"
             >
               <div className="flex h-full flex-col overflow-hidden">
                 <MarketDrawerBody {...bodyProps} />
@@ -480,41 +488,22 @@ export function MarketOverlayDrawer() {
 
       {/* 移动端：vaul Bottom Sheet */}
       {!isDesktop && (
-        <Drawer.Root
+        <DrawerRoot
           open={isOpen}
           onOpenChange={(open) => !open && closeMarket()}
-          snapPoints={[0.35, 0.85]}
           activeSnapPoint={snap}
           setActiveSnapPoint={setSnap}
-          fadeFromIndex={0}
-          modal={false}
-          dismissible
         >
-          <Drawer.Portal>
-            <Drawer.Overlay
-              className={`fixed inset-0 z-[45] transition-colors duration-200 ${
-                snap === 0.85 ? "bg-black/40 cursor-pointer" : "bg-transparent pointer-events-none"
-              }`}
-              onClick={snap === 0.85 ? closeMarket : undefined}
-            />
-            <Drawer.Content
-              className="fixed bottom-0 left-0 right-0 z-[50] flex h-[85dvh] flex-col rounded-t-[14px] bg-white/95 shadow-2xl supports-[backdrop-filter]:bg-white/90 backdrop-blur-md focus:outline-none"
-            >
-              <div className="flex shrink-0 justify-center pt-4 pb-2">
-                <div
-                  className="h-1.5 w-12 rounded-full bg-gray-300"
-                  aria-hidden
-                />
-              </div>
-              <div
-                className="flex min-h-0 flex-1 flex-col overflow-hidden"
-                data-vaul-no-drag
-              >
+          <DrawerPortal>
+            <DrawerOverlay snap={snap} onDismiss={closeMarket} />
+            <DrawerContent variant="glass">
+              <DrawerHandle />
+              <DrawerBody>
                 <MarketDrawerBody {...bodyProps} />
-              </div>
-            </Drawer.Content>
-          </Drawer.Portal>
-        </Drawer.Root>
+              </DrawerBody>
+            </DrawerContent>
+          </DrawerPortal>
+        </DrawerRoot>
       )}
     </>
   );

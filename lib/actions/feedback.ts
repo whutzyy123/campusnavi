@@ -33,6 +33,10 @@ export interface FeedbackItem {
   status: string;
   createdAt: string;
   updatedAt: string;
+  reply?: string;
+  repliedAt?: string;
+  repliedBy?: string;
+  schoolId?: string;
   user?: {
     id: string;
     nickname: string | null;
@@ -81,12 +85,17 @@ export async function createFeedback(
       return { success: false, error: "类型无效" };
     }
 
+    if (!auth.schoolId) {
+      return { success: false, error: "无法确定用户所属学校，请重新登录" };
+    }
+
     const sanitizedTitle = (await validateContent(title.trim(), { checkNumbers: true })).trim();
     const sanitizedContent = (await validateContent(content.trim(), { checkNumbers: true })).trim();
 
     const feedback = await prisma.feedback.create({
       data: {
         userId: auth.userId,
+        schoolId: auth.schoolId,
         type: type as FeedbackType,
         title: sanitizedTitle,
         content: sanitizedContent,
@@ -105,6 +114,7 @@ export async function createFeedback(
         status: feedback.status,
         createdAt: feedback.createdAt.toISOString(),
         updatedAt: feedback.updatedAt.toISOString(),
+        schoolId: feedback.schoolId,
       },
     };
   } catch (e) {
@@ -158,6 +168,7 @@ export async function getUserFeedbacks(
       status: f.status,
       createdAt: f.createdAt.toISOString(),
       updatedAt: f.updatedAt.toISOString(),
+      schoolId: f.schoolId,
     }));
 
     return {
@@ -215,6 +226,10 @@ export async function getFeedbackById(
         status: feedback.status,
         createdAt: feedback.createdAt.toISOString(),
         updatedAt: feedback.updatedAt.toISOString(),
+        reply: feedback.reply ?? undefined,
+        repliedAt: feedback.repliedAt?.toISOString() ?? undefined,
+        repliedBy: feedback.repliedBy ?? undefined,
+        schoolId: feedback.schoolId,
         user: feedback.user
           ? {
               id: feedback.user.id,
@@ -241,6 +256,7 @@ export async function getAdminFeedbacks(options?: {
   limit?: number;
   type?: "FEEDBACK" | "BUG";
   status?: "PENDING" | "RESOLVED" | "REJECTED";
+  schoolId?: string;
 }): Promise<
   FeedbackActionResult<{
     data: FeedbackItem[];
@@ -264,9 +280,10 @@ export async function getAdminFeedbacks(options?: {
     const limit = Math.min(50, Math.max(1, options?.limit ?? 10));
     const skip = (page - 1) * limit;
 
-    const where: { type?: FeedbackType; status?: FeedbackStatus } = {};
+    const where: { type?: FeedbackType; status?: FeedbackStatus; schoolId?: string } = {};
     if (options?.type) where.type = options.type as FeedbackType;
     if (options?.status) where.status = options.status as FeedbackStatus;
+    if (options?.schoolId) where.schoolId = options.schoolId;
 
     const [items, total] = await Promise.all([
       prisma.feedback.findMany({
@@ -288,6 +305,7 @@ export async function getAdminFeedbacks(options?: {
       status: f.status,
       createdAt: f.createdAt.toISOString(),
       updatedAt: f.updatedAt.toISOString(),
+      schoolId: f.schoolId,
       user: f.user
         ? {
             id: f.user.id,

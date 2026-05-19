@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/core/utils";
+import { inputClassName } from "@/components/ui/input";
 
 interface FormFieldProps {
   label: string;
@@ -24,10 +24,8 @@ export function FormField({ label, required, error, hint, className, children }:
   );
 }
 
+/** @deprecated 优先使用 Input / Textarea 组件 */
 export function FormFieldInputClass(hasError = false) {
-  return cn(
-    "w-full rounded-lg border px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#FF4500]/20",
-    hasError ? "border-red-500 focus:border-red-500" : "border-gray-300 focus:border-[#FF4500]"
-  );
+  return inputClassName(hasError);
 }
 

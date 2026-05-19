@@ -5,6 +5,7 @@ import { MapPin, Map } from "lucide-react";
 import type { ActivityWithPOI } from "@/types/activity";
 import { formatTimeRemaining, formatDateTime } from "@/lib/core/utils";
 import { cn } from "@/lib/core/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ActivityCardProps {
   activity: ActivityWithPOI;
@@ -114,14 +115,14 @@ export function ActivityListSkeleton({ count = 3, className }: ActivityListSkele
           key={i}
           className="rounded-lg border border-[#EDEFF1] bg-white p-4 shadow-sm"
         >
-          <div className="shimmer h-5 w-3/4 rounded" />
+          <Skeleton className="h-5 w-3/4" />
           <div className="mt-2 space-y-1">
-            <div className="shimmer h-4 w-full rounded" />
-            <div className="shimmer h-4 w-4/5 rounded" />
+            <Skeleton className="h-4 w-full" />
+            <Skeleton className="h-4 w-4/5" />
           </div>
           <div className="mt-3 flex gap-2">
-            <div className="shimmer h-6 w-24 rounded-full" />
-            <div className="shimmer h-4 w-32 rounded" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+            <Skeleton className="h-4 w-32" />
           </div>
         </div>
       ))}

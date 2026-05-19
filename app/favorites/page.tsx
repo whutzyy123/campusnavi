@@ -4,11 +4,12 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { AuthGuard } from "@/components/auth-guard";
-import { EmptyState } from "@/components/empty-state";
+import { StudentPageShell } from "@/components/shared/student-page-shell";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { PageEmpty, PageError, PageLoading } from "@/components/ui/page-state";
 import { getMyFavorites, type FavoritePOIItem } from "@/lib/actions/favorite";
-import { Heart, Loader2, MapPin, ExternalLink } from "lucide-react";
+import { Heart, MapPin, ExternalLink } from "lucide-react";
 import { formatDate } from "@/lib/core/utils";
 
 function FavoritesContent() {
@@ -19,6 +20,7 @@ function FavoritesContent() {
 
   const [items, setItems] = useState<FavoritePOIItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<{
     total: number;
     page: number;
@@ -28,6 +30,7 @@ function FavoritesContent() {
 
   const fetchFavorites = useCallback(async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const result = await getMyFavorites({ page, limit });
       if (result.success && result.data) {
@@ -36,10 +39,12 @@ function FavoritesContent() {
       } else {
         setItems([]);
         setPagination(null);
+        setError(result.error ?? "加载收藏失败");
       }
     } catch {
       setItems([]);
       setPagination(null);
+      setError("加载收藏失败，请稍后重试");
     } finally {
       setIsLoading(false);
     }
@@ -49,31 +54,27 @@ function FavoritesContent() {
     fetchFavorites();
   }, [fetchFavorites]);
 
+  if (error) {
+    return <PageError description={error} onRetry={fetchFavorites} />;
+  }
+
   if (isLoading) {
-    return (
-      <div className="flex min-h-[50vh] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-      </div>
-    );
+    return <PageLoading className="flex min-h-[40vh] items-center justify-center" />;
   }
 
   if (items.length === 0) {
     return (
-      <EmptyState
+      <PageEmpty
         icon={Heart}
         title="暂无收藏"
         description="在地图中点击 POI 详情，收藏您常用的地点"
-        action={{
-          label: "去地图逛逛",
-          onClick: () => router.push("/"),
-        }}
+        action={{ label: "去地图逛逛", onClick: () => router.push("/") }}
       />
     );
   }
 
   return (
-    <div className="mx-auto max-w-4xl px-4 py-6 pb-24">
-      <h1 className="mb-6 text-2xl font-bold text-[#1A1A1B]">我的收藏</h1>
+    <>
       <div className="mb-4 rounded-lg border border-[#EDEFF1] bg-white px-4 py-2 text-sm text-[#7C7C7C]">
         共 {pagination?.total ?? 0} 个收藏地点
       </div>
@@ -128,21 +129,17 @@ function FavoritesContent() {
           />
         </div>
       )}
-    </div>
+    </>
   );
 }
 
 export default function FavoritesPage() {
   return (
     <AuthGuard requiredRole="STUDENT">
-      <Suspense
-        fallback={
-          <div className="flex min-h-[50vh] items-center justify-center">
-            <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-          </div>
-        }
-      >
-        <FavoritesContent />
+      <Suspense fallback={<PageLoading className="flex min-h-[50vh] items-center justify-center" />}>
+        <StudentPageShell title="我的收藏" maxWidth="4xl">
+          <FavoritesContent />
+        </StudentPageShell>
       </Suspense>
     </AuthGuard>
   );

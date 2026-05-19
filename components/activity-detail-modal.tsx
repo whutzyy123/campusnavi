@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { createPortal } from "react-dom";
 import { X, ExternalLink, MapPin } from "lucide-react";
-import { cn } from "@/lib/core/utils";
+import { Modal } from "@/components/ui/modal";
 import type { ActivityWithPOI } from "@/types/activity";
 
 /** 活动详情弹窗所需的最小数据（兼容无 poi 的旧数据） */
@@ -18,52 +17,34 @@ interface ActivityDetailModalProps {
   onClose: () => void;
 }
 
-/**
- * 活动详情弹窗 - 复用 UserProfileModal 的成功结构：Portal + 严格居中
- */
 export function ActivityDetailModal({ activity, isOpen, onClose }: ActivityDetailModalProps) {
   if (!isOpen || !activity) return null;
 
-  const content = (
-    <div
-      className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center p-4",
-        "bg-black/50"
-      )}
-      onClick={onClose}
-      role="presentation"
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      elevation="elevated"
+      containerClassName="max-w-[500px]"
     >
-      <div
-        className={cn(
-          "z-[210] relative flex flex-col overflow-hidden rounded-lg bg-white p-6 shadow-xl",
-          "fixed left-[50%] top-[50%] w-[90vw] max-w-[500px] -translate-x-1/2 -translate-y-1/2 outline-none",
-          "max-h-[85vh]"
-        )}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="activity-detail-modal-title"
-      >
-        {/* Header - 关闭按钮在右上角 */}
-        <div className="flex shrink-0 flex-row items-start justify-between gap-4 border-b border-gray-100 pb-4">
-          <h3
-            id="activity-detail-modal-title"
-            className="min-w-0 flex-1 pr-8 text-lg font-bold text-[#1A1A1B]"
-          >
-            {activity.title}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-            aria-label="关闭"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+      <div className="modal-header flex shrink-0 flex-row items-start justify-between gap-4 px-6 py-4">
+        <h3
+          id="activity-detail-modal-title"
+          className="min-w-0 flex-1 pr-8 text-lg font-bold text-[#1A1A1B]"
+        >
+          {activity.title}
+        </h3>
+        <button
+          type="button"
+          onClick={onClose}
+          className="shrink-0 rounded p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          aria-label="关闭"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
 
-        {/* Body - 可滚动，长描述不溢出 */}
-        <div className="min-h-0 flex-1 overflow-y-auto pt-4 scrollbar-gutter-stable">
+      <div className="modal-body min-h-0 overflow-y-auto px-6 py-4 scrollbar-gutter-stable">
           <div className="mb-4 text-sm text-gray-500">
             {(() => {
               const start = new Date(activity.startAt);
@@ -106,10 +87,7 @@ export function ActivityDetailModal({ activity, isOpen, onClose }: ActivityDetai
               查看详情
             </a>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

@@ -11,7 +11,6 @@ import {
   type NotificationItem,
 } from "@/lib/actions/notification";
 import {
-  lockMarketItem,
   unlockMarketItem,
   selectBuyerAndLock,
   confirmTransaction,
@@ -22,9 +21,9 @@ import {
   submitIntention,
   getMarketItemDetail,
   getMarketCategories,
-} from "@/lib/actions/market";
+} from "@/lib/market";
 import { useNotificationStore } from "@/store/use-notification-store";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import {
   Package,
   Loader2,
@@ -147,33 +146,9 @@ export function MarketTransactionDashboard({
     if (result.success) {
       setMarketNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
       await fetchUnreadCounts(currentUser.id);
-      toast.success("交易动态已全部标为已读");
+      notify.success("交易动态已全部标为已读");
     } else {
-      toast.error(result.error || "操作失败");
-    }
-  };
-
-  const handleLockItem = async (itemId: string) => {
-    setMarketActionId(itemId);
-    try {
-      const result = await lockMarketItem(itemId);
-      if (result.success) {
-        toast.success("已锁定商品");
-        setMarketSellingAll((prev) =>
-          prev.map((i) =>
-            i.id === itemId ? { ...i, status: "LOCKED", lockedAt: new Date().toISOString() } : i
-          )
-        );
-        setMarketDetailItem((prev) =>
-          prev?.id === itemId ? { ...prev, status: "LOCKED", lockedAt: new Date().toISOString() } : prev
-        );
-      } else {
-        toast.error(result.error ?? "操作失败");
-      }
-    } catch {
-      toast.error("操作失败，请重试");
-    } finally {
-      setMarketActionId(null);
+      notify.error(result.error || "操作失败");
     }
   };
 
@@ -182,16 +157,16 @@ export function MarketTransactionDashboard({
     try {
       const result = await unlockMarketItem(itemId);
       if (result.success) {
-        toast.success("已重新上架");
+        notify.success("已重新上架");
         setShowMarketDetailModal(false);
         setMarketDetailItem(null);
         await refreshMarketItems();
         await refreshMarketNotifications();
       } else {
-        toast.error(result.error ?? "操作失败");
+        notify.error(result.error ?? "操作失败");
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setMarketActionId(null);
     }
@@ -202,7 +177,7 @@ export function MarketTransactionDashboard({
     try {
       const result = await rateMarketTransaction(itemId, isPositive);
       if (result.success) {
-        toast.success(isPositive ? "感谢您的评价！" : "已记录您的反馈");
+        notify.success(isPositive ? "感谢您的评价！" : "已记录您的反馈");
         await refreshMarketItems();
         setMarketDetailItem((prev) => {
           if (prev?.id !== itemId) return prev;
@@ -212,10 +187,10 @@ export function MarketTransactionDashboard({
             : { ...prev, buyerRatingOfSeller: isPositive };
         });
       } else {
-        toast.error(result.error ?? "评价失败");
+        notify.error(result.error ?? "评价失败");
       }
     } catch {
-      toast.error("评价失败，请重试");
+      notify.error("评价失败，请重试");
     } finally {
       setMarketRatingId(null);
     }
@@ -226,7 +201,7 @@ export function MarketTransactionDashboard({
     try {
       const result = await selectBuyerAndLock(itemId, buyerId);
       if (result.success) {
-        toast.success("商品已锁定，等待双方确认交易");
+        notify.success("商品已锁定，等待双方确认交易");
         const detailResult = await getMarketItemDetail(itemId);
         if (detailResult.success && detailResult.data) {
           setMarketDetailItem(detailResult.data as MarketItemDetailData);
@@ -235,10 +210,10 @@ export function MarketTransactionDashboard({
         await refreshMarketNotifications();
         return { success: true };
       }
-      toast.error(result.error ?? "操作失败");
+      notify.error(result.error ?? "操作失败");
       return { success: false, error: result.error };
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
       return { success: false, error: "操作失败" };
     } finally {
       setSelectingBuyerId(null);
@@ -251,7 +226,7 @@ export function MarketTransactionDashboard({
       const result = await confirmTransaction(itemId);
       if (result.success) {
         const completed = (result as { data?: { completed?: boolean } }).data?.completed;
-        toast.success(completed ? "交易已完成！" : "已确认，等待对方确认");
+        notify.success(completed ? "交易已完成！" : "已确认，等待对方确认");
         await refreshMarketItems();
         await refreshMarketNotifications();
         if (completed) {
@@ -267,10 +242,10 @@ export function MarketTransactionDashboard({
           return { ...prev, sellerConfirmed: nextSellerConfirmed, buyerConfirmed: nextBuyerConfirmed, status: nextStatus };
         });
       } else {
-        toast.error(result.error ?? "操作失败");
+        notify.error(result.error ?? "操作失败");
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setMarketActionId(null);
     }
@@ -281,15 +256,15 @@ export function MarketTransactionDashboard({
     try {
       const result = await deleteMarketItem(itemId);
       if (result.success) {
-        toast.success("已删除");
+        notify.success("已删除");
         setShowMarketDetailModal(false);
         setMarketDetailItem(null);
         await refreshMarketItems();
       } else {
-        toast.error(result.error ?? "删除失败");
+        notify.error(result.error ?? "删除失败");
       }
     } catch {
-      toast.error("删除失败，请重试");
+      notify.error("删除失败，请重试");
     } finally {
       setMarketActionId(null);
     }
@@ -300,13 +275,13 @@ export function MarketTransactionDashboard({
     try {
       const result = await withdrawIntention(itemId);
       if (result.success) {
-        toast.success("已撤回意向");
+        notify.success("已撤回意向");
         await refreshMarketItems();
       } else {
-        toast.error(result.error ?? "撤回失败");
+        notify.error(result.error ?? "撤回失败");
       }
     } catch {
-      toast.error("撤回失败，请重试");
+      notify.error("撤回失败，请重试");
     } finally {
       setMarketActionId(null);
     }
@@ -317,15 +292,15 @@ export function MarketTransactionDashboard({
     try {
       const result = await submitIntention(itemId);
       if (result.success) {
-        toast.success("已重新添加意向");
+        notify.success("已重新添加意向");
         await refreshMarketItems();
         setMarketRole("buyer");
         setMarketStatusFilter("ongoing");
       } else {
-        toast.error(result.error ?? "添加意向失败");
+        notify.error(result.error ?? "添加意向失败");
       }
     } catch {
-      toast.error("添加意向失败，请重试");
+      notify.error("添加意向失败，请重试");
     } finally {
       setMarketActionId(null);
     }
@@ -337,10 +312,10 @@ export function MarketTransactionDashboard({
       if (result.success && result.data) {
         setEditingMarketItem(result.data as MarketItemDetailData);
       } else {
-        toast.error(result.error ?? "商品不存在或已下架");
+        notify.error(result.error ?? "商品不存在或已下架");
       }
     } catch (e) {
-      toast.error("加载失败");
+      notify.error("加载失败");
     }
   };
 
@@ -350,16 +325,16 @@ export function MarketTransactionDashboard({
       if (result.success && result.data) {
         const d = result.data as MarketItemDetailData;
         if (d.status === "HIDDEN") {
-          toast.error("该商品已被屏蔽");
+          notify.error("该商品已被屏蔽");
           return;
         }
         setMarketDetailItem(d);
         setShowMarketDetailModal(true);
       } else {
-        toast.error(result.error ?? "商品不存在或已下架");
+        notify.error(result.error ?? "商品不存在或已下架");
       }
     } catch (e) {
-      toast.error("加载失败");
+      notify.error("加载失败");
     }
   }, []);
 
@@ -601,7 +576,6 @@ export function MarketTransactionDashboard({
         item={marketDetailItem}
         currentUser={currentUser}
         variant="profile"
-        onLock={handleLockItem}
         onUnlock={handleUnlockItem}
         onSelectBuyerAndLock={handleSelectBuyerAndLock}
         onConfirm={handleConfirmTransaction}

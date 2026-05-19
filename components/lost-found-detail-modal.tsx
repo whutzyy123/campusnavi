@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import Image from "next/image";
-import { createPortal } from "react-dom";
-import { X, ImageIcon, CheckCircle } from "lucide-react";
-import { cn, formatRelativeTime } from "@/lib/core/utils";
+import { useState, useEffect } from "react";
+import { X, CheckCircle } from "lucide-react";
+import { formatRelativeTime } from "@/lib/core/utils";
 import { markAsFound } from "@/lib/actions/lost-found";
-import toast from "react-hot-toast";
+import { Modal } from "@/components/ui/modal";
+import { ImageCarousel } from "@/components/shared/image-carousel";
+import { notify } from "@/lib/ui/notify";
 
 /** 失物招领详情项（与 getActiveLostFoundByPoi 返回结构一致） */
 export interface LostFoundEventWithRelations {
@@ -26,91 +26,6 @@ interface LostFoundDetailModalProps {
   currentUser: { id: string; role?: string } | null;
   /** 标记为已找到成功后的回调（用于刷新列表） */
   onMarkAsFoundSuccess?: () => void;
-}
-
-/** 图片轮播：多图时横向滑动，单图时静态展示 */
-function ImageCarousel({
-  images,
-  alt,
-  unoptimized,
-  className = "",
-}: {
-  images: string[];
-  alt: string;
-  unoptimized?: (src: string) => boolean;
-  className?: string;
-}) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  const handleScroll = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el || images.length <= 1) return;
-    const scrollLeft = el.scrollLeft;
-    const width = el.clientWidth;
-    const index = Math.round(scrollLeft / width);
-    setActiveIndex(Math.min(index, images.length - 1));
-  }, [images.length]);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el || images.length <= 1) return;
-    handleScroll();
-    el.addEventListener("scroll", handleScroll, { passive: true });
-    return () => el.removeEventListener("scroll", handleScroll);
-  }, [handleScroll, images.length]);
-
-  if (images.length === 0) {
-    return (
-      <div className={cn("flex aspect-video w-full items-center justify-center rounded-xl bg-gray-100", className)}>
-        <ImageIcon className="h-12 w-12 text-gray-300" aria-hidden />
-      </div>
-    );
-  }
-  if (images.length === 1) {
-    return (
-      <div className={cn("relative aspect-video w-full overflow-hidden rounded-xl bg-gray-100", className)}>
-        <Image
-          src={images[0]}
-          alt={alt}
-          fill
-          sizes="(max-width: 448px) 100vw, 448px"
-          className="object-cover"
-          unoptimized={unoptimized?.(images[0])}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className={cn("relative aspect-video w-full overflow-hidden rounded-xl bg-gray-100", className)}>
-      <div
-        ref={scrollRef}
-        className="flex h-full w-full overflow-x-auto no-scrollbar snap-x snap-mandatory"
-      >
-        {images.map((src, i) => (
-          <div key={i} className="relative h-full w-full min-w-full flex-none snap-center">
-            <Image
-              src={src}
-              alt={`${alt} (${i + 1}/${images.length})`}
-              fill
-              sizes="(max-width: 448px) 100vw, 448px"
-              className="object-cover"
-              unoptimized={unoptimized?.(src)}
-            />
-          </div>
-        ))}
-      </div>
-      <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
-        {images.map((_, i) => (
-          <span
-            key={i}
-            className={cn("h-1.5 w-1.5 rounded-full shadow-sm transition-opacity", i === activeIndex ? "bg-white opacity-100" : "bg-white/60")}
-            aria-hidden
-          />
-        ))}
-      </div>
-    </div>
-  );
 }
 
 /**
@@ -138,41 +53,27 @@ export function LostFoundDetailModal({
     try {
       const result = await markAsFound(item.id);
       if (result.success) {
-        toast.success("已标记为已找到");
+        notify.success("已标记为已找到");
         onClose();
         onMarkAsFoundSuccess?.();
       } else {
-        toast.error(result.error ?? "操作失败");
+        notify.error(result.error ?? "操作失败");
       }
     } catch {
-      toast.error("操作失败，请重试");
+      notify.error("操作失败，请重试");
     } finally {
       setIsMarking(false);
     }
   };
 
-  const content = (
-    <div
-      className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center p-4",
-        "bg-black/50"
-      )}
-      onClick={onClose}
-      role="presentation"
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      elevation="elevated"
+      containerClassName="max-w-[500px]"
     >
-      <div
-        className={cn(
-          "z-[210] relative flex flex-col overflow-hidden rounded-lg bg-white shadow-xl",
-          "fixed left-[50%] top-[50%] w-[90vw] max-w-[500px] -translate-x-1/2 -translate-y-1/2 outline-none",
-          "max-h-[min(85vh,calc(100vh-40px))]"
-        )}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="lost-found-detail-modal-title"
-      >
-        {/* 顶栏 */}
-        <div className="modal-header flex shrink-0 flex-row items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
+      <div className="modal-header flex shrink-0 flex-row items-start justify-between gap-4 px-6 py-4">
           <h3
             id="lost-found-detail-modal-title"
             className="min-w-0 flex-1 pr-8 text-lg font-bold text-[#1A1A1B]"
@@ -196,7 +97,7 @@ export function LostFoundDetailModal({
             <div className="mb-4">
               <ImageCarousel
                 images={item.images}
-                alt="失物招领图片"
+                altPrefix="失物招领图片"
                 unoptimized={(src) => src.startsWith("blob:")}
               />
             </div>
@@ -260,10 +161,7 @@ export function LostFoundDetailModal({
               </button>
             </div>
           )}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

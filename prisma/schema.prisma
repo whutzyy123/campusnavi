@@ -34,6 +34,8 @@ model School {
   activities        Activity[]
   lostFoundEvents   LostFoundEvent[]
   marketItems       MarketItem[]
+  feedbacks         Feedback[]
+  squarePosts       SquarePost[]
 
   @@index([centerLat, centerLng])
   @@map("schools")
@@ -71,6 +73,7 @@ model User {
   password            String?   @db.VarChar(255) // 哈希后的密码
   role                Int       @default(0) // 0: 游客, 1: 认证学生, 2: 校级管理员, 3: 校内工作人员, 4: 超级管理员
   points              Int       @default(0) // 用户积分
+  lastCheckInAt       DateTime? @map("last_check_in_at") // 最近一次签到时间（按中国日历日限一次）
   status              String    @default("ACTIVE") @db.VarChar(20) // ACTIVE: 正常, INACTIVE: 已停用/封禁
   createdAt           DateTime  @default(now()) @map("created_at")
   updatedAt           DateTime  @updatedAt @map("updated_at")
@@ -96,6 +99,9 @@ model User {
   notificationsActed     Notification[]   @relation("NotificationActor")
   poiFavorites           POIFavorite[]
   feedbacks              Feedback[]
+  reviewedFeedbacks      Feedback[]           @relation("FeedbackReviewedBy")
+  squarePosts            SquarePost[]
+  reviewedSquarePosts    SquarePost[]          @relation("SquarePostReviewedBy")
 
   @@index([schoolId])
   @@index([phone])
@@ -223,7 +229,7 @@ model POI {
   categoryId  String?  @map("category_id") // 关联分类ID（可选，兼容旧数据）
   category    String?  @db.VarChar(50) // 保留旧字段用于兼容（可选）
   lat         Decimal  @db.Decimal(10, 8)
-  lng         Decimal  @db.Decimal(10, 8)
+  lng         Decimal  @db.Decimal(11, 8)
   isOfficial  Boolean  @default(false) @map("is_official") // true: PGC, false: UGC
   entryPoints Json?    @map("entry_points") // JSON 格式存储建筑的具体入口坐标点
   description String?  @db.Text
@@ -243,6 +249,7 @@ model POI {
   lostFoundEvents LostFoundEvent[]
   marketItems     MarketItem[]
   favorites       POIFavorite[]
+  squarePosts     SquarePost[]
 
   @@index([schoolId])
   @@index([parentId])
@@ -421,20 +428,28 @@ enum FeedbackStatus {
 model Feedback {
   id        String         @id @default(cuid())
   userId    String         @map("user_id")
+  schoolId  String         @map("school_id")
   type      FeedbackType // FEEDBACK | BUG
   title     String         @db.VarChar(200) // 标题
   content   String         @db.Text // 详情内容
   images    Json           @default("[]") // 图片 URL 数组，最多 3 张
   status    FeedbackStatus @default(PENDING)
+  reply     String?        @db.Text // 超管回复内容
+  repliedAt DateTime?      @map("replied_at") // 回复时间
+  repliedBy String?        @map("replied_by") // 回复人ID
   createdAt DateTime       @default(now()) @map("created_at")
   updatedAt DateTime       @updatedAt @map("updated_at")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user     User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reviewer User? @relation("FeedbackReviewedBy", fields: [repliedBy], references: [id], onDelete: SetNull)
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([type])
+  @@index([schoolId])
   @@index([createdAt])
+  @@index([repliedAt])
   @@map("feedbacks")
 }
 
@@ -690,4 +705,45 @@ model MarketLog {
   @@index([userId])
   @@index([createdAt])
   @@map("market_logs")
+}
+
+// 广场帖子可见范围
+enum PostScope {
+  INTRA  // 仅本校可见
+  INTER  // 校际可见（所有学校均可见）
+}
+
+// 广场帖子表：用户在广场发布的帖子，可挂载本校 POI
+model SquarePost {
+  id           String    @id @default(cuid())
+  schoolId     String    @map("school_id")
+  userId       String    @map("user_id")
+  title        String    @db.VarChar(200)
+  content      String    @db.Text
+  images       Json      @default("[]")
+  poiId        String?   @map("poi_id")
+  scope        PostScope @default(INTRA)
+  isHidden     Boolean   @default(false) @map("is_hidden")
+  reportCount  Int       @default(0) @map("report_count")
+  isReviewed   Boolean   @default(false) @map("is_reviewed")
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewedBy   String?   @map("reviewed_by")
+  likeCount    Int       @default(0) @map("like_count")
+  commentCount Int       @default(0) @map("comment_count")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  poi      POI?   @relation(fields: [poiId], references: [id], onDelete: SetNull)
+  reviewer User?  @relation("SquarePostReviewedBy", fields: [reviewedBy], references: [id], onDelete: SetNull)
+
+  @@index([schoolId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([isHidden])
+  @@index([isReviewed])
+  @@index([reportCount])
+  @@index([scope])
+  @@map("square_posts")
 }

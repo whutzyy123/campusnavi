@@ -68,12 +68,24 @@ export default function SuperAdminPage() {
     <AuthGuard requiredRole="SUPER_ADMIN">
       <AdminLayout>
         <div className="box-border p-6 lg:p-8">
+          {/* 顶部渐变装饰条 */}
+          <div className="-mx-6 -mt-6 lg:-mx-8 lg:-mt-8 mb-6 h-[3px] bg-gradient-to-r from-[#FF4500] to-[#FF6B3D]" />
+
+          {/* 页面头部 */}
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-bold text-gray-900">
-                欢迎回来，{currentUser?.nickname || "系统管理员"}。
-              </h1>
-              <LiveClock />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF4500] to-[#FF6B3D] flex items-center justify-center shadow-md shadow-[#FF4500]/20">
+                <BarChart3 className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <h1 className="text-2xl font-bold text-[#1A1A1B]">
+                  系统看板
+                </h1>
+                <p className="text-sm text-[#7C7C7C]">
+                  欢迎回来，{currentUser?.nickname || "系统管理员"}
+                </p>
+                <LiveClock />
+              </div>
             </div>
             <ReportExportButton />
           </div>
@@ -121,7 +133,7 @@ export default function SuperAdminPage() {
                 />
           </DashboardSection>
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* 用户留存 */}
           <DashboardSection
@@ -186,7 +198,7 @@ export default function SuperAdminPage() {
             />
           </DashboardSection>
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* 生存集市 */}
           <DashboardSection
@@ -253,7 +265,7 @@ export default function SuperAdminPage() {
                 />
           </DashboardSection>
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* 集市类型分布（若有数据） */}
           {stats?.marketByType && stats.marketByType.length > 0 && (
@@ -274,7 +286,7 @@ export default function SuperAdminPage() {
             </DashboardSection>
           )}
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* POI 与内容 */}
           <DashboardSection
@@ -329,7 +341,7 @@ export default function SuperAdminPage() {
                 />
           </DashboardSection>
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* 消息 */}
           <DashboardSection
@@ -353,7 +365,7 @@ export default function SuperAdminPage() {
                 />
           </DashboardSection>
 
-          <div className="mt-6" />
+          <div className="my-6 border-t border-[#EDEFF1]" />
 
           {/* 内容健康（待处理） */}
           <DashboardSection

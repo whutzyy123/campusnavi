@@ -5,7 +5,7 @@ import { Loader2 } from "lucide-react";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { uploadLostFoundImage } from "@/lib/actions/upload";
 import { createLostFoundEvent } from "@/lib/actions/lost-found";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 
 const MAX_IMAGES = 3;
 const MAX_DESCRIPTION = 500;
@@ -52,17 +52,17 @@ export function LostFoundForm({
     e.preventDefault();
 
     if (!description.trim()) {
-      toast.error("请填写物品描述");
+      notify.error("请填写物品描述");
       return;
     }
 
     if (description.trim().length > MAX_DESCRIPTION) {
-      toast.error(`描述最多 ${MAX_DESCRIPTION} 字`);
+      notify.error(`描述最多 ${MAX_DESCRIPTION} 字`);
       return;
     }
 
     setIsSubmitting(true);
-    const toastId = toast.loading("发布中...");
+    const toastId = notify.loading("发布中...");
 
     try {
       const result = await createLostFoundEvent({
@@ -73,17 +73,17 @@ export function LostFoundForm({
       });
 
       if (result.success) {
-        toast.success("发布成功！信息将保留 24 小时", { id: toastId });
+        notify.success("发布成功！信息将保留 24 小时", { id: toastId });
         setDescription("");
         setContactInfo("");
         setImages([]);
         onSuccess?.();
         onClose?.();
       } else {
-        toast.error(result.error ?? "发布失败", { id: toastId });
+        notify.error(result.error ?? "发布失败", { id: toastId });
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "发布失败", { id: toastId });
+      notify.error(err instanceof Error ? err.message : "发布失败", { id: toastId });
     } finally {
       setIsSubmitting(false);
     }

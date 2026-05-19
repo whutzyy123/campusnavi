@@ -8,6 +8,7 @@ import { analytics } from "@/lib/analytics";
 import { useAuthStore, type UserRole } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { LogIn, Mail, Lock, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /**
  * 登录页面（邮箱 + 密码）
@@ -211,23 +212,10 @@ function LoginPageContent() {
           )}
 
           {/* 提交按钮 */}
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isSubmitting ? (
-              <>
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                登录中...
-              </>
-            ) : (
-              <>
-                <LogIn className="h-4 w-4" />
-                登录
-              </>
-            )}
-          </button>
+          <Button type="submit" loading={isSubmitting} className="w-full py-2.5">
+            {!isSubmitting ? <LogIn className="h-4 w-4" /> : null}
+            {isSubmitting ? "登录中..." : "登录"}
+          </Button>
         </form>
 
         <div className="mt-6 text-center">

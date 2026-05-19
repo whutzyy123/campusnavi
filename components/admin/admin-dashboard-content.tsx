@@ -14,6 +14,7 @@ import {
   Tags,
 } from "lucide-react";
 import { StatCard } from "@/components/admin/stat-card";
+import { DashboardSection } from "@/components/admin/dashboard-section";
 import { CommandShortcuts } from "@/components/admin/command-shortcuts";
 import { SetupGuide } from "@/components/admin/setup-guide";
 import { LiveClock } from "@/components/admin/live-clock";
@@ -63,51 +64,55 @@ export function AdminDashboardContent({
         (isNewSchool ? (
           <SetupGuide />
         ) : (
-          <div
-            className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
-              isStaff ? "lg:grid-cols-3" : "lg:grid-cols-4"
-            }`}
-          >
+          <div className="space-y-6">
             {!isStaff && (
-              <StatCard
-                icon={Users}
-                value={stats.campusUsers}
-                label="本校用户"
-                variant="blue"
-                href="/admin/school/users"
-              />
+              <DashboardSection
+                title="本校概览"
+                description="本校用户与 POI 数据概览"
+              >
+                <StatCard
+                  icon={Users}
+                  value={stats.campusUsers}
+                  label="本校用户"
+                  variant="blue"
+                  href="/admin/school/users"
+                />
+                <StatCard
+                  icon={MapPin}
+                  value={`${stats.poiCount.official} / ${stats.poiCount.userContributed}`}
+                  label="POI（官方 / 众包）"
+                  variant="green"
+                  href="/admin/school/pois"
+                />
+              </DashboardSection>
             )}
-            {!isStaff && (
+            <DashboardSection
+              title="运营待办"
+              description="待审核举报、活动与集市运营指标"
+            >
               <StatCard
-                icon={MapPin}
-                value={`${stats.poiCount.official} / ${stats.poiCount.userContributed}`}
-                label="POI（官方 / 众包）"
-                variant="green"
-                href="/admin/school/pois"
+                icon={AlertTriangle}
+                value={stats.pendingAudit}
+                label="待审核举报"
+                variant="amber"
+                href="/admin/audit"
+                urgent={stats.pendingAudit > 0}
               />
-            )}
-            <StatCard
-              icon={AlertTriangle}
-              value={stats.pendingAudit}
-              label="待审核举报"
-              variant="amber"
-              href="/admin/audit"
-              urgent={stats.pendingAudit > 0}
-            />
-            <StatCard
-              icon={CalendarDays}
-              value={stats.activeEvents}
-              label="进行中活动"
-              variant="slate"
-              href="/admin/school/activities"
-            />
-            <StatCard
-              icon={ShoppingBag}
-              value={stats.bazaarActivity}
-              label="在架商品"
-              variant="emerald"
-              href="/admin/school/market"
-            />
+              <StatCard
+                icon={CalendarDays}
+                value={stats.activeEvents}
+                label="进行中活动"
+                variant="slate"
+                href="/admin/school/activities"
+              />
+              <StatCard
+                icon={ShoppingBag}
+                value={stats.bazaarActivity}
+                label="在架商品"
+                variant="emerald"
+                href="/admin/school/market"
+              />
+            </DashboardSection>
           </div>
         ))}
 

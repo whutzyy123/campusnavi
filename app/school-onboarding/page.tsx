@@ -8,6 +8,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Building2, MapPin, Users, BarChart3, ArrowRight, Mail } from "lucide-react";
+import { buttonClassName } from "@/components/ui/button";
 
 const benefits = [
   {
@@ -92,14 +93,14 @@ export default function SchoolOnboardingPage() {
             <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
               <a
                 href="mailto:school@campus-survival.example.com"
-                className="inline-flex items-center gap-2 rounded-full bg-[#FF4500] px-6 py-3 text-base font-semibold text-white transition-all hover:bg-[#E03D00]"
+                className={buttonClassName("primary", "rounded-full px-6 py-3 text-base font-semibold")}
               >
                 <Mail className="h-5 w-5" />
                 联系商务
               </a>
               <Link
                 href="/"
-                className="inline-flex items-center gap-2 rounded-full border-2 border-slate-300 px-6 py-3 text-base font-semibold text-slate-700 transition-all hover:border-slate-400 hover:bg-slate-50"
+                className={buttonClassName("secondary", "rounded-full border-2 px-6 py-3 text-base font-semibold")}
               >
                 返回首页
                 <ArrowRight className="h-4 w-4" />

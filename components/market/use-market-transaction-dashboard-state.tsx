@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import toast from "react-hot-toast";
-import { getMyMarketItems } from "@/lib/actions/market";
+import { notify } from "@/lib/ui/notify";
+import { getMyMarketItems } from "@/lib/market";
 import type { MarketRole, MarketStatusFilter, MarketTransactionItem } from "./market-transaction-types";
 
 /**
@@ -35,11 +35,11 @@ export function useMarketTransactionDashboardState(
         setMarketSellingAll(normalize(d.selling));
         setMarketBuyingAll(normalize(d.buying));
       } else {
-        toast.error(result.error || "获取集市交易失败");
+        notify.error(result.error || "获取集市交易失败");
       }
     } catch (e) {
       console.error("获取集市交易失败:", e);
-      toast.error("获取失败，请重试");
+      notify.error("获取失败，请重试");
     } finally {
       setMarketLoading(false);
     }

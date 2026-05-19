@@ -14,21 +14,22 @@ import {
 } from "@/lib/actions/notification";
 import { submitQuickReply } from "@/lib/actions/comment";
 import { AuthGuard } from "@/components/auth-guard";
+import { StudentPageShell } from "@/components/shared/student-page-shell";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { truncateText, formatRelativeTime } from "@/lib/core/utils";
-import toast from "react-hot-toast";
+import { Button } from "@/components/ui/button";
+import { PageEmpty, PageError, PageLoading } from "@/components/ui/page-state";
+import { notify } from "@/lib/ui/notify";
 import {
   User,
-  Loader2,
   MessageCircle,
   Send,
   ShoppingBag,
   CheckCheck,
   ChevronLeft,
   Bell,
-  MapPin,
 } from "lucide-react";
 
 /** 格式化点赞者名称 */
@@ -108,6 +109,7 @@ function MessagesContent() {
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState("");
   const [isSubmittingReply, setIsSubmittingReply] = useState(false);
@@ -115,13 +117,21 @@ function MessagesContent() {
   const fetchNotifications = useCallback(async () => {
     if (!currentUser?.id) return;
     setLoading(true);
-    const result = await getUserNotifications(currentUser.id, 50, ["MARKET_ITEM"]);
-    setLoading(false);
-    if (result.success && result.data) {
-      setNotifications(result.data);
-      await fetchUnreadCounts(currentUser.id);
-    } else {
-      toast.error(result.error || "获取消息失败");
+    setError(null);
+    try {
+      const result = await getUserNotifications(currentUser.id, 50, ["MARKET_ITEM"]);
+      if (result.success && result.data) {
+        setNotifications(result.data);
+        await fetchUnreadCounts(currentUser.id);
+      } else {
+        setNotifications([]);
+        setError(result.error || "获取消息失败");
+      }
+    } catch {
+      setNotifications([]);
+      setError("获取消息失败，请稍后重试");
+    } finally {
+      setLoading(false);
     }
   }, [currentUser?.id, fetchUnreadCounts]);
 
@@ -157,7 +167,7 @@ function MessagesContent() {
       const poiId = n.poiId;
       const commentId = n.entityId || n.commentId;
       if (!poiId || !commentId) {
-        toast.error("无法定位到该留言");
+        notify.error("无法定位到该留言");
         await handleMarkAsRead(n);
         return;
       }
@@ -175,7 +185,7 @@ function MessagesContent() {
   ) => {
     const content = replyContent.trim();
     if (!content || content.length > 500) {
-      toast.error("回复内容不能为空且最多 500 字");
+      notify.error("回复内容不能为空且最多 500 字");
       return;
     }
     setIsSubmittingReply(true);
@@ -187,7 +197,7 @@ function MessagesContent() {
         notificationId
       );
       if (result.success) {
-        toast.success("回复已发送");
+        notify.success("回复已发送");
         setReplyingToId(null);
         setReplyContent("");
         setNotifications((prev) =>
@@ -197,10 +207,10 @@ function MessagesContent() {
         );
         if (currentUser?.id) await fetchUnreadCounts(currentUser.id);
       } else {
-        toast.error(result.error || "发送失败");
+        notify.error(result.error || "发送失败");
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "发送失败");
+      notify.error(e instanceof Error ? e.message : "发送失败");
     } finally {
       setIsSubmittingReply(false);
     }
@@ -211,7 +221,7 @@ function MessagesContent() {
     if (!currentUser?.id) return;
     const unreadCount = notifications.filter((n) => !n.isRead).length;
     if (unreadCount === 0) {
-      toast.success("暂无未读消息");
+      notify.success("暂无未读消息");
       return;
     }
     setIsMarkingAll(true);
@@ -220,9 +230,9 @@ function MessagesContent() {
       if (result.success) {
         setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
         await fetchUnreadCounts(currentUser.id);
-        toast.success(`已一键标为已读（${unreadCount} 条）`);
+        notify.success(`已一键标为已读（${unreadCount} 条）`);
       } else {
-        toast.error(result.error || "操作失败");
+        notify.error(result.error || "操作失败");
       }
     } finally {
       setIsMarkingAll(false);
@@ -233,7 +243,7 @@ function MessagesContent() {
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] flex-col bg-[#F8F9FA]">
+    <>
       {/* 固定头部 */}
       <header className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-[#EDEFF1] bg-white/95 px-4 py-3 backdrop-blur-sm">
         <div className="flex items-center gap-3">
@@ -257,45 +267,33 @@ function MessagesContent() {
           </div>
         </div>
         {hasUnread && (
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            loading={isMarkingAll}
             onClick={handleMarkAllAsRead}
-            disabled={isMarkingAll}
-            className="flex items-center gap-1.5 rounded-full bg-[#FF4500]/10 px-3 py-1.5 text-sm font-medium text-[#FF4500] transition-colors hover:bg-[#FF4500]/20 disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-full bg-[#FF4500]/10 px-3 py-1.5 text-[#FF4500] hover:bg-[#FF4500]/20"
           >
-            {isMarkingAll ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <CheckCheck className="h-4 w-4" />
-            )}
+            {!isMarkingAll ? <CheckCheck className="h-4 w-4" /> : null}
             一键已读
-          </button>
+          </Button>
         )}
       </header>
 
       {/* 消息列表 */}
       <main className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24">
-            <Loader2 className="h-10 w-10 animate-spin text-[#FF4500]" />
-            <p className="mt-4 text-sm text-[#7C7C7C]">加载中...</p>
-          </div>
+        {error ? (
+          <PageError description={error} onRetry={fetchNotifications} />
+        ) : loading ? (
+          <PageLoading className="flex min-h-[40vh] flex-col items-center justify-center py-24" />
         ) : notifications.length === 0 ? (
-          <div className="flex flex-col items-center justify-center px-6 py-20">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#EDEFF1]">
-              <Bell className="h-10 w-10 text-[#C4C7CC]" />
-            </div>
-            <h2 className="mt-6 text-lg font-medium text-[#1A1A1B]">暂无消息</h2>
-            <p className="mt-2 text-center text-sm text-[#7C7C7C]">
-              留言回复、点赞、集市通知等都会出现在这里
-            </p>
-            <Link
-              href="/"
-              className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#FF4500] px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#E03D00]"
-            >
-              <MapPin className="h-4 w-4" />
-              去逛逛地图
-            </Link>
-          </div>
+          <PageEmpty
+            icon={Bell}
+            title="暂无消息"
+            description="留言回复、点赞、集市通知等都会出现在这里"
+            action={{ label: "去逛逛地图", onClick: () => router.push("/") }}
+            className="px-6 py-20"
+          />
         ) : (
           <>
           <div className="mx-auto max-w-2xl px-4 py-4 pb-24">
@@ -434,21 +432,18 @@ function MessagesContent() {
                         <span className="text-xs text-[#7C7C7C]">
                           {replyContent.length}/500
                         </span>
-                        <button
+                        <Button
                           type="button"
+                          loading={isSubmittingReply}
+                          disabled={!replyContent.trim()}
                           onClick={() =>
                             handleQuickReply(n.poiId!, n.commentId!, n.id)
                           }
-                          disabled={isSubmittingReply || !replyContent.trim()}
-                          className="flex items-center gap-2 rounded-xl bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="rounded-xl px-4 py-2"
                         >
-                          {isSubmittingReply ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Send className="h-4 w-4" />
-                          )}
+                          {!isSubmittingReply ? <Send className="h-4 w-4" /> : null}
                           发送
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   )}
@@ -463,31 +458,30 @@ function MessagesContent() {
               className="fixed bottom-0 left-0 right-0 z-20 border-t border-[#EDEFF1] bg-white/95 px-4 py-3 backdrop-blur-sm"
               style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom, 0px))" }}
             >
-              <button
+              <Button
+                type="button"
+                loading={isMarkingAll}
                 onClick={handleMarkAllAsRead}
-                disabled={isMarkingAll}
-                className="flex w-full max-w-2xl mx-auto items-center justify-center gap-2 rounded-xl bg-[#FF4500] py-3 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mx-auto w-full max-w-2xl rounded-xl py-3"
               >
-                {isMarkingAll ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <CheckCheck className="h-4 w-4" />
-                )}
+                {!isMarkingAll ? <CheckCheck className="h-4 w-4" /> : null}
                 一键已读（{unreadCount} 条未读）
-              </button>
+              </Button>
             </div>
           )}
           </>
         )}
       </main>
-    </div>
+    </>
   );
 }
 
 export default function MessagesPage() {
   return (
     <AuthGuard requiredRole="STUDENT">
-      <MessagesContent />
+      <StudentPageShell variant="fullHeight">
+        <MessagesContent />
+      </StudentPageShell>
     </AuthGuard>
   );
 }

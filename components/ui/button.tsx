@@ -1,8 +1,9 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/core/utils";
 
-type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
@@ -16,18 +17,23 @@ const variantClass: Record<ButtonVariant, string> = {
   danger: "bg-red-600 text-white hover:bg-red-700",
 };
 
+export function buttonClassName(variant: ButtonVariant = "primary", className?: string) {
+  return cn(
+    "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+    variantClass[variant],
+    className
+  );
+}
+
 export function Button({ variant = "primary", loading = false, className, disabled, children, ...props }: ButtonProps) {
   return (
     <button
       {...props}
       disabled={disabled || loading}
-      className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        variantClass[variant],
-        className
-      )}
+      className={buttonClassName(variant, className)}
     >
+      {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
       {children}
     </button>
   );

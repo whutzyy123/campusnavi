@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Download, ChevronDown, Loader2 } from "lucide-react";
 import { exportReportCsv, type ReportPeriod } from "@/lib/actions/admin-report";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { cn } from "@/lib/core/utils";
 
 const PERIODS: { value: ReportPeriod; label: string }[] = [
@@ -24,7 +24,7 @@ export function ReportExportButton({ className }: { className?: string }) {
     try {
       const result = await exportReportCsv(period);
       if (!result.success) {
-        toast.error(result.error || "导出失败");
+        notify.error(result.error || "导出失败");
         return;
       }
       const blob = new Blob([result.csv], { type: "text/csv;charset=utf-8" });
@@ -34,10 +34,10 @@ export function ReportExportButton({ className }: { className?: string }) {
       a.download = result.filename;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("导出成功");
+      notify.success("导出成功");
       setOpen(false);
     } catch (e) {
-      toast.error("导出失败，请重试");
+      notify.error("导出失败，请重试");
     } finally {
       setExporting(null);
     }
@@ -48,7 +48,7 @@ export function ReportExportButton({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="inline-flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+        className="inline-flex items-center gap-2 rounded-lg border border-[#EDEFF1] bg-white px-4 py-2 text-sm font-medium text-[#1A1A1B] shadow-sm transition-colors hover:border-[#FF4500] hover:text-[#FF4500] hover:bg-[#FFF7F5]"
       >
         <Download className="h-4 w-4" />
         导出报表
@@ -63,14 +63,14 @@ export function ReportExportButton({ className }: { className?: string }) {
             aria-hidden
             onClick={() => setOpen(false)}
           />
-          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+          <div className="absolute right-0 top-full z-20 mt-1 w-48 rounded-lg border border-[#EDEFF1] bg-white py-1 shadow-lg">
             {PERIODS.map((p) => (
               <button
                 key={p.value}
                 type="button"
                 onClick={() => handleExport(p.value)}
                 disabled={exporting !== null}
-                className="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="flex w-full items-center justify-between px-4 py-2 text-left text-sm text-[#1A1A1B] hover:bg-[#F6F7F8] disabled:opacity-50"
               >
                 {p.label}
                 {exporting === p.value && (

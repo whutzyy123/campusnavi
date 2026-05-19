@@ -6,7 +6,7 @@ import Image from "next/image";
 import { compressImage } from "@/lib/image/utils";
 import { uploadImageAction } from "@/lib/image/actions";
 import { cn } from "@/lib/core/utils";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 
 export interface ImageUploadProps {
   /** Existing image URL */
@@ -68,7 +68,7 @@ export function ImageUpload({
         onChange(result.url);
       } else {
         onChange("");
-        if (result.error) toast.error(result.error);
+        if (result.error) notify.error(result.error);
       }
     } catch (err) {
       onChange("");

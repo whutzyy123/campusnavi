@@ -4,31 +4,9 @@ import React, { memo, useState, useEffect, useCallback, forwardRef } from "react
 import Image from "next/image";
 import { Heart } from "lucide-react";
 import type { User } from "@/store/use-auth-store";
+import type { CommentItem } from "@/lib/comment/types";
 
-export interface CommentItem {
-  id: string;
-  content: string;
-  createdAt: string;
-  likeCount: number;
-  isLikedByMe: boolean;
-  reportCount: number;
-  isHidden: boolean;
-  parentId?: string | null;
-  user: {
-    id: string;
-    nickname: string | null;
-    avatar: string | null;
-    email?: string | null;
-  };
-  parent?: {
-    id: string;
-    user: {
-      id: string;
-      nickname: string | null;
-    };
-  } | null;
-  replies?: CommentItem[];
-}
+export type { CommentItem } from "@/lib/comment/types";
 
 /** 将嵌套回复展平为单层数组（按时间正序） */
 export function flattenReplies(comments: CommentItem[]): CommentItem[] {

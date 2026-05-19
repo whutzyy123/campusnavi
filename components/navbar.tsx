@@ -11,7 +11,7 @@ import Image from "next/image";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { useNotificationStore } from "@/store/use-notification-store";
-import { MapPin, ChevronDown, MessageSquare, LogOut } from "lucide-react";
+import { MapPin, ChevronDown, MessageSquare } from "lucide-react";
 import { POISearchBar } from "@/components/poi-search-bar";
 import { useMapSearchStore } from "@/store/use-map-search-store";
 import { useFilterStore } from "@/store/use-filter-store";
@@ -26,19 +26,14 @@ export function Navbar() {
   const { pois, onSelectPOI } = useMapSearchStore();
   const [showSchoolSelector, setShowSchoolSelector] = useState(false);
   const [showCampusSelector, setShowCampusSelector] = useState(false);
-  const [showUserMenu, setShowUserMenu] = useState(false);
   const [campuses, setCampuses] = useState<Array<{ id: string; name: string; boundary: unknown; center: unknown }>>([]);
   const campusSelectorRef = useRef<HTMLDivElement>(null);
-  const userMenuRef = useRef<HTMLDivElement>(null);
 
-  // 点击外部关闭校区选择器和用户菜单
+  // 点击外部关闭校区选择器
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (campusSelectorRef.current && !campusSelectorRef.current.contains(e.target as Node)) {
         setShowCampusSelector(false);
-      }
-      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
-        setShowUserMenu(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -78,7 +73,7 @@ export function Navbar() {
   }, [currentUser?.id, pathname, fetchUnreadCounts]);
 
   useEffect(() => {
-    // 登录/注册页不请求 /api/auth/me，避免无意义的 401
+    // 登录/注册页不初始化认证状态，避免无意义的请求
     if (pathname.startsWith("/login") || pathname.startsWith("/register")) {
       return;
     }
@@ -303,73 +298,20 @@ export function Navbar() {
               登录/注册
             </Link>
           ) : (
-            <>
-              {/* 头像下拉：个人中心 → 管理后台（有权限时）→ 退出登录 */}
-              <div className="relative" ref={userMenuRef}>
-                <button
-                  type="button"
-                  onClick={() => setShowUserMenu(!showUserMenu)}
-                  className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-gray-200 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300"
-                  title={currentUser?.nickname || "菜单"}
-                  aria-label="用户菜单"
-                  aria-expanded={showUserMenu}
-                >
-                  {userAvatar ? (
-                    <Image
-                      src={userAvatar}
-                      alt=""
-                      width={36}
-                      height={36}
-                      className="h-full w-full object-cover"
-                      unoptimized={userAvatar.startsWith("blob:")}
-                    />
-                  ) : (
-                    userInitial
-                  )}
-                  {unreadCount > messagesUnread && unreadCount > 0 && (
-                    <span
-                      className="absolute -right-0.5 -top-0.5 z-[60] h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
-                      aria-label={`${unreadCount} 条未读通知`}
-                    />
-                  )}
-                </button>
-                {showUserMenu && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-0"
-                      onClick={() => setShowUserMenu(false)}
-                    />
-                    <div className="absolute right-0 top-full z-navbar-dropdown mt-2 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg">
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm text-[#1A1A1B] transition-colors hover:bg-[#FFE5DD]/60"
-                        onClick={() => {
-                          setShowUserMenu(false);
-                          void logoutUser();
-                        }}
-                      >
-                        <LogOut className="h-4 w-4 shrink-0 text-[var(--primary-theme)]" />
-                        退出登录
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-              <Link
-                href="/messages"
-                className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-[#FF4500]"
-                title="消息"
-                aria-label="消息"
-              >
-                <MessageSquare className="h-5 w-5" />
-                {messagesUnread > 0 && (
-                  <span
-                    className="absolute -right-0.5 -top-0.5 z-[60] h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
-                    aria-label={`${messagesUnread} 条未读消息`}
-                  />
-                )}
-              </Link>
-            </>
+            <Link
+              href="/messages"
+              className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-gray-600 transition-colors hover:bg-gray-100 hover:text-[#FF4500]"
+              title="消息"
+              aria-label="消息"
+            >
+              <MessageSquare className="h-5 w-5" />
+              {messagesUnread > 0 && (
+                <span
+                  className="absolute -right-0.5 -top-0.5 z-10 h-3 w-3 min-w-[12px] rounded-full border-2 border-white bg-[#FF4500]"
+                  aria-label={`${messagesUnread} 条未读消息`}
+                />
+              )}
+            </Link>
           )}
         </div>
       </div>

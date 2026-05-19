@@ -20,14 +20,25 @@ body {
   /* 移动端布局：基于宽高比，非固定像素。竖屏 100vw，21:9+ 横屏按 vmin 比例约束 */
   --mobile-content-max: 100vw;
 
-  /* Z-Index 层级（严格顺序：navbar < sidebar < modal-overlay < modal-content < tooltip） */
+  /* Z-Index 层级（App Portal；见 lib/ui/z-index.ts） */
   --z-navbar: 40;
-  --z-navbar-dropdown: 50;
+  --z-sidebar-backdrop: 44;
   --z-sidebar: 45;
+  --z-dropdown: 50;
+  --z-navbar-dropdown: 50;
+  --z-tab-bar: 55;
+  --z-map-control: 60;
+  --z-map-banner: 70;
+  --z-drawer-overlay: 100;
+  --z-drawer-content: 110;
   --z-modal-overlay: 100;
   --z-modal-content: 110;
+  --z-popover: 120;
   --z-tooltip: 120;
-  --z-tooltip-popover: 120; /* alias */
+  --z-tooltip-popover: 120;
+  --z-toast: 130;
+  --z-map-modal-overlay: 200;
+  --z-map-modal-content: 210;
 
   /* 平台主题色（与 Navigate 按钮一致） */
   --primary-theme: #FF4500;

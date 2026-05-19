@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { X, Copy, Check, Loader2, Search } from "lucide-react";
+import { X, Copy, Check, Search } from "lucide-react";
 import { createInvitationCodes } from "@/lib/actions/invitation";
 import type { InvitationCodeTypeStr } from "@/lib/actions/invitation";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { cn } from "@/lib/core/utils";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 
 interface School {
   id: string;
@@ -94,7 +96,7 @@ export function GenerateCodeModal({
         const codeStr = result.data.codes.length === 1
           ? result.data.codes[0]
           : result.data.codes.join("、");
-        toast.success(`邀请码已生成：${codeStr}`);
+        notify.success(`邀请码已生成：${codeStr}`);
         onSuccess?.();
         if (result.data.codes.length > 1) {
           // 批量生成时保留弹窗供用户复制
@@ -102,11 +104,11 @@ export function GenerateCodeModal({
           handleClose();
         }
       } else {
-        toast.error(result.message || "生成失败");
+        notify.error(result.message || "生成失败");
       }
     } catch (error) {
       console.error("生成邀请码失败:", error);
-      toast.error("生成失败，请重试");
+      notify.error("生成失败，请重试");
     } finally {
       setIsGenerating(false);
     }
@@ -116,10 +118,10 @@ export function GenerateCodeModal({
     try {
       await navigator.clipboard.writeText(code);
       setCopiedIndex(index);
-      toast.success("邀请码已复制到剪贴板");
+      notify.success("邀请码已复制到剪贴板");
       setTimeout(() => setCopiedIndex(null), 2000);
     } catch {
-      toast.error("复制失败");
+      notify.error("复制失败");
     }
   };
 
@@ -139,9 +141,8 @@ export function GenerateCodeModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-      <div className="modal-container max-w-md">
-        <div className="modal-header flex items-center justify-between px-6 py-4">
+    <Modal isOpen={isOpen} onClose={handleClose} containerClassName="max-w-md">
+      <div className="modal-header flex items-center justify-between px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">生成邀请码</h3>
           <button
             onClick={handleClose}
@@ -314,28 +315,19 @@ export function GenerateCodeModal({
 
         </div>
         <div className="modal-footer flex gap-3 p-6">
-          <button
-            onClick={handleClose}
-            className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-          >
+          <Button type="button" variant="secondary" onClick={handleClose} className="flex-1">
             关闭
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
             onClick={handleGenerate}
             disabled={!canSubmit}
-            className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#FF4500]/90 disabled:cursor-not-allowed disabled:opacity-50"
+            loading={isGenerating}
+            className="flex-1"
           >
-            {isGenerating ? (
-              <>
-                <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-                生成中...
-              </>
-            ) : (
-              "生成邀请码"
-            )}
-          </button>
+            生成邀请码
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

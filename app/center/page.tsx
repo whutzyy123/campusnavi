@@ -8,22 +8,18 @@ import { AuthGuard } from "@/components/auth-guard";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useNotificationStore } from "@/store/use-notification-store";
 import {
-  User,
-  Settings,
-  ShieldCheck,
-  LayoutDashboard,
   ShoppingBag,
-  Calendar,
   Heart,
+  Calendar,
   Package,
   MessageSquare,
+  Settings,
   LogOut,
-  Loader2,
   ChevronRight,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { Button } from "@/components/ui/button";
+import { notify } from "@/lib/ui/notify";
 import { analytics } from "@/lib/analytics";
-import { getAdminHrefByRole, hasAdminAccess } from "@/lib/auth/role-access";
 
 interface CenterEntry {
   id: string;
@@ -48,12 +44,12 @@ function CenterContent() {
   const handleLogout = async () => {
     if (isLoggingOut) return;
     analytics.auth.logoutClick();
-    toast.loading("正在退出...", { id: "logout" });
+    notify.loading("正在退出...", { id: "logout" });
     try {
       await useAuthStore.getState().logout();
     } catch (error) {
       if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
-        toast.error("退出登录失败，请重试", { id: "logout" });
+        notify.error("退出登录失败，请重试", { id: "logout" });
         console.error("退出登录失败:", error);
       }
     }
@@ -65,39 +61,8 @@ function CenterContent() {
       : messagesUnread > 0
         ? "/messages"
         : "/profile";
-  const canAccessAdmin = hasAdminAccess(currentUser?.role);
-  const adminHref = getAdminHrefByRole(currentUser?.role);
 
   const entries: CenterEntry[] = [
-    {
-      id: "profile",
-      label: "中控台",
-      href: profileHref,
-      icon: User,
-      badge: unreadCount > 0 ? unreadCount : undefined,
-    },
-    {
-      id: "account",
-      label: "账号管理",
-      href: "/profile",
-      icon: Settings,
-    },
-    {
-      id: "security",
-      label: "安全设置",
-      href: "/profile",
-      icon: ShieldCheck,
-    },
-    ...(canAccessAdmin
-      ? [
-          {
-            id: "admin-console",
-            label: "管理后台",
-            href: adminHref,
-            icon: LayoutDashboard,
-          } as CenterEntry,
-        ]
-      : []),
     {
       id: "market",
       label: "生存集市",
@@ -106,16 +71,16 @@ function CenterContent() {
       badge: marketUnread > 0 ? marketUnread : undefined,
     },
     {
-      id: "activities",
-      label: "校园活动",
-      href: "/activities",
-      icon: Calendar,
-    },
-    {
       id: "favorites",
       label: "我的收藏",
       href: "/favorites",
       icon: Heart,
+    },
+    {
+      id: "activities",
+      label: "校园活动",
+      href: "/activities",
+      icon: Calendar,
     },
     {
       id: "lost-found",
@@ -125,9 +90,15 @@ function CenterContent() {
     },
     {
       id: "feedback",
-      label: "信息反馈",
+      label: "帮助与反馈",
       href: "/feedback",
       icon: MessageSquare,
+    },
+    {
+      id: "settings",
+      label: "系统设置",
+      href: "/settings",
+      icon: Settings,
     },
   ];
 
@@ -139,8 +110,11 @@ function CenterContent() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8 pb-24">
-      {/* 用户信息卡片 */}
-      <div className="mb-8 flex items-center gap-4 rounded-2xl border border-[#EDEFF1] bg-white p-6 shadow-sm">
+      {/* 用户信息卡片 — 点击跳转"我的账号" */}
+      <Link
+        href="/profile"
+        className="mb-8 flex items-center gap-4 rounded-2xl border border-[#EDEFF1] bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-[#FF4500]/30 active:scale-[0.99]"
+      >
         <div className="relative flex h-16 w-16 shrink-0 overflow-hidden rounded-full bg-gray-100">
           {userAvatar ? (
             <Image
@@ -162,9 +136,14 @@ function CenterContent() {
             {currentUser?.nickname || "用户"}
           </h1>
           <p className="truncate text-sm text-[#7C7C7C]">{currentUser?.email}</p>
-          <p className="mt-1 text-xs text-[#7C7C7C]">积分：{currentUser?.points ?? 0}</p>
         </div>
-      </div>
+        {/* 积分显示在右侧，使用主题色 */}
+        <Link href="/center/points" className="flex shrink-0 items-center gap-1.5 rounded-full bg-[#FFE5DD] px-3 py-1.5 transition-all hover:bg-[#FF4500]/20 hover:shadow-sm active:scale-[0.97]">
+          <span className="text-sm font-semibold text-[#FF4500]">{currentUser?.points ?? 0}</span>
+          <span className="text-xs text-[#FF4500]/80">积分</span>
+        </Link>
+        <ChevronRight className="h-5 w-5 shrink-0 text-[#7C7C7C] ml-2" />
+      </Link>
 
       {/* 功能入口列表 */}
       <div className="space-y-1 rounded-2xl border border-[#EDEFF1] bg-white shadow-sm overflow-hidden">
@@ -214,19 +193,16 @@ function CenterContent() {
 
       {/* 退出登录 */}
       <div className="mt-8">
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          loading={isLoggingOut}
           onClick={handleLogout}
-          disabled={isLoggingOut}
-          className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+          className="w-full rounded-xl border border-red-200 bg-red-50 py-3 text-red-600 hover:bg-red-100 hover:text-red-600"
         >
-          {isLoggingOut ? (
-            <Loader2 className="h-5 w-5 animate-spin" />
-          ) : (
-            <LogOut className="h-5 w-5" />
-          )}
+          {!isLoggingOut ? <LogOut className="h-5 w-5" /> : null}
           退出登录
-        </button>
+        </Button>
       </div>
     </div>
   );

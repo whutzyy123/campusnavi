@@ -15,7 +15,8 @@ import {
   TableCell,
 } from "@/components/table";
 import { Tags, Globe, Building2, Pencil, Trash2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import { useDebounce } from "@/hooks/use-debounce";
 import {
   getAllUniqueCategories,
@@ -65,11 +66,11 @@ function SuperAdminAllCategoriesPageContent() {
         setLocalCategories(result.localCategories ?? []);
         setSchools(result.schools ?? []);
       } else {
-        toast.error(result.error ?? "获取分类列表失败");
+        notify.error(result.error ?? "获取分类列表失败");
       }
     } catch (error) {
       console.error("获取分类列表失败:", error);
-      toast.error("获取分类列表失败");
+      notify.error("获取分类列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -82,38 +83,46 @@ function SuperAdminAllCategoriesPageContent() {
   const handleSaveSystemEdit = async (id: string) => {
     const trimmed = editName.trim();
     if (!trimmed) {
-      toast.error("分类名称不能为空");
+      notify.error("分类名称不能为空");
       return;
     }
     const result = await updateCategory(id, { name: trimmed });
     if (result.success) {
-      toast.success("分类已更新");
+      notify.success("分类已更新");
       setEditingSystemId(null);
       setEditName("");
       fetchData();
     } else {
-      toast.error(result.error ?? "更新失败");
+      notify.error(result.error ?? "更新失败");
     }
   };
 
-  const handleDeleteSystem = async (id: string, name: string) => {
-    if (!confirm(`确定要删除系统分类"${name}"吗？此操作将影响所有学校，且不可恢复。`)) {
-      return;
-    }
-    setDeletingId(id);
-    try {
-      const result = await deleteCategory(id);
-      if (result.success) {
-        toast.success("系统分类已删除");
-        fetchData();
-      } else {
-        toast.error(result.error ?? "删除失败");
-      }
-    } catch (error) {
-      toast.error("删除失败，请重试");
-    } finally {
-      setDeletingId(null);
-    }
+  const handleDeleteSystem = (id: string, name: string) => {
+    openConfirm({
+      title: "删除系统分类",
+      description: `确定要删除系统分类"${name}"吗？此操作将影响所有学校，且不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingId(id);
+        try {
+          const result = await deleteCategory(id);
+          if (result.success) {
+            notify.success("系统分类已删除");
+            fetchData();
+          } else {
+            notify.error(result.error ?? "删除失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          notify.error("删除失败，请重试");
+          throw error;
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   const schoolOptions = [

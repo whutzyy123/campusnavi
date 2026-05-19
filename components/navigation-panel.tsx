@@ -12,7 +12,7 @@ import { distanceMeters } from "@/lib/geo/geo-utils";
 import { loadAMap } from "@/lib/geo/amap-loader";
 import { getPOIsBySchool } from "@/lib/actions/poi";
 import { MapPin, ArrowUpDown, X, Search, ChevronDown, LocateFixed, Footprints, Bike } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 
 interface NavPOI {
   id: string;
@@ -127,12 +127,12 @@ export function NavigationPanel() {
 
   const handleUseMyLocation = useCallback(
     async (type: "start" | "end") => {
-      const toastId = toast.loading("正在获取当前位置...");
+      const toastId = notify.loading("正在获取当前位置...");
       try {
         await loadAMap();
         const AMap = typeof window !== "undefined" ? window.AMap : null;
         if (!AMap?.Geolocation) {
-          toast.error("定位服务不可用，请刷新页面重试", { id: toastId });
+          notify.error("定位服务不可用，请刷新页面重试", { id: toastId });
           return;
         }
 
@@ -156,21 +156,21 @@ export function NavigationPanel() {
               analytics.nav.endSet({ source: "location" });
               setEndPoint(point);
             }
-            toast.success("已获取当前位置", { id: toastId });
+            notify.success("已获取当前位置", { id: toastId });
           } else {
             const errMsg = result?.message || "定位失败";
             if (errMsg.includes("Permission Denied") || errMsg.includes("用户拒绝")) {
-              toast.error("定位失败，请检查浏览器定位权限", { id: toastId });
+              notify.error("定位失败，请检查浏览器定位权限", { id: toastId });
             } else if (errMsg.includes("timeout") || errMsg.includes("超时")) {
-              toast.error("定位超时，请检查网络连接", { id: toastId });
+              notify.error("定位超时，请检查网络连接", { id: toastId });
             } else {
-              toast.error("定位失败，请稍后重试", { id: toastId });
+              notify.error("定位失败，请稍后重试", { id: toastId });
             }
           }
         });
       } catch (err) {
         console.error("[handleUseMyLocation]", err);
-        toast.error("定位服务加载失败，请刷新后重试", { id: toastId });
+        notify.error("定位服务加载失败，请刷新后重试", { id: toastId });
       }
     },
     [setStartPoint, setEndPoint]
@@ -235,7 +235,7 @@ export function NavigationPanel() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.18 }}
-          className="pointer-events-auto fixed z-50"
+          className="pointer-events-auto fixed z-dropdown"
           style={{
             top: "4rem",
             left: "calc(0.5rem + env(safe-area-inset-left, 0px))",
@@ -258,7 +258,7 @@ export function NavigationPanel() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="pointer-events-auto fixed left-0 right-0 z-50 w-auto md:left-4 md:right-auto md:w-96 md:rounded-xl"
+          className="pointer-events-auto fixed left-0 right-0 z-dropdown w-auto md:left-4 md:right-auto md:w-96 md:rounded-xl"
           style={{
             top: isMobile ? "4rem" : "6rem",
             left: isMobile ? 0 : undefined,

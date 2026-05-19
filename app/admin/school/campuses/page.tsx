@@ -7,11 +7,11 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { AuthGuard } from "@/components/auth-guard";
 import { AdminLayout } from "@/components/admin-layout";
-import { Card } from "@/components/card";
+import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { loadAMapPlugin } from "@/lib/geo/amap-loader";
-import polylabel from "polylabel";
-import { ensureLngLat } from "@/lib/geo/campus-label-utils";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
+import { Button } from "@/components/ui/button";
 import {
   getSchoolById,
   getCampuses,
@@ -29,41 +29,23 @@ import {
   Eye,
   Building2,
 } from "lucide-react";
-
-interface CampusArea {
-  id: string;
-  schoolId: string;
-  name: string;
-  boundary: any; // GeoJSON Polygon
-  center: [number, number]; // [lng, lat]
-  labelCenter?: [number, number] | unknown;
-  createdAt: string;
-  updatedAt: string;
-}
-
-/** 从 [lng, lat] 或 GeoJSON Point 解析坐标 */
-function parseLngLat(v: unknown): [number, number] {
-  if (!v) return [0, 0];
-  if (Array.isArray(v) && v.length >= 2) return [Number(v[0]), Number(v[1])];
-  const obj = v as { coordinates?: unknown[] };
-  if (obj?.coordinates && Array.isArray(obj.coordinates) && obj.coordinates.length >= 2) {
-    return [Number(obj.coordinates[0]), Number(obj.coordinates[1])];
-  }
-  return [0, 0];
-}
-
-/** 从坐标数组计算 labelCenter（polylabel - Pole of Inaccessibility） */
-function computeLabelCenter(coordinates: [number, number][]): [number, number] {
-  if (!coordinates || coordinates.length < 3) return [0, 0];
-  const closed =
-    coordinates[0][0] === coordinates[coordinates.length - 1][0] &&
-    coordinates[0][1] === coordinates[coordinates.length - 1][1]
-      ? coordinates
-      : [...coordinates, coordinates[0]];
-  const polygon = [closed];
-  const result = polylabel(polygon, 0.000001);
-  return ensureLngLat(result[0], result[1]);
-}
+// 使用提取的模块
+import {
+  type CampusArea,
+  parseLngLat,
+  computeLabelCenter,
+  CAMPUS_POLYGON_STYLE_DEFAULT,
+  CAMPUS_POLYGON_STYLE_HIGHLIGHT,
+  CAMPUS_LABEL_STYLE_NORMAL,
+  CAMPUS_LABEL_STYLE_EDITING,
+  DEFAULT_MAP_CENTER,
+  DEFAULT_MAP_ZOOM,
+  LABEL_MIN_ZOOM,
+  PLUGIN_LOAD_DELAY_MS,
+  EDITOR_INIT_DELAY_MS,
+  FIT_VIEW_PADDING,
+  FIT_VIEW_MAX_ZOOM,
+} from "@/lib/campus";
 
 /**
  * 校区边界编辑器页面
@@ -136,11 +118,11 @@ export default function CampusManagementPage() {
           }))
         );
       } else {
-        toast.error(result.success === false ? result.error : "加载校区列表失败");
+        notify.error(result.success === false ? result.error : "加载校区列表失败");
       }
     } catch (error) {
       console.error("加载校区列表失败:", error);
-      toast.error("加载校区列表失败");
+      notify.error("加载校区列表失败");
     } finally {
       setIsLoadingCampuses(false);
     }
@@ -339,7 +321,7 @@ export default function CampusManagementPage() {
         }, 500); // 延迟 500ms 确保地图先渲染
       } catch (error) {
         console.error("地图初始化失败:", error);
-        toast.error("地图加载失败，请刷新页面重试");
+        notify.error("地图加载失败，请刷新页面重试");
       }
     };
 
@@ -428,11 +410,12 @@ export default function CampusManagementPage() {
         }
       }
 
-      if (!boundary || boundary.type !== "Polygon") {
+      const typedBoundary = boundary as { type?: string; coordinates?: [number, number][][] };
+      if (!boundary || typedBoundary.type !== "Polygon") {
         return;
       }
 
-      const coordinates = boundary.coordinates[0];
+      const coordinates = typedBoundary.coordinates?.[0];
       if (!Array.isArray(coordinates) || coordinates.length === 0) {
         return;
       }
@@ -589,7 +572,7 @@ export default function CampusManagementPage() {
   // 开始绘制新校区
   const handleStartDrawing = useCallback(() => {
     if (!amap || !mapInstanceRef.current || !mouseToolRef.current) {
-      toast.error("地图未加载完成");
+      notify.error("地图未加载完成");
       return;
     }
 
@@ -641,18 +624,18 @@ export default function CampusManagementPage() {
   // 编辑校区
   const handleEditCampus = useCallback(async (campusId: string) => {
     if (!amap || !mapInstanceRef.current) {
-      toast.error("地图未加载完成");
+      notify.error("地图未加载完成");
       return;
     }
 
     if (isDrawing) {
-      toast.error("请先完成或取消当前绘制");
+      notify.error("请先完成或取消当前绘制");
       return;
     }
 
     const polygon = campusPolygonsRef.current.get(campusId);
     if (!polygon) {
-      toast.error("校区多边形不存在");
+      notify.error("校区多边形不存在");
       return;
     }
 
@@ -696,7 +679,7 @@ export default function CampusManagementPage() {
 
     try {
       // 显示加载状态
-      toast.loading("正在加载编辑器...", { id: "editor-loading" });
+      notify.loading("正在加载编辑器...", { id: "editor-loading" });
 
       // 加载 PolygonEditor 插件
       await loadAMapPlugin("AMap.PolygonEditor");
@@ -719,8 +702,8 @@ export default function CampusManagementPage() {
           // 使用 PolyEditor 作为备选
           console.warn("使用 PolyEditor 作为 PolygonEditor 的备选");
         } else {
-          toast.dismiss("editor-loading");
-          toast.error("多边形编辑器插件尚未挂载，请刷新页面重试");
+          notify.dismiss("editor-loading");
+          notify.error("多边形编辑器插件尚未挂载，请刷新页面重试");
           setEditingCampusId(null);
           return;
         }
@@ -728,8 +711,8 @@ export default function CampusManagementPage() {
 
       // 确保 amap 对象也有 PolygonEditor
       if (!amap.PolygonEditor && !(amap as any).PolyEditor) {
-        toast.dismiss("editor-loading");
-        toast.error("多边形编辑器插件加载失败，请刷新页面重试");
+        notify.dismiss("editor-loading");
+        notify.error("多边形编辑器插件加载失败，请刷新页面重试");
         setEditingCampusId(null);
         return;
       }
@@ -737,8 +720,8 @@ export default function CampusManagementPage() {
       // 创建编辑器实例（使用备选方案如果主方案不可用）
       const EditorClass = amap.PolygonEditor || (amap as any).PolyEditor;
       if (!EditorClass) {
-        toast.dismiss("editor-loading");
-        toast.error("无法找到编辑器构造函数，请刷新页面重试");
+        notify.dismiss("editor-loading");
+        notify.error("无法找到编辑器构造函数，请刷新页面重试");
         setEditingCampusId(null);
         return;
       }
@@ -786,7 +769,7 @@ export default function CampusManagementPage() {
       editingLabel.setMap(mapInstanceRef.current);
       editingLabelRef.current = editingLabel;
 
-      toast.dismiss("editor-loading");
+      notify.dismiss("editor-loading");
 
       // 监听编辑事件 - 关键修复：使用 hide/show 组合技强制 Canvas 物理刷新
       // 这是高德 2.0 社区最有效的暴力刷新手段
@@ -923,10 +906,10 @@ export default function CampusManagementPage() {
         }
       });
 
-      toast.success("已进入编辑模式，拖动控制点调整校区形状");
+      notify.success("已进入编辑模式，拖动控制点调整校区形状");
     } catch (error) {
       console.error("初始化编辑器失败:", error);
-      toast.error("初始化编辑器失败，请刷新页面重试");
+      notify.error("初始化编辑器失败，请刷新页面重试");
       setEditingCampusId(null);
       polygonEditorRef.current = null;
       if (editingLabelRef.current && mapInstanceRef.current) {
@@ -943,13 +926,13 @@ export default function CampusManagementPage() {
   // 保存编辑后的校区
   const handleSaveEdit = useCallback(async () => {
     if (!editingCampusId || !polygonEditorRef.current) {
-      toast.error("没有正在编辑的校区");
+      notify.error("没有正在编辑的校区");
       return;
     }
 
     const polygon = campusPolygonsRef.current.get(editingCampusId);
     if (!polygon) {
-      toast.error("校区多边形不存在");
+      notify.error("校区多边形不存在");
       return;
     }
 
@@ -1013,7 +996,7 @@ export default function CampusManagementPage() {
       }
       
       if (!path || path.length < 3) {
-        toast.error("校区边界至少需要3个点");
+        notify.error("校区边界至少需要3个点");
         // 重新打开编辑器，让用户可以继续编辑
         if (polygon && amap && mapInstanceRef.current) {
           try {
@@ -1056,7 +1039,7 @@ export default function CampusManagementPage() {
       const result = await updateCampus(editingCampusId, { boundary: coordinates });
 
       if (result.success) {
-        toast.success("校区更新成功");
+        notify.success("校区更新成功");
         
         // 关键修复：解除编辑锁定，允许 React 重新渲染
         isEditingRef.current = false;
@@ -1069,7 +1052,7 @@ export default function CampusManagementPage() {
         // 刷新校区列表（这会重新渲染多边形和标签）
         await fetchCampuses();
       } else {
-        toast.error(result.error || "更新校区失败");
+        notify.error(result.error || "更新校区失败");
         // 重新打开编辑器，让用户可以继续编辑
         if (polygon && amap && mapInstanceRef.current) {
           try {
@@ -1082,7 +1065,7 @@ export default function CampusManagementPage() {
       }
     } catch (error) {
       console.error("更新校区失败:", error);
-      toast.error(error instanceof Error ? error.message : "更新校区失败");
+      notify.error(error instanceof Error ? error.message : "更新校区失败");
       
       // 重新打开编辑器，让用户可以继续编辑
       if (polygon && amap && mapInstanceRef.current) {
@@ -1123,7 +1106,7 @@ export default function CampusManagementPage() {
     editingPolygonRef.current = null;
     setEditingCampusId(null);
     
-    toast("已取消编辑");
+    notify.show("已取消编辑");
     
     // 刷新校区列表，恢复所有多边形的显示
     fetchCampuses();
@@ -1132,13 +1115,13 @@ export default function CampusManagementPage() {
   // 保存新校区
   const handleSaveNewCampus = useCallback(async () => {
     if (!newCampusName.trim() || !newCampusBoundary) {
-      toast.error("请填写校区名称");
+      notify.error("请填写校区名称");
       return;
     }
 
     const schoolId = getTargetSchoolId();
     if (!schoolId) {
-      toast.error("未选择学校");
+      notify.error("未选择学校");
       return;
     }
 
@@ -1151,17 +1134,17 @@ export default function CampusManagementPage() {
       });
 
       if (result.success) {
-        toast.success("校区创建成功");
+        notify.success("校区创建成功");
         setShowNameInput(false);
         setNewCampusName("");
         setNewCampusBoundary(null);
         await fetchCampuses();
       } else {
-        toast.error(result.error || "创建校区失败");
+        notify.error(result.error || "创建校区失败");
       }
     } catch (error) {
       console.error("创建校区失败:", error);
-      toast.error("创建校区失败");
+      notify.error("创建校区失败");
     } finally {
       setIsSaving(false);
     }
@@ -1185,27 +1168,34 @@ export default function CampusManagementPage() {
       mouseToolRef.current = null;
     }
     setIsDrawing(false);
-    toast("已取消绘制");
+    notify.show("已取消绘制");
   }, []);
 
   // 删除校区
-  const handleDeleteCampus = useCallback(async (campusId: string) => {
-    if (!confirm("确定要删除该校区吗？此操作不可恢复。")) {
-      return;
-    }
-
-    try {
-      const result = await deleteCampus(campusId);
-      if (result.success) {
-        toast.success("校区删除成功");
-        await fetchCampuses();
-      } else {
-        toast.error(result.error || "删除校区失败");
-      }
-    } catch (error) {
-      console.error("删除校区失败:", error);
-      toast.error("删除校区失败");
-    }
+  const handleDeleteCampus = useCallback((campusId: string) => {
+    openConfirm({
+      title: "删除校区",
+      description: "确定要删除该校区吗？此操作不可恢复。",
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        try {
+          const result = await deleteCampus(campusId);
+          if (result.success) {
+            notify.success("校区删除成功");
+            await fetchCampuses();
+          } else {
+            notify.error(result.error || "删除校区失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          console.error("删除校区失败:", error);
+          notify.error("删除校区失败");
+          throw error;
+        }
+      },
+    });
   }, [fetchCampuses]);
 
   // 定位到校区并高亮边界（列表点击时调用）
@@ -1259,19 +1249,17 @@ export default function CampusManagementPage() {
   return (
     <AuthGuard requiredRole="ADMIN">
       <AdminLayout>
+        <AdminPageContainer
+          title="校区管理"
+          description={activeSchool?.name || "未选择学校"}
+          bodyClassName="flex-1 min-h-0 overflow-hidden p-0 pt-0"
+        >
         <div className="flex h-full min-h-0 overflow-hidden">
           {/* 左侧面板：固定宽度，无外层滚动 */}
           <div className="flex w-80 flex-shrink-0 flex-col border-r border-gray-200 bg-white">
             <div className="flex flex-col gap-4 p-4">
-              <div>
-                <h2 className="text-xl font-bold text-gray-900">校区管理</h2>
-                <p className="mt-1 text-sm text-gray-500">
-                  {activeSchool?.name || "未选择学校"}
-                </p>
-              </div>
-
-              {/* 新增校区按钮（置顶） */}
-              <button
+              <Button
+                type="button"
                 onClick={handleStartDrawing}
                 disabled={
                   !isPluginsLoaded ||
@@ -1282,7 +1270,7 @@ export default function CampusManagementPage() {
                   !activeSchool ||
                   !getTargetSchoolId()
                 }
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-white transition-colors hover:bg-[#FF5500] disabled:cursor-not-allowed disabled:opacity-50"
+                className="w-full"
               >
                 <Plus className="h-4 w-4" />
                 {!activeSchool || !getTargetSchoolId()
@@ -1296,7 +1284,7 @@ export default function CampusManagementPage() {
                         : !isPluginsLoaded
                           ? "编辑器加载中..."
                           : "新增校区"}
-              </button>
+              </Button>
 
               {editingCampusId && (
                 <div className="flex gap-2">
@@ -1432,20 +1420,24 @@ export default function CampusManagementPage() {
                   autoFocus
                 />
                 <div className="flex gap-2">
-                  <button
+                  <Button
+                    type="button"
+                    loading={isSaving}
                     onClick={handleSaveNewCampus}
-                    disabled={isSaving || !newCampusName.trim()}
-                    className="flex-1 px-4 py-2 bg-[#FF4500] text-white rounded-lg hover:bg-[#FF5500] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    disabled={!newCampusName.trim()}
+                    className="flex-1"
                   >
                     保存
-                  </button>
-                  <button
-                    onClick={handleCancelNewCampus}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
                     disabled={isSaving}
-                    className="flex-1 px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    onClick={handleCancelNewCampus}
+                    className="flex-1 bg-gray-500 text-white hover:bg-gray-600 border-transparent"
                   >
                     取消
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -1466,6 +1458,7 @@ export default function CampusManagementPage() {
             )}
           </div>
         </div>
+        </AdminPageContainer>
       </AdminLayout>
     </AuthGuard>
   );

@@ -58,7 +58,7 @@ export function LiveClock() {
 
   if (!mounted) {
     return (
-      <span className="font-mono text-gray-500 text-sm md:text-base tabular-nums">
+      <span className="font-mono text-[#7C7C7C] text-sm md:text-base tabular-nums">
         &nbsp;
       </span>
     );
@@ -67,7 +67,7 @@ export function LiveClock() {
   return (
     <time
       dateTime={new Date().toISOString()}
-      className="font-mono text-gray-500 text-sm md:text-base tabular-nums"
+      className="font-mono text-[#7C7C7C] text-sm md:text-base tabular-nums"
     >
       {time}
     </time>

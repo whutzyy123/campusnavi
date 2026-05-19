@@ -26,6 +26,12 @@ export interface FocusCampusPayload {
   boundary?: { type: string; coordinates?: number[][][] };
 }
 
+/** 地图选点结果：跨页面传递（地图 → 帖子编辑） */
+export interface PickedPOI {
+  id: string;
+  name: string;
+}
+
 interface SchoolState {
   activeSchool: School | null;
   inspectedSchool: School | null; // 超级管理员临时视察的学校
@@ -45,6 +51,8 @@ interface SchoolState {
   mapViewHistory: MapViewState | null;
   /** 高亮的 POI ID（用于地图 Marker 视觉反馈） */
   highlightedPoiId: string | null;
+  /** 地图选点结果（从地图页带回帖子编辑页） */
+  pickedPOI: PickedPOI | null;
 
   setActiveSchool: (school: School | null) => void;
   setInspectedSchool: (school: School | null) => void;
@@ -63,6 +71,10 @@ interface SchoolState {
   /** 恢复完成后清除 mapViewHistory，由 map 调用 */
   clearMapViewHistory: () => void;
   setHighlightPoi: (id: string | null) => void;
+  /** 设置地图选点结果 */
+  setPickedPOI: (poi: PickedPOI | null) => void;
+  /** 清除地图选点结果（帖子编辑页读取后调用） */
+  clearPickedPOI: () => void;
 }
 
 /**
@@ -81,6 +93,7 @@ export const useSchoolStore = create<SchoolState>((set, get) => ({
   selectedSubPOI: null,
   mapViewHistory: null,
   highlightedPoiId: null,
+  pickedPOI: null,
 
   setActiveSchool: (school) => {
     set({ activeSchool: school });
@@ -139,6 +152,14 @@ export const useSchoolStore = create<SchoolState>((set, get) => ({
 
   setHighlightPoi: (id) => {
     set({ highlightedPoiId: id });
+  },
+
+  setPickedPOI: (poi) => {
+    set({ pickedPOI: poi });
+  },
+
+  clearPickedPOI: () => {
+    set({ pickedPOI: null });
   },
 }));
 

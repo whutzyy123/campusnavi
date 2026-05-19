@@ -20,7 +20,7 @@ import {
   Info,
 } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { StatusBadge } from "@/components/status-badge";
 import {
   Table,
@@ -43,6 +43,9 @@ import {
 } from "@/lib/actions/invitation";
 import { getSchoolUsers } from "@/lib/actions/user";
 import { getSchoolsList } from "@/lib/school/actions";
+import { Button } from "@/components/ui/button";
+import { openConfirm } from "@/components/ui/confirm-dialog";
+import { Modal } from "@/components/ui/modal";
 
 interface StaffMember {
   id: string;
@@ -60,12 +63,12 @@ interface School {
 const EXTEND_DAYS_OPTIONS = [7, 30, 90];
 
 function ExtendValidityDialog({
-  codeId,
+  isOpen,
   onClose,
   onSuccess,
   disabled,
 }: {
-  codeId: string;
+  isOpen: boolean;
   onClose: () => void;
   onSuccess: (days: number) => Promise<void>;
   disabled?: boolean;
@@ -83,9 +86,14 @@ function ExtendValidityDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-modal-overlay flex items-center justify-center bg-black/50">
-      <div className="modal-container max-w-sm">
-        <div className="modal-header flex items-center justify-between px-6 py-4">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      containerClassName="max-w-sm"
+      closeOnOverlayClick={!loading && !disabled}
+      closeOnEscape={!loading && !disabled}
+    >
+      <div className="modal-header flex items-center justify-between px-6 py-4">
           <h3 className="text-lg font-semibold text-gray-900">延长有效期</h3>
           <button
             onClick={onClose}
@@ -116,23 +124,14 @@ function ExtendValidityDialog({
           </div>
         </div>
         <div className="modal-footer flex gap-3 p-6">
-          <button
-            onClick={onClose}
-            disabled={loading}
-            className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-          >
+          <Button type="button" variant="secondary" onClick={onClose} disabled={loading} className="flex-1">
             取消
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={loading}
-            className="flex-1 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-[#FF4500]/90 disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          </Button>
+          <Button type="button" loading={loading} onClick={handleConfirm} className="flex-1">
             {loading ? "延长中..." : "确认延长"}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -265,9 +264,9 @@ function TeamManagementPageContent() {
   const handleCopyInvitationCode = async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      toast.success("邀请码已复制到剪贴板");
+      notify.success("邀请码已复制到剪贴板");
     } catch {
-      toast.error("复制失败，请手动复制");
+      notify.error("复制失败，请手动复制");
     }
   };
 
@@ -275,58 +274,67 @@ function TeamManagementPageContent() {
     setActionLoading(codeId);
     const loadingMsg =
       newStatus === "ACTIVE" ? "正在激活..." : newStatus === "DEACTIVATED" ? "正在停用..." : newStatus === "USED" ? "正在启用..." : "正在停用...";
-    const toastId = toast.loading(loadingMsg);
+    const toastId = notify.loading(loadingMsg);
     try {
       const result =
         newStatus === "DEACTIVATED" || newStatus === "USED"
           ? await toggleInvitationCodeStatus(codeId)
           : await toggleCodeStatus(codeId, newStatus);
       if (result.success) {
-        toast.success(result.message ?? "操作成功", { id: toastId });
+        notify.success(result.message ?? "操作成功", { id: toastId });
         await fetchInvitationCodes();
       } else {
-        toast.error(result.message || "操作失败", { id: toastId });
+        notify.error(result.message || "操作失败", { id: toastId });
       }
     } catch (error) {
-      toast.error("操作失败", { id: toastId });
+      notify.error("操作失败", { id: toastId });
     } finally {
       setActionLoading(null);
     }
   };
 
-  const handleDelete = async (codeId: string) => {
-    if (!window.confirm("确定要撤销此邀请码吗？撤销后将从系统中永久删除，不可恢复。")) return;
-
-    setActionLoading(codeId);
-    const toastId = toast.loading("正在删除...");
-    try {
-      const result = await deleteCode(codeId);
-      if (result.success) {
-        toast.success(result.message ?? "操作成功", { id: toastId });
-        await fetchInvitationCodes();
-      } else {
-        toast.error(result.message || "删除失败", { id: toastId });
-      }
-    } catch (error) {
-      toast.error("删除失败", { id: toastId });
-    } finally {
-      setActionLoading(null);
-    }
+  const handleDelete = (codeId: string) => {
+    openConfirm({
+      title: "撤销邀请码",
+      description: "确定要撤销此邀请码吗？撤销后将从系统中永久删除，不可恢复。",
+      variant: "danger",
+      confirmText: "撤销",
+      onConfirm: async () => {
+        setActionLoading(codeId);
+        const toastId = notify.loading("正在删除...");
+        try {
+          const result = await deleteCode(codeId);
+          if (result.success) {
+            notify.success(result.message ?? "操作成功", { id: toastId });
+            await fetchInvitationCodes();
+          } else {
+            notify.error(result.message || "删除失败", { id: toastId });
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          notify.error("删除失败", { id: toastId });
+          throw error;
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleExtend = async (codeId: string, days: number = 7) => {
     setActionLoading(codeId);
-    const toastId = toast.loading("正在延长有效期...");
+    const toastId = notify.loading("正在延长有效期...");
     try {
       const result = await extendInvitationCode(codeId, days);
       if (result.success) {
-        toast.success(result.message ?? "操作成功", { id: toastId });
+        notify.success(result.message ?? "操作成功", { id: toastId });
         await fetchInvitationCodes();
       } else {
-        toast.error(result.message || "延长失败", { id: toastId });
+        notify.error(result.message || "延长失败", { id: toastId });
       }
     } catch {
-      toast.error("延长失败", { id: toastId });
+      notify.error("延长失败", { id: toastId });
     } finally {
       setActionLoading(null);
     }
@@ -376,13 +384,10 @@ function TeamManagementPageContent() {
           <Card
             title="校内工作人员列表"
             action={
-              <button
-                onClick={() => setShowGenerateModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-              >
+              <Button type="button" onClick={() => setShowGenerateModal(true)}>
                 <Plus className="h-4 w-4" />
                 生成邀请码
-              </button>
+              </Button>
             }
           >
             {staffMembers.length === 0 ? (
@@ -430,13 +435,10 @@ function TeamManagementPageContent() {
           <Card
             title="邀请码管理"
             action={
-              <button
-                onClick={() => setShowGenerateModal(true)}
-                className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90"
-              >
+              <Button type="button" onClick={() => setShowGenerateModal(true)}>
                 <Plus className="h-4 w-4" />
                 生成新邀请码
-              </button>
+              </Button>
             }
           >
             {/* 提示：已过期邀请码说明 */}
@@ -652,17 +654,15 @@ function TeamManagementPageContent() {
         />
 
         {/* 延长有效期弹窗 */}
-        {extendDialog.open && extendDialog.codeId && (
-          <ExtendValidityDialog
-            codeId={extendDialog.codeId}
-            onClose={() => setExtendDialog({ open: false, codeId: null })}
-            onSuccess={async (days) => {
-              await handleExtend(extendDialog.codeId!, days);
-              setExtendDialog({ open: false, codeId: null });
-            }}
-            disabled={!!actionLoading}
-          />
-        )}
+        <ExtendValidityDialog
+          isOpen={extendDialog.open && !!extendDialog.codeId}
+          onClose={() => setExtendDialog({ open: false, codeId: null })}
+          onSuccess={async (days) => {
+            await handleExtend(extendDialog.codeId!, days);
+            setExtendDialog({ open: false, codeId: null });
+          }}
+          disabled={!!actionLoading}
+        />
       </div>
     </AdminLayout>
   );

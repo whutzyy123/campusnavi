@@ -3,6 +3,10 @@
 /**
  * 认证 Server Actions
  * 所有认证操作都在服务端执行，使用 HTTP Only Cookie 存储认证状态
+ * 
+ * 双重认证机制：
+ * 1. DB Session Token（campus-survival-session）：用于 Server Action 的完整鉴权，支持邀请码停用检查
+ * 2. JWT Token（campus-auth-jwt）：用于 Middleware 快速角色判断，无状态
  */
 
 import { cookies, headers } from "next/headers";
@@ -12,7 +16,8 @@ import { verifyPassword, hashPassword, needsPasswordRehash } from "@/lib/auth/ut
 import { validateInvitationCode } from "@/lib/actions/invitation";
 import { getClientIpFromHeaders } from "@/lib/auth/client-ip";
 import { consumeRateLimit } from "@/lib/auth/rate-limit";
-import { dbRoleToAppRole, registerableRoleToDbRole, type RegisterableAppRole } from "@/lib/auth/role";
+import { dbRoleToAppRole, registerableRoleToDbRole, type RegisterableAppRole, type AppRole } from "@/lib/auth/role";
+import { signAuthJWT, getJWTCookieName } from "@/lib/auth/jwt";
 
 function isNextRedirectError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("NEXT_REDIRECT");
@@ -36,6 +41,21 @@ async function setAuthCookie(sessionToken: string): Promise<void> {
     httpOnly: true, // 防止 XSS 攻击
     secure: process.env.NODE_ENV === "production", // 生产环境使用 HTTPS
     sameSite: "lax", // 防止 CSRF 攻击
+    maxAge: COOKIE_MAX_AGE,
+    path: "/",
+  });
+}
+
+/**
+ * 设置 JWT Cookie（HTTP Only，供 Middleware 使用）
+ */
+async function setJWTCookie(userId: string, role: AppRole, schoolId: string | null): Promise<void> {
+  const cookieStore = await cookies();
+  const token = await signAuthJWT({ userId, role, schoolId });
+  cookieStore.set(getJWTCookieName(), token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
     maxAge: COOKIE_MAX_AGE,
     path: "/",
   });
@@ -138,6 +158,7 @@ export async function removeAuthCookie(): Promise<void> {
   const cookieStore = await cookies();
   const authCookie = cookieStore.get(AUTH_COOKIE_NAME);
   cookieStore.delete(AUTH_COOKIE_NAME);
+  cookieStore.delete(getJWTCookieName()); // 同时清除 JWT Cookie
   if (authCookie?.value) {
     await prisma.authSession.updateMany({
       where: { sessionToken: authCookie.value, revokedAt: null },
@@ -257,6 +278,9 @@ export async function loginUser(formData: FormData) {
 
     const sessionToken = await createSession(user.id);
     await setAuthCookie(sessionToken);
+    
+    // 签发 JWT Cookie（供 Middleware 快速角色判断）
+    await setJWTCookie(user.id, userRole, user.schoolId || null);
 
     // 返回用户信息，由前端决定跳转逻辑
     return {
@@ -434,6 +458,9 @@ export async function registerUser(formData: FormData) {
 
     const sessionToken = await createSession(user.id);
     await setAuthCookie(sessionToken);
+    
+    // 签发 JWT Cookie（供 Middleware 快速角色判断）
+    await setJWTCookie(user.id, role as AppRole, targetSchoolId);
 
     // 根据角色重定向（注册仅允许 STUDENT / ADMIN / STAFF）
     if (role === "ADMIN" || role === "STAFF") {
@@ -500,7 +527,7 @@ export async function getCurrentUser(): Promise<AuthCookieData | null> {
   return await getAuthCookie();
 }
 
-/** getMe 返回的用户对象（与 /api/auth/me 一致） */
+/** getMe 返回的用户对象（canonical 用户态） */
 export interface MeUser {
   id: string;
   email: string | null;
@@ -519,7 +546,7 @@ export type GetMeResult =
   | { success: false; error: string };
 
 /**
- * 获取当前登录用户完整信息（替代 /api/auth/me）
+ * 获取当前登录用户完整信息（Server Action，供客户端与 RSC 使用）
  * 用于客户端初始化认证状态、个人资料表单等
  */
 export async function getMe(): Promise<GetMeResult> {

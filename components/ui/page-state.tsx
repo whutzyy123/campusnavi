@@ -30,6 +30,8 @@ export function PageLoading({ className }: PageStateBaseProps) {
   return <LoadingSpinner className={className ?? "flex min-h-[40vh] items-center justify-center"} />;
 }
 
+/** 整页/区块加载用 PageLoading；内联占位块用 components/ui/skeleton.tsx 的 Skeleton */
+
 export function PageEmpty({ icon, title, description, action, className }: EmptyProps) {
   return (
     <div className={className}>

@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import Image from "next/image";
 import { X, User } from "lucide-react";
 import { getPublicProfile, type PublicProfile } from "@/lib/actions/user";
-import { cn } from "@/lib/core/utils";
+import { Modal } from "@/components/ui/modal";
 
 interface UserProfileModalProps {
   userId: string | null;
@@ -40,27 +39,9 @@ export function UserProfileModal({ userId, isOpen, onClose }: UserProfileModalPr
 
   if (!isOpen) return null;
 
-  const content = (
-    <div
-      className={cn(
-        "fixed inset-0 z-[200] flex items-center justify-center p-4",
-        "bg-black/50"
-      )}
-      onClick={onClose}
-      role="presentation"
-    >
-      <div
-        className={cn(
-          "z-[210] relative modal-container max-w-sm",
-          "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
-          "max-h-[min(90vh,calc(100vh-40px))]"
-        )}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="user-profile-modal-title"
-      >
-        <div className="modal-header flex items-center justify-between px-4 py-3">
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} elevation="elevated" containerClassName="max-w-sm">
+      <div className="modal-header flex items-center justify-between px-4 py-3">
           <span id="user-profile-modal-title" className="text-sm font-medium text-gray-500">用户资料</span>
           <button
             type="button"
@@ -115,10 +96,7 @@ export function UserProfileModal({ userId, isOpen, onClose }: UserProfileModalPr
               )}
             </div>
           ) : null}
-        </div>
       </div>
-    </div>
+    </Modal>
   );
-
-  return createPortal(content, document.body);
 }

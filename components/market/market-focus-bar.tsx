@@ -31,7 +31,7 @@ export function MarketFocusBar() {
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 80, opacity: 0 }}
           transition={{ type: "spring", damping: 25, stiffness: 200 }}
-          className="fixed bottom-4 left-4 right-4 z-[60] mx-auto max-w-md"
+          className="fixed bottom-4 left-4 right-4 z-map-control mx-auto max-w-md"
         >
           <div className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white/95 px-4 py-3 shadow-lg backdrop-blur-md">
             <div className="flex min-w-0 flex-1 items-center gap-2">

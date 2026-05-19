@@ -1,14 +1,17 @@
-import toast from "react-hot-toast";
+import toast, { type ToastOptions } from "react-hot-toast";
 
 export const notify = {
-  success(message: string) {
-    return toast.success(message);
+  show(message: string, options?: ToastOptions) {
+    return toast(message, options);
   },
-  error(message: string) {
-    return toast.error(message);
+  success(message: string, options?: ToastOptions) {
+    return toast.success(message, options);
   },
-  loading(message: string) {
-    return toast.loading(message);
+  error(message: string, options?: ToastOptions) {
+    return toast.error(message, options);
+  },
+  loading(message: string, options?: ToastOptions) {
+    return toast.loading(message, options);
   },
   dismiss(toastId?: string) {
     return toast.dismiss(toastId);
@@ -16,4 +19,3 @@ export const notify = {
 };
 
 export type Notify = typeof notify;
-

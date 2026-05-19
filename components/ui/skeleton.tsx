@@ -1,12 +1,6 @@
-"use client";
-
 import { cn } from "@/lib/core/utils";
 
-interface SkeletonProps {
-  className?: string;
+/** 内联占位块（列表卡片、详情字段等）；整页加载请用 PageLoading */
+export function Skeleton({ className }: { className?: string }) {
+  return <div className={cn("shimmer rounded", className)} aria-hidden />;
 }
-
-export function Skeleton({ className }: SkeletonProps) {
-  return <div className={cn("animate-pulse rounded bg-gray-200", className)} />;
-}
-

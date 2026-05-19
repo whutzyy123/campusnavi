@@ -8,7 +8,7 @@ import { Card } from "@/components/card";
 import { PageEmpty, PageLoading } from "@/components/ui/page-state";
 import { Users2, Ban, Key, Info, RotateCcw } from "lucide-react";
 import { TableActions } from "@/components/ui/table-actions";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 import { StatusBadge } from "@/components/status-badge";
 import {
   Table,
@@ -83,11 +83,11 @@ function SchoolUsersPageContent() {
         setUsers(result.data);
         setPagination(result.pagination ?? null);
       } else {
-        toast.error(result.error || "获取用户列表失败");
+        notify.error(result.error || "获取用户列表失败");
       }
     } catch (error) {
       console.error("获取用户列表失败:", error);
-      toast.error("获取用户列表失败");
+      notify.error("获取用户列表失败");
     } finally {
       setIsLoading(false);
     }
@@ -117,11 +117,11 @@ function SchoolUsersPageContent() {
       if (result.success && result.data) {
         setProfileDetail(result.data);
       } else {
-        toast.error(result.error || "获取资料失败");
+        notify.error(result.error || "获取资料失败");
         closeViewModal();
       }
     }).catch(() => {
-      toast.error("获取资料失败");
+      notify.error("获取资料失败");
       closeViewModal();
     }).finally(() => {
       setProfileLoading(false);
@@ -148,35 +148,35 @@ function SchoolUsersPageContent() {
     const result = await adminResetUserPassword(userId, newPassword);
     if (result.success) {
       const nickname = selectedUserForReset?.nickname || selectedUserForReset?.email || "该用户";
-      toast.success(`已为 ${nickname} 重置密码成功`);
+      notify.success(`已为 ${nickname} 重置密码成功`);
       closeResetModal();
       router.refresh();
       await fetchUsers();
     } else {
-      toast.error(result.message);
+      notify.error(result.message);
     }
     return result;
   };
 
   const handleToggleStatus = async (user: SchoolUserListItem) => {
     if (user.id === currentUser?.id) {
-      toast.error("不能操作自己的账户");
+      notify.error("不能操作自己的账户");
       return;
     }
     const newStatus = user.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
     setActionLoading(user.id);
-    const toastId = toast.loading(newStatus === "ACTIVE" ? "正在激活..." : "正在停用...");
+    const toastId = notify.loading(newStatus === "ACTIVE" ? "正在激活..." : "正在停用...");
     try {
       const result = await deactivateUser(user.id, newStatus);
       if (result.success) {
-        toast.success(result.message, { id: toastId });
+        notify.success(result.message, { id: toastId });
         router.refresh();
         await fetchUsers();
       } else {
-        toast.error(result.message, { id: toastId });
+        notify.error(result.message, { id: toastId });
       }
     } catch {
-      toast.error("操作失败", { id: toastId });
+      notify.error("操作失败", { id: toastId });
     } finally {
       setActionLoading(null);
     }

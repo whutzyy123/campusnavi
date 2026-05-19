@@ -4,7 +4,7 @@ import { useNotificationStore } from "@/store/use-notification-store";
 
 export type UserRole = "STUDENT" | "ADMIN" | "STAFF" | "SUPER_ADMIN";
 
-/** 与 getMe / /api/auth/me 对齐的客户端用户快照 */
+/** 与 getMe() Server Action 对齐的客户端用户快照 */
 export type User = MeUser;
 
 interface AuthState {

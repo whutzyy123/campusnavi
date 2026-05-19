@@ -32,7 +32,8 @@ import {
   MessageCircle,
   BarChart3,
 } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { cn } from "@/lib/core/utils";
 
 interface AdminLayoutProps {
   children: React.ReactNode;
@@ -276,12 +277,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
   const handleLogout = async () => {
     if (isLoggingOut) return;
     analytics.auth.logoutClick();
-    toast.loading("正在退出...", { id: "logout" });
+    notify.loading("正在退出...", { id: "logout" });
     try {
       await useAuthStore.getState().logout();
     } catch (error) {
       if (error instanceof Error && !error.message.includes("NEXT_REDIRECT")) {
-        toast.error("退出登录失败，请重试", { id: "logout" });
+        notify.error("退出登录失败，请重试", { id: "logout" });
         console.error("退出登录失败:", error);
       }
     }
@@ -297,11 +298,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       >
         <div className="flex h-full min-h-0 flex-col">
           {/* 侧边栏头部 */}
-          <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-gray-200 px-6">
-            <h2 className="text-lg font-bold text-gray-900">管理后台</h2>
+          <div className="flex h-16 flex-shrink-0 items-center justify-between border-b border-[#EDEFF1] px-5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#FF4500] to-[#FF6B3D] flex items-center justify-center shadow-sm">
+                <Settings className="h-4 w-4 text-white" />
+              </div>
+              <h2 className="text-base font-bold text-[#1A1A1B]">管理后台</h2>
+            </div>
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-gray-500 hover:text-gray-700"
+              className="lg:hidden text-[#7C7C7C] hover:text-[#1A1A1B] transition-colors"
             >
               <X className="h-5 w-5" />
             </button>
@@ -317,11 +323,12 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                   key={item.href}
                   href={item.href}
                   onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={cn(
+                    "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
                     isActive
-                      ? "bg-[#FFE5DD] text-[#FF4500]"
-                      : "text-gray-700 hover:bg-gray-50"
-                  }`}
+                      ? "bg-[#FFE5DD] text-[#FF4500] shadow-sm"
+                      : "text-[#7C7C7C] hover:bg-[#F6F7F8] hover:text-[#1A1A1B]"
+                  )}
                 >
                   <Icon className="h-5 w-5" />
                   <span>{item.name}</span>
@@ -331,17 +338,17 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </nav>
 
           {/* 侧边栏底部 */}
-          <div className="border-t border-gray-200 p-4 space-y-3">
-            <div className="text-sm text-gray-600">
-              <div className="font-medium text-gray-900">{currentUser?.nickname}</div>
-              <div className="text-xs text-gray-500">
+          <div className="border-t border-[#EDEFF1] p-4 space-y-3">
+            <div className="text-sm text-[#7C7C7C]">
+              <div className="font-medium text-[#1A1A1B]">{currentUser?.nickname}</div>
+              <div className="text-xs text-[#7C7C7C]">
                 {isSuperAdmin ? "超级管理员" : "校级管理员"}
               </div>
             </div>
             <button
               onClick={handleLogout}
               disabled={isLoggingOut}
-              className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-600 transition-colors hover:bg-red-100 disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#EDEFF1] px-3 py-2 text-sm font-medium text-[#7C7C7C] transition-all hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {isLoggingOut ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -357,7 +364,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* 遮罩层（移动端，低于侧边栏，高于主内容） */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-[44] bg-black/50 lg:hidden"
+          className="fixed inset-0 z-sidebar-backdrop bg-black/50 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -365,26 +372,26 @@ export function AdminLayout({ children }: AdminLayoutProps) {
       {/* 主内容区 */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden relative">
         {/* 面包屑导航（固定，不滚动） */}
-        <div className="flex-shrink-0 border-b border-gray-200 bg-white px-4 py-3 lg:px-6">
+        <div className="flex-shrink-0 border-b border-[#EDEFF1] bg-white px-4 py-3 lg:px-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden text-gray-500 hover:text-gray-700"
+              className="lg:hidden text-[#7C7C7C] hover:text-[#1A1A1B] transition-colors"
             >
               <Menu className="h-6 w-6" />
             </button>
 
             {/* 面包屑导航 */}
-            <nav className="flex items-center gap-2 text-sm text-gray-600">
+            <nav className="flex items-center gap-2 text-sm text-[#7C7C7C]">
               {breadcrumbs.map((crumb, index) => (
                 <div key={`${crumb.href}-${index}`} className="flex items-center gap-2">
-                  {index > 0 && <ChevronRight className="h-4 w-4" />}
+                  {index > 0 && <ChevronRight className="h-4 w-4 text-[#EDEFF1]" />}
                   {index === breadcrumbs.length - 1 ? (
-                    <span className="font-medium text-gray-900">{crumb.name}</span>
+                    <span className="font-medium text-[#1A1A1B]">{crumb.name}</span>
                   ) : (
                     <Link
                       href={crumb.href}
-                      className="hover:text-gray-900"
+                      className="hover:text-[#FF4500] transition-colors"
                     >
                       {crumb.name}
                     </Link>

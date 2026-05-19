@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { formatDateTimeDisplay } from "@/lib/core/utils";
 import type { AdminUserDetail } from "@/lib/actions/user";
 import { cn } from "@/lib/core/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Modal } from "@/components/ui/modal";
 
 export interface AdminUserDetailModalProps {
@@ -41,14 +42,6 @@ function StatCard({
       <span className="text-xs font-medium text-gray-500">{label}</span>
       <span className="text-lg font-semibold text-gray-900">{value}</span>
     </div>
-  );
-}
-
-function SkeletonLine({ className }: { className?: string }) {
-  return (
-    <div
-      className={cn("h-4 animate-pulse rounded bg-gray-200", className)}
-    />
   );
 }
 
@@ -91,7 +84,7 @@ export function AdminUserDetailModal({
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
                 {isLoading ? (
-                  <SkeletonLine className="h-6 w-32" />
+                  <Skeleton className="h-6 w-32" />
                 ) : (
                   profileDetail?.basic.nickname || displayName || "—"
                 )}
@@ -115,15 +108,15 @@ export function AdminUserDetailModal({
           {isLoading ? (
             <div className="space-y-6">
               <div className="space-y-3">
-                <SkeletonLine className="h-4 w-20" />
+                <Skeleton className="h-4 w-20" />
                 <div className="grid grid-cols-2 gap-3">
                   {[1, 2, 3, 4, 5].map((i) => (
-                    <SkeletonLine key={i} className="h-5" />
+                    <Skeleton key={i} className="h-5" />
                   ))}
                 </div>
               </div>
               <div className="space-y-3">
-                <SkeletonLine className="h-4 w-24" />
+                <Skeleton className="h-4 w-24" />
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                   {[1, 2, 3].map((i) => (
                     <div

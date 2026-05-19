@@ -9,7 +9,8 @@ import { AdminLayout } from "@/components/admin-layout";
 import { AdminPageContainer } from "@/components/admin/admin-page-container";
 import { EmptyState } from "@/components/empty-state";
 import { Tags, Plus, Trash2, Pencil, Droplets, LayoutGrid } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   getMicroCategories,
@@ -21,6 +22,8 @@ import {
   deleteGlobalCategory,
   type MicroCategoryItem,
 } from "@/lib/actions/category";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 
 interface Category {
   id: string;
@@ -83,11 +86,11 @@ function SuperAdminCategoriesPageContent() {
         setCategories(result.data);
         setPagination(result.pagination || null);
       } else {
-        toast.error(result.error || "获取全局分类列表失败");
+        notify.error(result.error || "获取全局分类列表失败");
       }
     } catch (error) {
       console.error("获取全局分类列表失败:", error);
-      toast.error("获取全局分类列表失败");
+      notify.error("获取全局分类列表失败");
     } finally {
       setIsLoadingRegular(false);
     }
@@ -101,11 +104,11 @@ function SuperAdminCategoriesPageContent() {
       if (result.success && result.data) {
         setMicroCategories(result.data);
       } else {
-        toast.error(result.error || "获取便民公共设施列表失败");
+        notify.error(result.error || "获取便民公共设施列表失败");
       }
     } catch (error) {
       console.error("获取便民公共设施列表失败:", error);
-      toast.error("获取便民公共设施列表失败");
+      notify.error("获取便民公共设施列表失败");
     } finally {
       setIsLoadingMicro(false);
     }
@@ -149,7 +152,7 @@ function SuperAdminCategoriesPageContent() {
   const handleModalSubmit = async () => {
     const trimmedName = modalName.trim();
     if (!trimmedName) {
-      toast.error("请输入分类名称");
+      notify.error("请输入分类名称");
       return;
     }
 
@@ -161,11 +164,11 @@ function SuperAdminCategoriesPageContent() {
           icon: modalIcon.trim() || null,
         });
         if (result.success) {
-          toast.success("便民公共设施更新成功");
+          notify.success("便民公共设施更新成功");
           closeModal();
           fetchMicroCategories();
         } else {
-          toast.error(result.message || "更新失败");
+          notify.error(result.message || "更新失败");
         }
       } else {
         if (modalIsMicro) {
@@ -174,11 +177,11 @@ function SuperAdminCategoriesPageContent() {
             icon: modalIcon.trim() || null,
           });
           if (result.success) {
-            toast.success("便民公共设施创建成功");
+            notify.success("便民公共设施创建成功");
             closeModal();
             fetchMicroCategories();
           } else {
-            toast.error(result.message || "创建失败");
+            notify.error(result.message || "创建失败");
           }
         } else {
           const result = await createGlobalCategory({
@@ -188,53 +191,67 @@ function SuperAdminCategoriesPageContent() {
           if (!result.success) {
             throw new Error(result.error || "创建失败");
           }
-          toast.success("全局分类创建成功");
+          notify.success("全局分类创建成功");
           closeModal();
           fetchRegularCategories();
         }
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "操作失败，请重试");
+      notify.error(error instanceof Error ? error.message : "操作失败，请重试");
     } finally {
       setModalSubmitting(false);
     }
   };
 
-  const handleDeleteRegular = async (id: string, name: string) => {
-    if (!confirm(`确定要删除全局分类"${name}"吗？此操作将影响所有学校，且不可恢复。`)) {
-      return;
-    }
-    setDeletingRegularId(id);
-    try {
-      const result = await deleteGlobalCategory(id);
-      if (!result.success) throw new Error(result.error || "删除失败");
-      toast.success("全局分类已删除");
-      fetchRegularCategories();
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "删除失败");
-    } finally {
-      setDeletingRegularId(null);
-    }
+  const handleDeleteRegular = (id: string, name: string) => {
+    openConfirm({
+      title: "删除全局分类",
+      description: `确定要删除全局分类"${name}"吗？此操作将影响所有学校，且不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingRegularId(id);
+        try {
+          const result = await deleteGlobalCategory(id);
+          if (!result.success) throw new Error(result.error || "删除失败");
+          notify.success("全局分类已删除");
+          fetchRegularCategories();
+        } catch (error) {
+          notify.error(error instanceof Error ? error.message : "删除失败");
+          throw error;
+        } finally {
+          setDeletingRegularId(null);
+        }
+      },
+    });
   };
 
-  const handleDeleteMicro = async (id: string, name: string) => {
-    if (!confirm(`确定要删除便民公共设施"${name}"吗？此操作不可恢复。`)) {
-      return;
-    }
-    setDeletingMicroId(id);
-    try {
-      const result = await deleteMicroCategory(id);
-      if (result.success) {
-        toast.success("便民公共设施已删除");
-        fetchMicroCategories();
-      } else {
-        toast.error(result.message || "删除失败");
-      }
-    } catch (error) {
-      toast.error("删除失败，请重试");
-    } finally {
-      setDeletingMicroId(null);
-    }
+  const handleDeleteMicro = (id: string, name: string) => {
+    openConfirm({
+      title: "删除便民公共设施",
+      description: `确定要删除便民公共设施"${name}"吗？此操作不可恢复。`,
+      variant: "danger",
+      confirmText: "删除",
+      onConfirm: async () => {
+        setDeletingMicroId(id);
+        try {
+          const result = await deleteMicroCategory(id);
+          if (result.success) {
+            notify.success("便民公共设施已删除");
+            fetchMicroCategories();
+          } else {
+            notify.error(result.message || "删除失败");
+            throw new Error("delete_failed");
+          }
+        } catch (error) {
+          if (error instanceof Error && error.message === "delete_failed") throw error;
+          notify.error("删除失败，请重试");
+          throw error;
+        } finally {
+          setDeletingMicroId(null);
+        }
+      },
+    });
   };
 
   const headerActions = (
@@ -246,13 +263,14 @@ function SuperAdminCategoriesPageContent() {
         <LayoutGrid className="h-4 w-4" />
         全量分类监控
       </Link>
-      <button
+      <Button
+        type="button"
         onClick={() => openCreateModal(activeTab === "micro")}
-        className="flex items-center gap-2 rounded-full bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90"
+        className="rounded-full"
       >
         <Plus className="h-4 w-4" />
         {activeTab === "regular" ? "新增常规全局分类" : "新增便民公共设施"}
-      </button>
+      </Button>
     </div>
   );
 
@@ -443,14 +461,12 @@ function SuperAdminCategoriesPageContent() {
         </AdminPageContainer>
 
         {/* 新建/编辑弹窗 */}
-        {modalOpen && (
-          <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-          <div className="modal-container max-w-md">
-              <h2 className="modal-header px-6 pt-6 text-lg font-semibold text-[#1A1A1B]">
-                {modalMode === "edit" ? "编辑便民公共设施" : "新增分类"}
-              </h2>
+        <Modal isOpen={modalOpen} onClose={closeModal} containerClassName="max-w-md">
+          <h2 className="modal-header px-6 pt-6 text-lg font-semibold text-[#1A1A1B]">
+            {modalMode === "edit" ? "编辑便民公共设施" : "新增分类"}
+          </h2>
 
-              <div className="modal-body space-y-4 px-6 py-4">
+          <div className="modal-body space-y-4 px-6 py-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-[#1A1A1B]">
                     分类名称 <span className="text-red-500">*</span>
@@ -497,27 +513,20 @@ function SuperAdminCategoriesPageContent() {
                 )}
               </div>
 
-              <div className="modal-footer flex justify-end gap-3 px-6 py-4">
-                <button
-                  onClick={closeModal}
-                  className="rounded-lg border border-[#EDEFF1] px-4 py-2 text-sm font-medium text-[#7C7C7C] hover:bg-[#F6F7F8]"
-                >
-                  取消
-                </button>
-                <button
-                  onClick={handleModalSubmit}
-                  disabled={modalSubmitting || !modalName.trim()}
-                  className="flex items-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {modalSubmitting ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  ) : null}
-                  {modalMode === "edit" ? "保存" : "创建"}
-                </button>
-              </div>
-            </div>
+          <div className="modal-footer flex justify-end gap-3 px-6 py-4">
+            <Button type="button" variant="secondary" onClick={closeModal}>
+              取消
+            </Button>
+            <Button
+              type="button"
+              loading={modalSubmitting}
+              disabled={!modalName.trim()}
+              onClick={handleModalSubmit}
+            >
+              {modalMode === "edit" ? "保存" : "创建"}
+            </Button>
           </div>
-        )}
+        </Modal>
         </>
       </AdminLayout>
     </AuthGuard>

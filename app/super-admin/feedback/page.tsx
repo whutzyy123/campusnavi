@@ -19,6 +19,7 @@ import {
 } from "@/components/table";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Modal } from "@/components/ui/modal";
+import { PageError, PageLoading } from "@/components/ui/page-state";
 import {
   getAdminFeedbacks,
   getFeedbackById,
@@ -26,7 +27,7 @@ import {
   type FeedbackItem,
 } from "@/lib/actions/feedback";
 import { MessageCircle, Loader2, X, MessageSquare, Bug } from "lucide-react";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 
 function getTypeLabel(type: string): string {
   return type === "FEEDBACK" ? "使用体验反馈" : "Bug 提交";
@@ -73,6 +74,7 @@ function SuperAdminFeedbackPageContent() {
   const { currentUser } = useAuthStore();
   const [items, setItems] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [listError, setListError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<{
     total: number;
     pageCount: number;
@@ -89,8 +91,9 @@ function SuperAdminFeedbackPageContent() {
   const currentPage = parseInt(searchParams.get("page") || "1", 10);
 
   const fetchFeedbacks = useCallback(async () => {
+    setLoading(true);
+    setListError(null);
     try {
-      setLoading(true);
       const result = await getAdminFeedbacks({
         page: currentPage,
         limit: 10,
@@ -110,12 +113,13 @@ function SuperAdminFeedbackPageContent() {
       } else {
         setItems([]);
         setPagination(null);
+        setListError(result.error ?? "获取反馈列表失败");
       }
     } catch (err) {
       console.error("获取反馈列表失败:", err);
-      toast.error("获取反馈列表失败");
       setItems([]);
       setPagination(null);
+      setListError("获取反馈列表失败，请稍后重试");
     } finally {
       setLoading(false);
     }
@@ -154,11 +158,11 @@ function SuperAdminFeedbackPageContent() {
       if (result.success && result.data) {
         setDetailItem(result.data);
       } else {
-        toast.error(result.error || "获取详情失败");
+        notify.error(result.error || "获取详情失败");
         setDetailId(null);
       }
     } catch {
-      toast.error("获取详情失败");
+      notify.error("获取详情失败");
       setDetailId(null);
     } finally {
       setIsLoadingDetail(false);
@@ -176,16 +180,16 @@ function SuperAdminFeedbackPageContent() {
     try {
       const result = await updateFeedbackStatus(id, status);
       if (result.success) {
-        toast.success("状态已更新");
+        notify.success("状态已更新");
         fetchFeedbacks();
         if (detailId === id && detailItem) {
           setDetailItem({ ...detailItem, status });
         }
       } else {
-        toast.error(result.error || "更新失败");
+        notify.error(result.error || "更新失败");
       }
     } catch {
-      toast.error("更新失败");
+      notify.error("更新失败");
     } finally {
       setUpdatingId(null);
       setUpdatingStatus(null);
@@ -240,10 +244,10 @@ function SuperAdminFeedbackPageContent() {
             </div>
 
             {/* 列表 */}
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-[#FF4500]" />
-              </div>
+            {listError ? (
+              <PageError description={listError} onRetry={fetchFeedbacks} />
+            ) : loading ? (
+              <PageLoading className="flex justify-center py-12" />
             ) : items.length === 0 ? (
               <EmptyState
                 icon={MessageCircle}

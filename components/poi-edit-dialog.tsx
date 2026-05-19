@@ -1,14 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { X, MapPin, Save, Loader2, Trash2 } from "lucide-react";
+import { X, MapPin, Save, Trash2 } from "lucide-react";
 import { uploadPOIImage } from "@/lib/actions/upload";
 import { updatePOI, deletePOI } from "@/lib/actions/poi";
 import { getSchoolCategoriesForAdmin } from "@/lib/actions/category";
 import { ImageUpload } from "@/components/shared/image-upload";
 import { useAMap } from "@/hooks/use-amap";
 import { CoordinateConverter } from "@/lib/geo/amap-loader";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
+import { openConfirm } from "@/components/ui/confirm-dialog";
+import { Modal } from "@/components/ui/modal";
+import { Button } from "@/components/ui/button";
 
 interface CategoryItem {
   id: string;
@@ -211,7 +214,7 @@ export function POIEditDialog({
         markerRef.current.setPosition([lng, lat]);
       }
       setIsSelectingOnMap(false);
-      toast.success("已选择位置");
+      notify.success("已选择位置");
     };
 
     map.on("click", handleMapClick);
@@ -235,12 +238,12 @@ export function POIEditDialog({
     if (!poi) return;
 
     if (!formData.name.trim()) {
-      toast.error("请输入 POI 名称");
+      notify.error("请输入 POI 名称");
       return;
     }
 
     if (!formData.categoryId) {
-      toast.error("请选择分类");
+      notify.error("请选择分类");
       return;
     }
 
@@ -272,48 +275,53 @@ export function POIEditDialog({
         throw new Error(result.error || "更新失败");
       }
 
-      toast.success("POI 更新成功");
+      notify.success("POI 更新成功");
       onSave();
       onClose();
     } catch (error) {
       console.error("更新 POI 失败:", error);
-      toast.error(error instanceof Error ? error.message : "更新失败，请重试");
+      notify.error(error instanceof Error ? error.message : "更新失败，请重试");
     } finally {
       setIsSaving(false);
     }
   };
 
-  // 删除 POI
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (!poi) return;
-    if (!confirm("确定要删除这个 POI 吗？此操作无法撤销。")) return;
+    openConfirm({
+      title: "删除 POI",
+      description: "确定要删除这个 POI 吗？此操作无法撤销。",
+      variant: "danger",
+      confirmText: "删除",
+      elevation: "elevated",
+      onConfirm: async () => {
+        setIsDeleting(true);
+        try {
+          const result = await deletePOI(poi.id);
 
-    setIsDeleting(true);
-    try {
-      const result = await deletePOI(poi.id);
+          if (!result.success) {
+            throw new Error(result.error || "删除失败");
+          }
 
-      if (!result.success) {
-        throw new Error(result.error || "删除失败");
-      }
-
-      toast.success("POI 已删除");
-      onClose();
-      onSave();
-    } catch (error) {
-      console.error("删除 POI 失败:", error);
-      toast.error(error instanceof Error ? error.message : "删除失败，请重试");
-    } finally {
-      setIsDeleting(false);
-    }
+          notify.success("POI 已删除");
+          onClose();
+          onSave();
+        } catch (error) {
+          console.error("删除 POI 失败:", error);
+          notify.error(error instanceof Error ? error.message : "删除失败，请重试");
+          throw error;
+        } finally {
+          setIsDeleting(false);
+        }
+      },
+    });
   };
 
   if (!isOpen || !poi) return null;
 
   return (
-    <div className="fixed inset-0 z-modal-overlay modal-overlay bg-black/50">
-      <div className="modal-container max-w-4xl">
-        {/* 头部 */}
-        <div className="modal-header flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+    <Modal isOpen={isOpen} onClose={onClose} containerClassName="max-w-4xl">
+      <div className="modal-header flex items-center justify-between px-6 py-4">
           <h2 className="text-xl font-bold text-gray-900">编辑 POI</h2>
           <button
             onClick={onClose}
@@ -558,56 +566,39 @@ export function POIEditDialog({
         </div>
 
         {/* 底部操作按钮（固定） */}
-        <div className="modal-footer flex items-center justify-between border-t border-gray-200 bg-white px-6 py-4">
-          <div>
-            <button
-              type="button"
-              onClick={handleDelete}
-              disabled={isSaving || isDeleting}
-              className="flex items-center gap-2 rounded-lg border border-red-200 bg-white px-4 py-2.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50 hover:border-red-300 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  删除中...
-                </>
-              ) : (
-                <>
-                  <Trash2 className="h-4 w-4" />
-                  删除
-                </>
-              )}
-            </button>
-          </div>
+        <div className="modal-footer flex items-center justify-between px-6 py-4">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleDelete}
+            disabled={isSaving || isDeleting}
+            loading={isDeleting}
+            className="border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+          >
+            {!isDeleting ? <Trash2 className="h-4 w-4" /> : null}
+            删除
+          </Button>
           <div className="flex gap-3">
-            <button
+            <Button
+              type="button"
+              variant="secondary"
               onClick={onClose}
               disabled={isSaving || isDeleting}
-              className="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={handleSave}
-              disabled={isSaving || isImageUploading || isDeleting || !formData.name.trim() || !formData.categoryId}
-              className="flex items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-5 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isImageUploading || isDeleting || !formData.name.trim() || !formData.categoryId}
+              loading={isSaving}
             >
-              {isSaving ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  保存中...
-                </>
-              ) : (
-                <>
-                  <Save className="h-4 w-4" />
-                  保存
-                </>
-              )}
-            </button>
+              {!isSaving ? <Save className="h-4 w-4" /> : null}
+              保存
+            </Button>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

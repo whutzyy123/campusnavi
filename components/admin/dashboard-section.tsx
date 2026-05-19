@@ -21,18 +21,18 @@ export function DashboardSection({
   children,
 }: DashboardSectionProps) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-[#EDEFF1] border-t-[3px] border-t-[#FF4500] bg-white p-5 shadow-sm">
       <div className="mb-4 flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">{title}</h2>
+          <h2 className="text-base font-semibold text-[#1A1A1B]">{title}</h2>
           {description && (
-            <p className="mt-0.5 text-sm text-gray-500">{description}</p>
+            <p className="mt-0.5 text-sm text-[#7C7C7C]">{description}</p>
           )}
         </div>
         {detailHref && (
           <Link
             href={detailHref}
-            className="flex shrink-0 items-center gap-0.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+            className="flex shrink-0 items-center gap-0.5 text-sm font-medium text-[#FF4500] hover:text-[#E03E00] transition-colors"
           >
             查看详情
             <ChevronRight className="h-4 w-4" />

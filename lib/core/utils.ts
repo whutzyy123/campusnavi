@@ -169,3 +169,14 @@ export function getPaginationMeta(total: number, page: number, limit: number) {
     limit: limitNum,
   };
 }
+
+/** 中国时区（Asia/Shanghai）下的 yyyy-MM-dd，用于每日签到等日历日判断 */
+export function getChinaDateKey(date: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+  }).format(date);
+}
+
+export function isSameChinaDay(a: Date, b: Date): boolean {
+  return getChinaDateKey(a) === getChinaDateKey(b);
+}

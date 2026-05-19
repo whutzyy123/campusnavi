@@ -1,7 +1,6 @@
 /**
  * 数据埋点封装层
- * 遵循 docs/数据埋点说明文档.md 规范
- * 平台无关设计，可对接 GA4、Mixpanel、自建等
+ * 契约见 docs/PRD.md §8.7；平台无关设计，可对接 GA4、Mixpanel、自建等
  */
 
 export type TrackPropertyValue = string | number | boolean | null | undefined;

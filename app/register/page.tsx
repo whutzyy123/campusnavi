@@ -10,8 +10,9 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useSchoolStore } from "@/store/use-school-store";
 import { UserPlus, CheckCircle, AlertCircle, Loader2, Lock } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/ui/button";
 import { AgreementModal } from "@/components/auth/agreement-modal";
-import toast from "react-hot-toast";
+import { notify } from "@/lib/ui/notify";
 
 /**
  * 注册页面
@@ -113,7 +114,7 @@ export default function RegisterPage() {
         if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
           document.activeElement.blur();
         }
-        toast.success(
+        notify.success(
           `邀请码有效！将加入 ${result.schoolName} 作为${result.roleType === "ADMIN" ? "校级管理员" : "工作人员"}`
         );
       } else {
@@ -143,7 +144,7 @@ export default function RegisterPage() {
     if (result.success) {
       setAgreementModalContent(result.data);
     } else {
-      toast.error(result.error || "文档未找到");
+      notify.error(result.error || "文档未找到");
       setIsModalOpen(false);
     }
     setIsAgreementLoading(false);
@@ -220,7 +221,7 @@ export default function RegisterPage() {
       // 如果返回成功但没有重定向（理论上不应该发生）
       if (result && result.success) {
         analytics.auth.registerSuccess({ user_role: formData.role });
-        toast.success("注册成功，正在跳转...");
+        notify.success("注册成功，正在跳转...");
         setSuccess(true);
         
         // 获取用户信息
@@ -241,7 +242,7 @@ export default function RegisterPage() {
       // 不要拦截这个错误，让 Next.js 正常处理跳转
       if (err instanceof Error && err.message.includes("NEXT_REDIRECT")) {
         analytics.auth.registerSuccess({ user_role: formData.role });
-        toast.success("注册成功，正在跳转...");
+        notify.success("注册成功，正在跳转...");
         // 不设置 setIsSubmitting(false)，让按钮保持加载状态直到跳转完成
         return;
       }
@@ -553,10 +554,11 @@ export default function RegisterPage() {
             </div>
 
             {/* 提交按钮 */}
-            <button
+            <Button
               type="submit"
+              loading={isSubmitting}
+              className="w-full py-2.5"
               disabled={
-                isSubmitting ||
                 !isAgreed ||
                 !formData.email ||
                 !formData.nickname ||
@@ -565,20 +567,10 @@ export default function RegisterPage() {
                 (formData.role === "STUDENT" && !formData.schoolId) ||
                 ((formData.role === "ADMIN" || formData.role === "STAFF") && !codeVerified)
               }
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#FF4500] px-4 py-2.5 text-sm font-medium text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {isSubmitting ? (
-                <>
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
-                  注册中...
-                </>
-              ) : (
-                <>
-                  <UserPlus className="h-4 w-4" />
-                  注册
-                </>
-              )}
-            </button>
+              {!isSubmitting ? <UserPlus className="h-4 w-4" /> : null}
+              {isSubmitting ? "注册中..." : "注册"}
+            </Button>
           </form>
           )}
         </div>

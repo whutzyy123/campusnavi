@@ -132,30 +132,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: "测试账号初始化成功",
-      accounts: accounts.length > 0 ? accounts : "所有账号已存在",
-      summary: {
-        superAdmin: {
-          email: "admin@system.local",
-          password: "123456",
-          role: "SUPER_ADMIN",
+      data: {
+        accounts: accounts.length > 0 ? accounts : "所有账号已存在",
+        summary: {
+          superAdmin: {
+            email: "admin@system.local",
+            password: "123456",
+            role: "SUPER_ADMIN",
+          },
+          testAccounts: [
+            {
+              email: "student@test.com",
+              password: "123456",
+              role: "STUDENT",
+            },
+            {
+              email: "admin@test.com",
+              password: "123456",
+              role: "ADMIN",
+            },
+            {
+              email: "staff@test.com",
+              password: "123456",
+              role: "STAFF",
+            },
+          ],
         },
-        testAccounts: [
-          {
-            email: "student@test.com",
-            password: "123456",
-            role: "STUDENT",
-          },
-          {
-            email: "admin@test.com",
-            password: "123456",
-            role: "ADMIN",
-          },
-          {
-            email: "staff@test.com",
-            password: "123456",
-            role: "STAFF",
-          },
-        ],
       },
     });
   } catch (error) {
