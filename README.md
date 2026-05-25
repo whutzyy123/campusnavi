@@ -126,6 +126,88 @@ npm run dev
 
 ---
 
+## 代码提交规范
+
+团队提交采用 **[Conventional Commits](https://www.conventionalcommits.org/)** 风格，便于生成变更日志与快速定位问题。更完整的工程约定见 [docs/开发规范.md](docs/开发规范.md)。
+
+### 提交信息格式
+
+```
+<type>(<scope>): <subject>
+
+[可选正文：说明背景、影响范围、Breaking Change 等]
+```
+
+| 字段 | 说明 |
+|------|------|
+| `type` | 变更类型（见下表） |
+| `scope` | 影响模块，可选；如 `market`、`poi`、`admin`、`auth`、`prisma` |
+| `subject` | 简短描述，**说明「为什么改」**，建议 ≤ 72 字符；中英文均可 |
+
+**常用 `type`：**
+
+| type | 用途 |
+|------|------|
+| `feat` | 新功能 |
+| `fix` | Bug 修复 |
+| `refactor` | 重构（不改变对外行为） |
+| `docs` | 仅文档变更 |
+| `style` | 格式调整（不影响逻辑，如 Prettier / 类名整理） |
+| `chore` | 构建、依赖、脚本、配置 |
+| `perf` | 性能优化 |
+| `test` | 测试相关 |
+
+**示例：**
+
+```
+feat(points): 积分页增加每日签到
+fix(market): 修复交易锁定时的重复提交
+refactor(poi-drawer): 移动端抽屉迁移至 ui/drawer
+docs: 补充 README 代码提交规范
+chore(prisma): 同步 User.lastCheckInAt 字段
+```
+
+### 提交前自检
+
+提交前请确认：
+
+1. **范围聚焦**：一次提交只做一件事；避免「顺手改一堆无关文件」。
+2. **质量检查**：至少执行 `npm run lint`；涉及类型或逻辑改动时建议再跑 `npx tsc --noEmit`。
+3. **数据库变更**：若修改 `prisma/schema.prisma`，在提交说明或 PR 中注明需执行 `npm run db:push` / 迁移脚本；本地已验证 Schema 可同步。
+4. **多租户与权限**：涉及 `schoolId`、角色、集市状态机时，自查是否存在跨校泄漏或权限提升风险（详见开发规范 §6）。
+5. **禁止入库**：`.env`、密钥、`.next/`、`node_modules/` 及本地构建产物。
+
+### 分支与 Pull Request
+
+| 约定 | 说明 |
+|------|------|
+| 分支命名 | `feat/<简述>`、`fix/<简述>`、`refactor/<简述>`、`docs/<简述>` |
+| PR 粒度 | 优先小步、可 review 的 PR；大功能可拆成多个垂直切片 |
+| PR 描述 | 包含 **Summary**（改了什么、为什么）与 **Test plan**（如何验证） |
+| 合并前 | CI / lint 通过；Schema 变更已在描述中说明部署步骤 |
+
+### 推荐工作流
+
+```bash
+# 1. 从主分支拉取最新代码并创建分支
+git checkout main
+git pull
+git checkout -b feat/daily-check-in
+
+# 2. 开发并自检
+npm run lint
+npx tsc --noEmit
+
+# 3. 暂存相关文件并提交（勿提交 .env 等敏感文件）
+git add app/center/points/page.tsx lib/actions/points.ts
+git commit -m "feat(points): 积分页增加每日签到"
+
+# 4. 推送并创建 PR
+git push -u origin feat/daily-check-in
+```
+
+---
+
 ## 项目结构
 
 ```
